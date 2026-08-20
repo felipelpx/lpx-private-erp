@@ -1,0 +1,384 @@
+<!DOCTYPE html>
+<html lang="pt">
+<head>
+<meta charset="utf-8"/>
+<title>Setup da Base de Dados — LPX Private ERP</title>
+<style>
+  body{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;padding:34px 26px;background:#0B0B0F;color:#e9ecef;max-width:1000px;margin:0 auto;line-height:1.65}
+  h1{color:#fff;font-size:22px;letter-spacing:-0.01em}
+  h2{color:#6B7C93;border-bottom:1px solid #23262e;padding-bottom:6px;margin-top:30px;font-size:15px;text-transform:uppercase;letter-spacing:.1em}
+  pre{background:#14161c;padding:18px;border-radius:10px;overflow:auto;border-left:3px solid #6B7C93;font-size:11.5px;max-height:460px;white-space:pre}
+  .step{background:#14161c;padding:16px 18px;border-radius:10px;margin:12px 0;border-left:3px solid #2c313b}
+  button{background:#6B7C93;border:none;padding:11px 22px;font-size:13px;cursor:pointer;border-radius:8px;font-weight:700;color:#0B0B0F;font-family:inherit}
+  button:hover{background:#8593a7}
+  a{color:#9fb0c6}
+  code{background:#1c1f27;padding:2px 6px;border-radius:4px;font-size:12px}
+  .warn{border-left-color:#d97706;background:#1e1a12}
+  .logo{background:#0B0B0F;display:inline-block;margin-bottom:14px}
+  .logo img{height:34px;display:block}
+</style>
+</head>
+<body>
+<div class="logo"><img src="/logo-lpx.png" alt="LPX Private"/></div>
+<h1>Setup da base de dados</h1>
+
+<div class="step warn">
+  <strong>Antes de começar:</strong> este ERP tem de usar um projeto Supabase
+  <strong>novo e separado</strong> do da Rio Capital. Se apontares para o projeto
+  antigo, as duas apps partilham os mesmos dados.
+</div>
+
+<div class="step">
+  <strong>1.</strong> Cria um projeto novo em
+  <a href="https://supabase.com/dashboard" target="_blank">supabase.com/dashboard</a>
+  (região Europa — Frankfurt ou Londres).
+</div>
+
+<div class="step">
+  <strong>2.</strong> Abre <em>SQL Editor → New query</em>, cola o SQL abaixo e carrega em <em>Run</em>.
+  Cria todas as tabelas, índices, políticas de acesso (RLS), realtime e as 16 contas bancárias.
+</div>
+
+<div class="step">
+  <strong>3.</strong> Em <em>Project Settings → API</em>, copia o <code>Project URL</code> e a
+  <code>publishable key</code> para as variáveis
+  <code>VITE_SUPABASE_URL</code> e <code>VITE_SUPABASE_ANON_KEY</code>
+  (ficheiro <code>.env</code> local e Netlify → Site settings → Environment variables).
+</div>
+
+<div class="step">
+  <strong>4.</strong> Cria os utilizadores em <a href="/criar-utilizadores.html">/criar-utilizadores.html</a>.
+</div>
+
+<h2>SQL — copiar tudo</h2>
+<button onclick="copiar()">Copiar SQL</button>
+<span id="msg" style="margin-left:12px;color:#16a34a"></span>
+<pre id="sql">-- ═══════════════════════════════════════════════════════════════════════════
+-- LPX PRIVATE — ERP · SCHEMA COMPLETO
+--
+-- Correr UMA VEZ, de uma só vez, no SQL Editor de um projeto Supabase NOVO
+-- (Dashboard → SQL Editor → New query → colar tudo → Run).
+--
+-- Este script é idempotente: pode ser corrido novamente sem apagar dados.
+-- ═══════════════════════════════════════════════════════════════════════════
+
+-- ───────────────────────────────────────────────────────────────────────────
+-- 1. PROFILES — utilizadores da app (ligados ao Supabase Auth)
+-- ───────────────────────────────────────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS profiles (
+  id               uuid PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
+  nome             text,
+  email            text,
+  role             text    NOT NULL DEFAULT &#x27;viewer&#x27;,  -- admin | gestor | viewer
+  approval_level   int     NOT NULL DEFAULT 0,         -- 0 nenhum | 1 nível 1 | 2 nível 2
+  can_create_mapas boolean NOT NULL DEFAULT false,
+  created_at       timestamptz NOT NULL DEFAULT now()
+);
+
+-- Cria automaticamente o profile quando se regista um utilizador no Auth
+CREATE OR REPLACE FUNCTION public.handle_new_user()
+RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
+BEGIN
+  INSERT INTO public.profiles (id, nome, email, role)
+  VALUES (NEW.id,
+          COALESCE(NEW.raw_user_meta_data-&gt;&gt;&#x27;nome&#x27;, split_part(NEW.email, &#x27;@&#x27;, 1)),
+          NEW.email,
+          &#x27;viewer&#x27;)
+  ON CONFLICT (id) DO NOTHING;
+  RETURN NEW;
+END; $$;
+
+DROP TRIGGER IF EXISTS on_auth_user_created ON auth.users;
+CREATE TRIGGER on_auth_user_created
+  AFTER INSERT ON auth.users
+  FOR EACH ROW EXECUTE FUNCTION public.handle_new_user();
+
+-- ───────────────────────────────────────────────────────────────────────────
+-- 2. CONTAS — contas bancárias por empresa
+--    id segue a convenção &lt;empresa_id&gt;_&lt;banco minúsculo sem espaços&gt;
+-- ───────────────────────────────────────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS contas (
+  id           text PRIMARY KEY,
+  empresa_id   text NOT NULL,
+  empresa_nome text,
+  banco        text NOT NULL,
+  iban         text DEFAULT &#x27;&#x27;,
+  saldo        numeric NOT NULL DEFAULT 0,
+  updated_at   timestamptz NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_contas_empresa ON contas(empresa_id);
+
+-- ───────────────────────────────────────────────────────────────────────────
+-- 3. MOVIMENTOS — linhas de extrato bancário
+-- ───────────────────────────────────────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS movimentos (
+  id         uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  conta_id   text NOT NULL,
+  empresa_id text,
+  banco      text,
+  data       date NOT NULL,
+  movimento  text,
+  valor      numeric NOT NULL DEFAULT 0,
+  saldo      numeric NOT NULL DEFAULT 0,
+  categoria  text DEFAULT &#x27;&#x27;,
+  detalhes   text DEFAULT &#x27;&#x27;,
+  seq        int,                       -- preserva a ordem original do Excel
+  created_at timestamptz NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_mov_conta   ON movimentos(conta_id);
+CREATE INDEX IF NOT EXISTS idx_mov_data    ON movimentos(data);
+CREATE INDEX IF NOT EXISTS idx_mov_empresa ON movimentos(empresa_id);
+CREATE INDEX IF NOT EXISTS idx_mov_ordem   ON movimentos(conta_id, seq DESC, data DESC);
+
+-- ───────────────────────────────────────────────────────────────────────────
+-- 4. FATURAS — contas a pagar
+-- ───────────────────────────────────────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS faturas (
+  id           text PRIMARY KEY,
+  empresa      text,          -- id da empresa (ver src/empresas.js)
+  projeto      text DEFAULT &#x27;&#x27;,
+  fatura       text,          -- nº de fatura
+  fornecedor   text,
+  categoria    text,
+  tipo_projeto text,
+  valor        numeric NOT NULL DEFAULT 0,
+  vencimento   date,
+  status       text NOT NULL DEFAULT &#x27;Pendente&#x27;,
+                              -- Pendente | Aprovada | Paga | Vencida | Em disputa | Rejeitada
+  obs          text DEFAULT &#x27;&#x27;,
+  anexo_nome   text DEFAULT &#x27;&#x27;,
+  anexo_b64    text DEFAULT &#x27;&#x27;,   -- PDF/imagem em base64 (data URL)
+  created_at   timestamptz NOT NULL DEFAULT now(),
+  updated_at   timestamptz NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_faturas_status  ON faturas(status);
+CREATE INDEX IF NOT EXISTS idx_faturas_empresa ON faturas(empresa);
+CREATE INDEX IF NOT EXISTS idx_faturas_venc    ON faturas(vencimento);
+
+-- ───────────────────────────────────────────────────────────────────────────
+-- 5. PAGAMENTOS_EXTRAS — saídas/entradas manuais do Fluxo Futuro
+-- ───────────────────────────────────────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS pagamentos_extras (
+  id            text PRIMARY KEY,
+  tipo          text NOT NULL DEFAULT &#x27;saida&#x27;,   -- saida | entrada
+  descricao     text,
+  empresa       text,
+  categoria     text,
+  valor         numeric NOT NULL DEFAULT 0,
+  data_inicio   date,
+  parcelas      int  NOT NULL DEFAULT 1,
+  periodicidade text NOT NULL DEFAULT &#x27;unica&#x27;,   -- unica | mensal | trimestral | anual
+  status        text NOT NULL DEFAULT &#x27;Pendente&#x27;,
+  obs           text DEFAULT &#x27;&#x27;,
+  created_at    timestamptz NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_pe_status ON pagamentos_extras(status);
+CREATE INDEX IF NOT EXISTS idx_pe_data   ON pagamentos_extras(data_inicio);
+
+-- ───────────────────────────────────────────────────────────────────────────
+-- 6. MAPAS DE PAGAMENTO — aprovação em 2 níveis
+-- ───────────────────────────────────────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS mapas_pagamento (
+  id              uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  numero          text,
+  descricao       text,
+  status          text NOT NULL DEFAULT &#x27;pendente_nivel_1&#x27;,
+                  -- pendente_nivel_1 | pendente_nivel_2 | aprovado | recusado
+  total_valor     numeric NOT NULL DEFAULT 0,
+  created_by      uuid REFERENCES profiles(id),
+  created_at      timestamptz NOT NULL DEFAULT now(),
+  aprovado_n1_por uuid REFERENCES profiles(id),
+  aprovado_n1_em  timestamptz,
+  aprovado_n2_por uuid REFERENCES profiles(id),
+  aprovado_n2_em  timestamptz,
+  recusado_por    uuid REFERENCES profiles(id),
+  recusado_em     timestamptz,
+  motivo_recusa   text
+);
+
+CREATE TABLE IF NOT EXISTS mapas_pagamento_itens (
+  id          uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  mapa_id     uuid NOT NULL REFERENCES mapas_pagamento(id) ON DELETE CASCADE,
+  tipo_origem text NOT NULL,   -- fatura | pagamento_extra | comissao_sinal |
+                               -- comissao_escritura | recebivel_escritura
+  origem_id   text NOT NULL,
+  descricao   text NOT NULL,
+  fornecedor  text,
+  empresa     text,
+  categoria   text,
+  valor       numeric NOT NULL,
+  vencimento  date,
+  created_at  timestamptz NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_mpi_mapa_id ON mapas_pagamento_itens(mapa_id);
+CREATE INDEX IF NOT EXISTS idx_mp_status   ON mapas_pagamento(status);
+
+-- ───────────────────────────────────────────────────────────────────────────
+-- 7. FRACOES — inventário comercial
+-- ───────────────────────────────────────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS fracoes (
+  id             text PRIMARY KEY,
+  projeto        text,
+  fracao         text,
+  tipologia      text,
+  area           numeric DEFAULT 0,
+  preco_tabela   numeric DEFAULT 0,
+  status         text DEFAULT &#x27;Disponível&#x27;,  -- Disponível | Reservada | CPCV | Escriturada
+  piso           text,
+  bloco          text,
+  andar          text,
+  estacionamento text,
+  notas          text DEFAULT &#x27;&#x27;,
+  documentos     jsonb DEFAULT &#x27;[]&#x27;::jsonb,
+  updated_at     timestamptz NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_fracoes_projeto ON fracoes(projeto);
+
+-- ───────────────────────────────────────────────────────────────────────────
+-- 8. VENDAS
+-- ───────────────────────────────────────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS vendas (
+  id                          text PRIMARY KEY,
+  fracao_id                   text,
+  projeto                     text,
+  fracao                      text,
+  cliente                     text,
+  nif                         text,
+  email                       text,
+  telefone                    text,
+  valor_venda                 numeric DEFAULT 0,
+  preco_tabela                numeric DEFAULT 0,
+  desconto_pct                numeric DEFAULT 0,
+  recebemos                   numeric DEFAULT 0,
+  falta_receber               numeric DEFAULT 0,
+  previsao_escritura          date,
+  data                        date,
+  parcelas                    jsonb DEFAULT &#x27;[]&#x27;::jsonb,
+  mediador                    text,
+  mediadores                  jsonb DEFAULT &#x27;[]&#x27;::jsonb,
+  comissao_pct                numeric DEFAULT 0,
+  comissao_valor              numeric DEFAULT 0,
+  comissao_manual             boolean DEFAULT false,
+  comissao_parcelas           jsonb DEFAULT &#x27;[]&#x27;::jsonb,
+  comissao_paga_sinal         numeric DEFAULT 0,
+  comissao_paga_escritura     numeric DEFAULT 0,
+  comissao_pendente_sinal     numeric DEFAULT 0,
+  comissao_pendente_escritura numeric DEFAULT 0,
+  data_pagamento_sinal        date,
+  data_pagamento_escritura    date,
+  liquido_empresa             numeric DEFAULT 0,
+  comissao_status             text,
+  fatura_criada               boolean DEFAULT false,
+  status                      text,
+  documentos                  jsonb DEFAULT &#x27;[]&#x27;::jsonb,
+  updated_at                  timestamptz NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_vendas_fracao ON vendas(fracao_id);
+
+-- ───────────────────────────────────────────────────────────────────────────
+-- 9. ORCAMENTO — real × orçado por empresa/categoria
+-- ───────────────────────────────────────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS orcamento (
+  id         text PRIMARY KEY,
+  empresa_id text,
+  projeto    text,
+  categoria  text,
+  grupo      text,     -- receita | capex | obra | opex | resultado
+  orcado     numeric DEFAULT 0,
+  realizado  numeric DEFAULT 0,
+  a_realizar numeric DEFAULT 0,
+  updated_at timestamptz NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_orc_empresa ON orcamento(empresa_id);
+
+-- ───────────────────────────────────────────────────────────────────────────
+-- 10. ENTIDADES — fornecedores, clientes, mediadores
+-- ───────────────────────────────────────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS entidades (
+  id         text PRIMARY KEY,
+  tipo       text,     -- Fornecedor | Cliente | Mediador | Outro
+  nome       text NOT NULL,
+  nif        text,
+  iban       text,
+  email      text,
+  telefone   text,
+  notas      text DEFAULT &#x27;&#x27;,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_entidades_tipo ON entidades(tipo);
+
+-- ═══════════════════════════════════════════════════════════════════════════
+-- 11. RLS — acesso a utilizadores autenticados
+-- ═══════════════════════════════════════════════════════════════════════════
+DO $$
+DECLARE t text;
+BEGIN
+  FOREACH t IN ARRAY ARRAY[
+    &#x27;profiles&#x27;,&#x27;contas&#x27;,&#x27;movimentos&#x27;,&#x27;faturas&#x27;,&#x27;pagamentos_extras&#x27;,
+    &#x27;mapas_pagamento&#x27;,&#x27;mapas_pagamento_itens&#x27;,&#x27;fracoes&#x27;,&#x27;vendas&#x27;,
+    &#x27;orcamento&#x27;,&#x27;entidades&#x27;
+  ] LOOP
+    EXECUTE format(&#x27;ALTER TABLE %I ENABLE ROW LEVEL SECURITY&#x27;, t);
+    EXECUTE format(&#x27;DROP POLICY IF EXISTS &quot;auth_full_access&quot; ON %I&#x27;, t);
+    EXECUTE format(
+      &#x27;CREATE POLICY &quot;auth_full_access&quot; ON %I FOR ALL TO authenticated USING (true) WITH CHECK (true)&#x27;, t);
+  END LOOP;
+END $$;
+
+-- ═══════════════════════════════════════════════════════════════════════════
+-- 12. REALTIME — sincronização em tempo real entre utilizadores
+-- ═══════════════════════════════════════════════════════════════════════════
+DO $$
+DECLARE t text;
+BEGIN
+  FOREACH t IN ARRAY ARRAY[
+    &#x27;profiles&#x27;,&#x27;contas&#x27;,&#x27;movimentos&#x27;,&#x27;faturas&#x27;,&#x27;pagamentos_extras&#x27;,
+    &#x27;mapas_pagamento&#x27;,&#x27;mapas_pagamento_itens&#x27;,&#x27;fracoes&#x27;,&#x27;vendas&#x27;,
+    &#x27;orcamento&#x27;,&#x27;entidades&#x27;
+  ] LOOP
+    BEGIN
+      EXECUTE format(&#x27;ALTER PUBLICATION supabase_realtime ADD TABLE %I&#x27;, t);
+    EXCEPTION WHEN duplicate_object THEN NULL;
+    END;
+    EXECUTE format(&#x27;ALTER TABLE %I REPLICA IDENTITY FULL&#x27;, t);
+  END LOOP;
+END $$;
+
+-- ═══════════════════════════════════════════════════════════════════════════
+-- 13. SEED — empresas e contas bancárias da LPX Private
+--     Tem de coincidir com src/empresas.js
+-- ═══════════════════════════════════════════════════════════════════════════
+INSERT INTO contas (id, empresa_id, empresa_nome, banco, iban, saldo) VALUES
+  (&#x27;favcloset_bcp&#x27;,     &#x27;favcloset&#x27;, &#x27;Favorite Closet&#x27;,    &#x27;BCP&#x27;,     &#x27;&#x27;, 0),
+  (&#x27;favcloset_red&#x27;,     &#x27;favcloset&#x27;, &#x27;Favorite Closet&#x27;,    &#x27;RED&#x27;,     &#x27;&#x27;, 0),
+  (&#x27;simplify_bcp&#x27;,      &#x27;simplify&#x27;,  &#x27;Simplify Rubric&#x27;,    &#x27;BCP&#x27;,     &#x27;&#x27;, 0),
+  (&#x27;simplify_red&#x27;,      &#x27;simplify&#x27;,  &#x27;Simplify Rubric&#x27;,    &#x27;RED&#x27;,     &#x27;&#x27;, 0),
+  (&#x27;enchanted_bcp&#x27;,     &#x27;enchanted&#x27;, &#x27;Enchanted Vortex&#x27;,   &#x27;BCP&#x27;,     &#x27;&#x27;, 0),
+  (&#x27;blessed_bcp&#x27;,       &#x27;blessed&#x27;,   &#x27;Blessed Legion&#x27;,     &#x27;BCP&#x27;,     &#x27;&#x27;, 0),
+  (&#x27;pearl_bcp&#x27;,         &#x27;pearl&#x27;,     &#x27;Pearl Syntax&#x27;,       &#x27;BCP&#x27;,     &#x27;&#x27;, 0),
+  (&#x27;genero_bcp&#x27;,        &#x27;genero&#x27;,    &#x27;Género Prudente&#x27;,    &#x27;BCP&#x27;,     &#x27;&#x27;, 0),
+  (&#x27;fluffy_bcp&#x27;,        &#x27;fluffy&#x27;,    &#x27;Fluffy Rithm&#x27;,       &#x27;BCP&#x27;,     &#x27;&#x27;, 0),
+  (&#x27;adseq_bcp&#x27;,         &#x27;adseq&#x27;,     &#x27;Admirable Sequence&#x27;, &#x27;BCP&#x27;,     &#x27;&#x27;, 0),
+  (&#x27;adseq_red&#x27;,         &#x27;adseq&#x27;,     &#x27;Admirable Sequence&#x27;, &#x27;RED&#x27;,     &#x27;&#x27;, 0),
+  (&#x27;infinite_bcp&#x27;,      &#x27;infinite&#x27;,  &#x27;Infinite Change&#x27;,    &#x27;BCP&#x27;,     &#x27;&#x27;, 0),
+  (&#x27;infinite_red&#x27;,      &#x27;infinite&#x27;,  &#x27;Infinite Change&#x27;,    &#x27;RED&#x27;,     &#x27;&#x27;, 0),
+  (&#x27;lpx_bcp&#x27;,           &#x27;lpx&#x27;,       &#x27;LPX Private&#x27;,        &#x27;BCP&#x27;,     &#x27;&#x27;, 0),
+  (&#x27;lpx_revolut&#x27;,       &#x27;lpx&#x27;,       &#x27;LPX Private&#x27;,        &#x27;Revolut&#x27;, &#x27;&#x27;, 0),
+  (&#x27;lpx_cgd&#x27;,           &#x27;lpx&#x27;,       &#x27;LPX Private&#x27;,        &#x27;CGD&#x27;,     &#x27;&#x27;, 0)
+ON CONFLICT (id) DO NOTHING;
+
+-- ═══════════════════════════════════════════════════════════════════════════
+-- FIM. Passo seguinte: criar os utilizadores (ver /criar-utilizadores.html)
+-- ═══════════════════════════════════════════════════════════════════════════
+</pre>
+
+<script>
+function copiar(){
+  navigator.clipboard.writeText(document.getElementById('sql').textContent)
+    .then(()=>{document.getElementById('msg').textContent='Copiado.';
+               setTimeout(()=>document.getElementById('msg').textContent='',2500);});
+}
+</script>
+</body>
+</html>

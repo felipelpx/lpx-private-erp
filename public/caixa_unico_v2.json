@@ -1,0 +1,134 @@
+{
+ "favcloset": [
+  {
+   "conta_id": "favcloset_bcp",
+   "banco": "BCP",
+   "sheet": "Favorite Closet BCP",
+   "saldo": 0.0,
+   "movimentos": []
+  },
+  {
+   "conta_id": "favcloset_red",
+   "banco": "RED",
+   "sheet": "Favorite Closet RED",
+   "saldo": 0.0,
+   "movimentos": []
+  }
+ ],
+ "simplify": [
+  {
+   "conta_id": "simplify_bcp",
+   "banco": "BCP",
+   "sheet": "Simplify Rubric BCP",
+   "saldo": 0.0,
+   "movimentos": []
+  },
+  {
+   "conta_id": "simplify_red",
+   "banco": "RED",
+   "sheet": "Simplify Rubric RED",
+   "saldo": 0.0,
+   "movimentos": []
+  }
+ ],
+ "enchanted": [
+  {
+   "conta_id": "enchanted_bcp",
+   "banco": "BCP",
+   "sheet": "Enchanted Vortex BCP",
+   "saldo": 0.0,
+   "movimentos": []
+  }
+ ],
+ "blessed": [
+  {
+   "conta_id": "blessed_bcp",
+   "banco": "BCP",
+   "sheet": "Blessed Legion BCP",
+   "saldo": 0.0,
+   "movimentos": []
+  }
+ ],
+ "pearl": [
+  {
+   "conta_id": "pearl_bcp",
+   "banco": "BCP",
+   "sheet": "Pearl Syntax BCP",
+   "saldo": 0.0,
+   "movimentos": []
+  }
+ ],
+ "genero": [
+  {
+   "conta_id": "genero_bcp",
+   "banco": "BCP",
+   "sheet": "Género Prudente BCP",
+   "saldo": 0.0,
+   "movimentos": []
+  }
+ ],
+ "fluffy": [
+  {
+   "conta_id": "fluffy_bcp",
+   "banco": "BCP",
+   "sheet": "Fluffy Rithm BCP",
+   "saldo": 0.0,
+   "movimentos": []
+  }
+ ],
+ "adseq": [
+  {
+   "conta_id": "adseq_bcp",
+   "banco": "BCP",
+   "sheet": "Admirable Sequence BCP",
+   "saldo": 0.0,
+   "movimentos": []
+  },
+  {
+   "conta_id": "adseq_red",
+   "banco": "RED",
+   "sheet": "Admirable Sequence RED",
+   "saldo": 0.0,
+   "movimentos": []
+  }
+ ],
+ "infinite": [
+  {
+   "conta_id": "infinite_bcp",
+   "banco": "BCP",
+   "sheet": "Infinite Change BCP",
+   "saldo": 0.0,
+   "movimentos": []
+  },
+  {
+   "conta_id": "infinite_red",
+   "banco": "RED",
+   "sheet": "Infinite Change RED",
+   "saldo": 0.0,
+   "movimentos": []
+  }
+ ],
+ "lpx": [
+  {
+   "conta_id": "lpx_bcp",
+   "banco": "BCP",
+   "sheet": "LPX Private BCP",
+   "saldo": 0.0,
+   "movimentos": []
+  },
+  {
+   "conta_id": "lpx_revolut",
+   "banco": "Revolut",
+   "sheet": "LPX Private Revolut",
+   "saldo": 0.0,
+   "movimentos": []
+  },
+  {
+   "conta_id": "lpx_cgd",
+   "banco": "CGD",
+   "sheet": "LPX Private CGD",
+   "saldo": 0.0,
+   "movimentos": []
+  }
+ ]
+}

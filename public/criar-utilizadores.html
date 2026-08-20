@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="pt">
+<head>
+<meta charset="utf-8"/>
+<title>Criar Utilizadores — LPX Private ERP</title>
+<style>
+  body{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;padding:34px 26px;background:#0B0B0F;color:#e9ecef;max-width:1000px;margin:0 auto;line-height:1.65}
+  h1{color:#fff;font-size:22px;letter-spacing:-0.01em}
+  h2{color:#6B7C93;border-bottom:1px solid #23262e;padding-bottom:6px;margin-top:30px;font-size:15px;text-transform:uppercase;letter-spacing:.1em}
+  pre{background:#14161c;padding:18px;border-radius:10px;overflow:auto;border-left:3px solid #6B7C93;font-size:12px;white-space:pre-wrap}
+  .step{background:#14161c;padding:16px 18px;border-radius:10px;margin:12px 0;border-left:3px solid #2c313b}
+  table{width:100%;border-collapse:collapse;font-size:12.5px;margin-top:10px}
+  th,td{padding:9px 12px;border-bottom:1px solid #23262e;text-align:left}
+  th{color:#6B7C93;text-transform:uppercase;font-size:10.5px;letter-spacing:.08em}
+  button{background:#6B7C93;border:none;padding:11px 22px;font-size:13px;cursor:pointer;border-radius:8px;font-weight:700;color:#0B0B0F;font-family:inherit}
+  button:hover{background:#8593a7}
+  a{color:#9fb0c6}
+  code{background:#1c1f27;padding:2px 6px;border-radius:4px;font-size:12px}
+  .logo{background:#0B0B0F;display:inline-block;margin-bottom:14px}
+  .logo img{height:34px;display:block}
+  .warn{border-left-color:#d97706;background:#1e1a12}
+</style>
+</head>
+<body>
+<div class="logo"><img src="/logo-lpx.png" alt="LPX Private"/></div>
+<h1>Criar utilizadores</h1>
+
+<p>Os utilizadores são criados no <strong>Supabase Auth</strong>. O <code>profile</code>
+(nome, papel, nível de aprovação) é criado automaticamente por trigger e depois
+ajustado com o SQL abaixo.</p>
+
+<h2>1 · Criar as contas no Auth</h2>
+<div class="step">
+  Vai a <em>Authentication → Users → Add user → Create new user</em> e cria as três
+  contas. Marca <strong>Auto Confirm User</strong> para não ser preciso confirmar por email.
+  <table>
+    <tr><th>Nome</th><th>Email</th><th>Papel</th><th>Aprovação</th></tr>
+    <tr><td>Felipe</td><td>felipe@lpxprivate.pt</td><td>admin</td><td>Nível 2 · cria mapas</td></tr>
+    <tr><td>Rodrigo</td><td>rodrigo@lpxprivate.pt</td><td>gestor</td><td>Nível 1</td></tr>
+    <tr><td>Thiago</td><td>thiago@lpxprivate.pt</td><td>gestor</td><td>Nível 1</td></tr>
+  </table>
+</div>
+
+<div class="step warn">
+  Se o domínio de email não for <code>@lpxprivate.pt</code>, altera-o nesta página e no
+  SQL abaixo antes de correr. Define palavras-passe fortes e distintas; podem ser
+  alteradas depois em <em>Authentication → Users</em>.
+</div>
+
+<h2>2 · Definir papéis e níveis de aprovação</h2>
+<div class="step">
+  Cola no <em>SQL Editor</em> do Supabase, depois de as três contas existirem.
+</div>
+<button onclick="copiar()">Copiar SQL</button>
+<span id="msg" style="margin-left:12px;color:#16a34a"></span>
+<pre id="sql">-- Garante que existe um profile para cada utilizador do Auth
+INSERT INTO profiles (id, nome, email, role)
+SELECT u.id,
+       initcap(split_part(u.email, '@', 1)),
+       u.email,
+       'viewer'
+FROM auth.users u
+ON CONFLICT (id) DO NOTHING;
+
+-- Felipe — administrador, aprovador de nível 2, pode criar mapas de pagamento
+UPDATE profiles
+   SET nome = 'Felipe', role = 'admin',
+       approval_level = 2, can_create_mapas = true
+ WHERE email = 'felipe@lpxprivate.pt';
+
+-- Rodrigo — gestor, aprovador de nível 1
+UPDATE profiles
+   SET nome = 'Rodrigo', role = 'gestor',
+       approval_level = 1, can_create_mapas = true
+ WHERE email = 'rodrigo@lpxprivate.pt';
+
+-- Thiago — gestor, aprovador de nível 1
+UPDATE profiles
+   SET nome = 'Thiago', role = 'gestor',
+       approval_level = 1, can_create_mapas = true
+ WHERE email = 'thiago@lpxprivate.pt';
+
+-- Conferir o resultado
+SELECT nome, email, role, approval_level, can_create_mapas
+  FROM profiles ORDER BY role, nome;</pre>
+
+<h2>3 · Papéis disponíveis</h2>
+<div class="step">
+  <table>
+    <tr><th>Papel</th><th>O que vê / pode fazer</th></tr>
+    <tr><td>admin</td><td>Tudo, incluindo o separador Utilizadores</td></tr>
+    <tr><td>gestor</td><td>Tudo exceto gestão de utilizadores; pode importar e editar</td></tr>
+    <tr><td>viewer</td><td>Só leitura; não vê o separador Importar</td></tr>
+  </table>
+  <p><strong>approval_level:</strong> 0 = não aprova · 1 = 1.ª aprovação de mapas ·
+  2 = 2.ª aprovação (fecha o mapa).</p>
+</div>
+
+<script>
+function copiar(){
+  navigator.clipboard.writeText(document.getElementById('sql').textContent)
+    .then(()=>{document.getElementById('msg').textContent='Copiado.';
+               setTimeout(()=>document.getElementById('msg').textContent='',2500);});
+}
+</script>
+</body>
+</html>
