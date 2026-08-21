@@ -14,6 +14,7 @@ import { EMPRESAS as EMPRESAS_ALL, BANCO_COLORS as BANCO_COLORS_CFG } from "./em
 const EMPRESAS = EMPRESAS_ALL;
 import FotosView from "./FotosView.jsx";
 import { BRAND } from "./brand.js";
+import { fmtEUR, fmtCompacto, fmtPct, fmtInt, fmtData } from "./formato.js";
 
 const ROLE_LABELS = { admin: "Administrador", gestor: "Gestor", viewer: "Visualizador", investidor: "Investidor" };
 const ROLE_COLORS = { admin: "#dc2626", gestor: "#2563eb", viewer: "#16a34a", investidor: "#9333ea" };
@@ -36,8 +37,8 @@ const STATUS_FATURA = ["Pendente","Aprovada","Paga","Vencida","Em disputa","Reje
 const INITIAL_FATURAS = [];
 
 // ─── HELPERS ──────────────────────────────────────────────────────────────────
-const fmt = (v) => new Intl.NumberFormat("pt-PT",{minimumFractionDigits:2,maximumFractionDigits:2}).format(v)+" €";
-const fmtK = (v) => { const a=Math.abs(v); return (v<0?"-":"")+(a>=1e6?(a/1e6).toFixed(2)+"M":(a>=1000?(a/1000).toFixed(0)+"k":a.toFixed(0)))+" €"; };
+const fmt = (v) => fmtEUR(v);
+const fmtK = (v) => fmtCompacto(v);
 // Formata "2026-04-30" → "30-04-2026". Se vier inválido, devolve string original.
 const fmtDate = (s) => {
   if (!s || typeof s !== "string" || s.length < 10) return s || "";
@@ -230,7 +231,7 @@ function RealOrcado() {
                     <td style={{padding:"11px 14px",fontFamily:"monospace",fontWeight:600,color:row.grupo==="receita"?"#16a34a":row.grupo==="resultado"?"#0891b2":"#555"}}>{forecast?fmtK(forecast):"—"}</td>
                     <td style={{padding:"11px 14px",fontFamily:"monospace",fontSize:11}}>
                       {p!==null ? (
-                        <span style={{color:p>110?"#dc2626":p>80?"#16a34a":"#d97706",fontWeight:600}}>{p.toFixed(1)}%</span>
+                        <span style={{color:p>110?"#dc2626":p>80?"#16a34a":"#d97706",fontWeight:600}}>{fmtPct(p,1)}</span>
                       ):"—"}
                     </td>
                     <td style={{padding:"11px 14px",fontFamily:"monospace",fontSize:11,color:desvio>0?"#16a34a":desvio<0?"#dc2626":"#aaa"}}>
@@ -478,10 +479,10 @@ function ContasPagar({canEdit, faturas: faturasTodas, setFaturas, addFatura, upd
     Object.entries(byEmp).forEach(([nome,fs])=>{
       const tot=fs.reduce((s,f)=>s+f.valor,0);grand+=tot;
       html+=`<h2>${nome}</h2><table><thead><tr><th>Fatura</th><th>Fornecedor</th><th>Categoria</th><th>Vencimento</th><th>Valor</th></tr></thead><tbody>`;
-      fs.forEach(f=>{html+=`<tr><td>${f.fatura||""}</td><td>${f.fornecedor||""}</td><td>${f.categoria||""}</td><td>${f.vencimento||""}</td><td style="text-align:right">${new Intl.NumberFormat("pt-PT",{minimumFractionDigits:2}).format(f.valor)} €</td></tr>`;});
-      html+=`</tbody><tfoot><tr><td colspan="4">Total ${nome}</td><td style="text-align:right">${new Intl.NumberFormat("pt-PT",{minimumFractionDigits:2}).format(tot)} €</td></tr></tfoot></table>`;
+      fs.forEach(f=>{html+=`<tr><td>${f.fatura||""}</td><td>${f.fornecedor||""}</td><td>${f.categoria||""}</td><td>${f.vencimento||""}</td><td style="text-align:right">${fmtEUR(f.valor)}</td></tr>`;});
+      html+=`</tbody><tfoot><tr><td colspan="4">Total ${nome}</td><td style="text-align:right">${fmtEUR(tot)}</td></tr></tfoot></table>`;
     });
-    html+=`<h2 style="color:#1a1a2e">TOTAL GERAL: ${new Intl.NumberFormat("pt-PT",{minimumFractionDigits:2}).format(grand)} €</h2></body></html>`;
+    html+=`<h2 style="color:#1a1a2e">TOTAL GERAL: ${fmtEUR(grand)}</h2></body></html>`;
     const w=window.open("","_blank");w.document.write(html);w.document.close();w.print();
   };
   const exportMapaExcel=()=>{

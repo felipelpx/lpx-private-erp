@@ -1,6 +1,7 @@
 import { useState, useMemo, useEffect } from "react";
 import { useFracoes, useVendas } from "./hooks.js";
 import { EMPRESAS } from "./empresas.js";
+import { fmtEUR, fmtPct as fmtPctCfg, fmtNum, fmtArea } from "./formato.js";
 
 // Empresa a que são imputadas as faturas de comissão geradas a partir das vendas.
 const EMPRESA_COMISSOES = EMPRESAS[EMPRESAS.length - 1]?.id || "";
@@ -13,8 +14,8 @@ const STATUS_STYLES = {
   "Escriturada": { bg:"#f0fdf4", text:"#16a34a",  border:"#bbf7d0" },
 };
 
-const fmt = v => new Intl.NumberFormat("pt-PT",{minimumFractionDigits:2,maximumFractionDigits:2}).format(v||0)+" €";
-const fmtPct = v => (v||0).toFixed(2)+"%";
+const fmt = v => fmtEUR(v);
+const fmtPct = v => fmtPctCfg(v);
 
 const inp = {background:"#f8f8f8",border:"1px solid #eee",borderRadius:7,padding:"7px 10px",fontSize:12,outline:"none",width:"100%",boxSizing:"border-box"};
 const lbl = {fontSize:9,color:"#aaa",fontFamily:"monospace",textTransform:"uppercase",letterSpacing:"0.07em",display:"block",marginBottom:3};

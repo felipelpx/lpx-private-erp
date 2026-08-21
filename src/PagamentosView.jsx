@@ -1,8 +1,9 @@
 import { useState, useMemo, useEffect } from "react";
 import { useMapasPagamento, useMapaItens, useVendas } from "./hooks.js";
 import { supabase } from "./supabase.js";
+import { fmtEUR, fmtDataHora } from "./formato.js";
 
-const fmtFull = (v) => new Intl.NumberFormat("pt-PT", { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(v || 0) + " €";
+const fmtFull = (v) => fmtEUR(v);
 const fmtDate = (s) => {
   if (!s || typeof s !== "string" || s.length < 10) return s || "—";
   const m = s.substring(0, 10).match(/^(\d{4})-(\d{2})-(\d{2})$/);
@@ -12,7 +13,7 @@ const fmtDateTime = (s) => {
   if (!s) return "—";
   const d = new Date(s);
   if (isNaN(d.getTime())) return s;
-  return d.toLocaleString("pt-PT", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" });
+  return fmtDataHora(d);
 };
 
 const STATUS_INFO = {
@@ -779,7 +780,7 @@ function DetalheMapa({ mapaId, mapas, currentUser, profileById, faturas = [], pa
   ${aprovacoesHtml}
 
   <div class="footer">
-    <div>Documento gerado em ${new Date().toLocaleString("pt-PT")}</div>
+    <div>Documento gerado em ${fmtDataHora(new Date())}</div>
     <div>LPX Private · Mapa ${numeroAmigavel}</div>
   </div>
 

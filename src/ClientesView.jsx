@@ -1,7 +1,8 @@
 import { useState, useMemo } from "react";
+import { fmtEUR, fmtEUR0, fmtNum, fmtArea } from "./formato.js";
 
-const fmt = (v) => new Intl.NumberFormat("pt-PT", { minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(v || 0) + " €";
-const fmt2 = (v) => new Intl.NumberFormat("pt-PT", { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(v || 0) + " €";
+const fmt = (v) => fmtEUR0(v);
+const fmt2 = (v) => fmtEUR(v);
 
 const STATUS_MAP = {
   "Escriturada":    { bg: "#f0fdf4", text: "#16a34a", border: "#bbf7d0" },
@@ -139,7 +140,7 @@ export default function ClientesView({ vendas }) {
                     <td style={{ padding: "9px 12px", color: "#888" }}>{u.bloco}</td>
                     <td style={{ padding: "9px 12px", color: "#888", whiteSpace: "nowrap" }}>{u.andar}</td>
                     <td style={{ padding: "9px 12px", color: "#aaa", fontSize: 11 }}>{u.estacionamento || "—"}</td>
-                    <td style={{ padding: "9px 12px", color: "#888", fontFamily: "monospace" }}>{u.area_privativa?.toFixed(2)}</td>
+                    <td style={{ padding: "9px 12px", color: "#888", fontFamily: "monospace" }}>{fmtNum(u.area_privativa)}</td>
                     <td style={{ padding: "9px 12px", color: "#333", maxWidth: 160, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={u.cliente}>{u.cliente || "—"}</td>
                     <td style={{ padding: "9px 12px", color: "#888", fontSize: 11, whiteSpace: "nowrap" }}>{u.consultor || "—"}</td>
                     <td style={{ padding: "9px 12px", color: "#888", fontFamily: "monospace", whiteSpace: "nowrap" }}>{u.previsao_escritura || "—"}</td>
@@ -200,7 +201,7 @@ export default function ClientesView({ vendas }) {
               { label: "Data Pag. Escritura", value: selected.data_pagamento_escritura || "—", color: "#888" },
               { label: "Previsão Escritura", value: selected.previsao_escritura || "—", color: "#888" },
               { label: "Tipologia", value: selected.tipologia, color: "#4a6fa5" },
-              { label: "Área Privativa", value: `${selected.area_privativa?.toFixed(2)} m²`, color: "#888" },
+              { label: "Área Privativa", value: fmtArea(selected.area_privativa), color: "#888" },
             ].map((k, i) => (
               <div key={i} style={{ background: "#f8f9fc", borderRadius: 8, padding: "10px 14px" }}>
                 <div style={{ fontSize: 10, color: "#aaa", textTransform: "uppercase", fontFamily: "monospace", letterSpacing: "0.06em", marginBottom: 3 }}>{k.label}</div>

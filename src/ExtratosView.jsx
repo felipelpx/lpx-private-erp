@@ -2,10 +2,11 @@ import { useState, useMemo, useCallback, useEffect, useRef } from "react";
 import { useMovimentosByConta, useSaldosAtuais } from "./hooks.js";
 import { supabase } from "./supabase.js";
 import { CATEGORIAS } from "./categorias.js";
+import { fmtEUR, fmtNum, fmtInt, fmtPctSinal, fmtDataHora, fmtData as fmtDataCfg } from "./formato.js";
 
 const BANCO_COLORS = {"Millennium":"#e84393","BNI":"#0057b7","BB Americas":"#c8a500","Eurobic":"#e74c3c","Revolut":"#6772e5","CGD":"#00a859","NovoBanco":"#ff6200","Banco Invest":"#1e3a6e","BAE":"#6c3483","BCP":"#002fa7","Miami":"#0891b2","Cartao 7449":"#f59e0b","Caixa Livre":"#8b5cf6"};
 
-const fmtN = (v) => new Intl.NumberFormat("pt-PT",{minimumFractionDigits:2,maximumFractionDigits:2}).format(v||0)+" €";
+const fmtN = (v) => fmtEUR(v);
 
 // ────────────────────────────────────────────────────────────────────────────
 // Editable cells: campos com state local controlado, debounced save, e badge
@@ -299,7 +300,7 @@ function CaixaDinamicoBar({
                 {diffAbs >= 0 ? "+" : ""}{fmtN(diffAbs)}
                 {diffPct !== null && (
                   <span style={{ fontSize: 11, marginLeft: 6, opacity: 0.8 }}>
-                    ({diffAbs >= 0 ? "+" : ""}{diffPct.toFixed(1)}%)
+                    ({diffAbs >= 0 ? "+" : ""}{fmtNum(diffPct,1)}%)
                   </span>
                 )}
               </span>
@@ -399,7 +400,7 @@ function CaixaDinamicoBar({
                       {loadingHist || loadingAtual ? "…" : (l.variacaoAbs >= 0 ? "+" : "") + fmtN(l.variacaoAbs)}
                     </td>
                     <td style={{ padding: "10px 16px", color: varColor, fontFamily: "monospace", fontWeight: 700, textAlign: "right" }}>
-                      {loadingHist || loadingAtual ? "…" : (l.variacaoPct === null ? "—" : (l.variacaoPct >= 0 ? "+" : "") + l.variacaoPct.toFixed(2) + " %")}
+                      {loadingHist || loadingAtual ? "…" : (l.variacaoPct === null ? "—" : fmtPctSinal(l.variacaoPct))}
                     </td>
                   </tr>
                 );
@@ -419,7 +420,7 @@ function CaixaDinamicoBar({
                     {(totaisTabela.variacaoAbs >= 0 ? "+" : "") + fmtN(totaisTabela.variacaoAbs)}
                   </td>
                   <td style={{ padding: "12px 16px", color: totaisTabela.variacaoAbs >= 0 ? "#22c55e" : "#ef4444", fontFamily: "monospace", fontWeight: 800, textAlign: "right" }}>
-                    {totalVarPct === null ? "—" : (totalVarPct >= 0 ? "+" : "") + totalVarPct.toFixed(2) + " %"}
+                    {totalVarPct === null ? "—" : fmtPctSinal(totalVarPct)}
                   </td>
                 </tr>
               )}
@@ -465,7 +466,7 @@ const fmtEur = (v) => {
   const n = Number(v) || 0;
   const sign = n < 0 ? "-" : "";
   const abs = Math.abs(n);
-  return sign + "€" + abs.toLocaleString("pt-PT", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  return sign + "€" + fmtNum(abs, 2);
 };
 const fmtDataPT = (iso) => {
   if (!iso) return "";
@@ -548,7 +549,7 @@ async function exportarExtratoExcel({ empresaNome, banco, sheetOrigem, movimento
     ["Período", periodoTxt],
     ["Filtros", filtrosTxt],
     ["Movimentos", movs.length],
-    ["Exportado em", new Date().toLocaleString("pt-PT")],
+    ["Exportado em", fmtDataHora(new Date())],
     [],
     ["Data", "Descrição", "Valor", "Saldo", "Categoria", "Detalhes"],
   ];
@@ -1368,7 +1369,7 @@ function GerarApresentacaoModal({ empresasEnriquecidas, onClose }) {
               { text: desc.slice(0, 55),    options: { fill: zeb, color: "1A1A2E", fontSize: 8, align: "left",  valign: "middle" } },
               { text: obs.slice(0, 40),     options: { fill: zeb, color: "666666", fontSize: 7, align: "left",  valign: "middle", italic: true } },
               { text: fmtEur(valor).replace("€", ""), options: { fill: zeb, color: valor < 0 ? RED : GREEN, fontSize: 8, bold: true, align: "right", valign: "middle", fontFace: "Consolas" } },
-              { text: (Number(m.saldo) || 0).toLocaleString("pt-PT", { minimumFractionDigits: 2, maximumFractionDigits: 2 }), options: { fill: zeb, color: "666666", fontSize: 8, align: "right", valign: "middle", fontFace: "Consolas" } },
+              { text: fmtNum(Number(m.saldo) || 0, 2), options: { fill: zeb, color: "666666", fontSize: 8, align: "right", valign: "middle", fontFace: "Consolas" } },
               { text: m.categoria || "—",   options: { fill: zeb, color: "888888", fontSize: 8, align: "left",  valign: "middle" } },
             ];
           });
@@ -1921,7 +1922,7 @@ export default function ExtratosView({ EMPRESAS, extrato, caixaUnico, setCaixaUn
             🔄 Atualizar
           </button>
           <div style={{ fontSize: 12, color: "#6B7C93", fontFamily: "monospace", fontWeight: 700 }}>
-            {totalMovsGlobal > 0 ? totalMovsGlobal.toLocaleString("pt-PT") + " movimentos" : "A carregar..."}
+            {totalMovsGlobal > 0 ? fmtInt(totalMovsGlobal) + " movimentos" : "A carregar..."}
           </div>
         </div>
       </div>
@@ -2085,7 +2086,7 @@ export default function ExtratosView({ EMPRESAS, extrato, caixaUnico, setCaixaUn
                         fontWeight: 700,
                         whiteSpace: "nowrap",
                       }}>
-                        {nMovs.toLocaleString("pt-PT")}
+                        {fmtInt(nMovs)}
                       </span>
                     )}
                   </div>

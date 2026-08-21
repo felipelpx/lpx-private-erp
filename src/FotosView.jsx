@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useMemo } from "react";
 import { supabase } from "./supabase.js";
 import { EMPRESAS } from "./empresas.js";
+import { fmtData, fmtTamanho, fmtInt } from "./formato.js";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // FOTOS DE OBRA — galeria por projeto
@@ -14,17 +15,6 @@ import { EMPRESAS } from "./empresas.js";
 const BUCKET = "fotos";
 const MAX_LADO = 1800;      // px — reduz antes de enviar
 const QUALIDADE = 0.82;
-
-const fmtData = (iso) => {
-  if (!iso) return "";
-  const [y, m, d] = String(iso).split("T")[0].split("-");
-  return `${d}/${m}/${y}`;
-};
-
-const fmtTamanho = (bytes) => {
-  if (!bytes) return "";
-  return bytes > 1048576 ? `${(bytes / 1048576).toFixed(1)} MB` : `${Math.round(bytes / 1024)} KB`;
-};
 
 // Reduz a imagem no browser: uploads mais rápidos e menos custo de storage
 function reduzirImagem(file) {
@@ -62,9 +52,10 @@ export default function FotosView({ currentUser, empresasVisiveis }) {
   const [urls, setUrls] = useState({});
   const [lightbox, setLightbox] = useState(null);
   const [aEnviar, setAEnviar] = useState(null);
-  const [legenda, setLegenda] = useState("");
-  const [dataFoto, setDataFoto] = useState(new Date().toISOString().slice(0, 10));
   const [empresaUpload, setEmpresaUpload] = useState(empresas[0]?.id || "");
+  // Fotos acabadas de enviar, à espera de legenda e data
+  const [porLegendar, setPorLegendar] = useState([]);
+  const [aGuardar, setAGuardar] = useState(false);
   const inputRef = useRef(null);
 
   const carregar = async () => {
@@ -102,10 +93,14 @@ export default function FotosView({ currentUser, empresasVisiveis }) {
 
   const nomeEmpresa = (id) => empresas.find(e => e.id === id)?.nome || id;
 
+  // Envia primeiro; a legenda e a data são preenchidas depois, foto a foto.
   const enviar = async (ficheiros) => {
     const lista = Array.from(ficheiros || []).filter(f => f.type.startsWith("image/"));
     if (!lista.length) return;
     if (!empresaUpload) { alert("Escolhe o projeto."); return; }
+
+    const hoje = new Date().toISOString().slice(0, 10);
+    const novas = [];
 
     for (let i = 0; i < lista.length; i++) {
       const file = lista[i];
@@ -118,25 +113,74 @@ export default function FotosView({ currentUser, empresasVisiveis }) {
           .upload(path, blob, { contentType: "image/jpeg", upsert: false });
         if (upErr) throw upErr;
 
-        const { error: dbErr } = await supabase.from("fotos").insert({
+        const { data: linha, error: dbErr } = await supabase.from("fotos").insert({
           empresa_id: empresaUpload,
           path,
-          legenda: legenda || "",
-          data: dataFoto,
+          legenda: "",
+          data: hoje,
           tamanho: blob.size,
           criado_por: currentUser?.id || null,
-        });
+        }).select().single();
         if (dbErr) {
           await supabase.storage.from(BUCKET).remove([path]); // não deixa órfãos
           throw dbErr;
         }
+
+        novas.push({
+          ...linha,
+          _preview: URL.createObjectURL(blob),   // pré-visualização imediata
+          _nomeOriginal: file.name,
+          legenda: "",
+          data: hoje,
+        });
       } catch (e) {
         alert(`Erro ao enviar "${file.name}": ${e?.message || e}`);
         break;
       }
     }
-    setAEnviar(null); setLegenda("");
+
+    setAEnviar(null);
     if (inputRef.current) inputRef.current.value = "";
+    if (novas.length) setPorLegendar(p => [...p, ...novas]);
+    carregar();
+  };
+
+  const alterarPendente = (id, campo, valor) =>
+    setPorLegendar(lista => lista.map(f => f.id === id ? { ...f, [campo]: valor } : f));
+
+  // Aplica a data da primeira foto a todas as restantes
+  const aplicarDataATodas = () => {
+    const primeira = porLegendar[0]?.data;
+    if (!primeira) return;
+    setPorLegendar(lista => lista.map(f => ({ ...f, data: primeira })));
+  };
+
+  const guardarLegendas = async () => {
+    setAGuardar(true);
+    try {
+      for (const f of porLegendar) {
+        const { error } = await supabase.from("fotos")
+          .update({ legenda: f.legenda || "", data: f.data })
+          .eq("id", f.id);
+        if (error) throw error;
+      }
+      porLegendar.forEach(f => f._preview && URL.revokeObjectURL(f._preview));
+      setPorLegendar([]);
+      carregar();
+    } catch (e) {
+      alert("Erro a guardar: " + (e?.message || e));
+    } finally {
+      setAGuardar(false);
+    }
+  };
+
+  // Remove uma foto ainda na fase de legendagem (apaga mesmo)
+  const descartarPendente = async (foto) => {
+    if (!confirm("Apagar esta foto?")) return;
+    await supabase.storage.from(BUCKET).remove([foto.path]);
+    await supabase.from("fotos").delete().eq("id", foto.id);
+    foto._preview && URL.revokeObjectURL(foto._preview);
+    setPorLegendar(lista => lista.filter(f => f.id !== foto.id));
     carregar();
   };
 
@@ -187,39 +231,92 @@ export default function FotosView({ currentUser, empresasVisiveis }) {
         </div>
       </div>
 
-      {/* Envio de fotos */}
+      {/* Envio de fotos — escolher projeto e enviar; legenda vem a seguir */}
       {podeEditar && (
         <div style={{ background: "#fff", border: "1px solid #f0f0f0", borderRadius: 12, padding: 18 }}>
           <div style={{ fontSize: 15, fontWeight: 700, color: "#1a1a2e", fontFamily: "Georgia,serif", marginBottom: 14 }}>
             Adicionar fotos
           </div>
           <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "flex-end" }}>
-            <div style={{ flex: "1 1 220px" }}>
+            <div style={{ flex: "1 1 260px" }}>
               <div style={{ fontSize: 9, color: "#aaa", textTransform: "uppercase", fontFamily: "monospace", marginBottom: 4 }}>Projeto</div>
               <select value={empresaUpload} onChange={e => setEmpresaUpload(e.target.value)}
                 style={{ width: "100%", background: "#f8f8f8", border: "1px solid #eee", borderRadius: 8, padding: "8px 10px", fontSize: 12, outline: "none" }}>
                 {empresas.map(e => <option key={e.id} value={e.id}>{e.nome}</option>)}
               </select>
             </div>
-            <div style={{ flex: "0 0 140px" }}>
-              <div style={{ fontSize: 9, color: "#aaa", textTransform: "uppercase", fontFamily: "monospace", marginBottom: 4 }}>Data</div>
-              <input type="date" value={dataFoto} onChange={e => setDataFoto(e.target.value)}
-                style={{ width: "100%", background: "#f8f8f8", border: "1px solid #eee", borderRadius: 8, padding: "8px 10px", fontSize: 12, outline: "none", fontFamily: "monospace" }} />
-            </div>
-            <div style={{ flex: "2 1 260px" }}>
-              <div style={{ fontSize: 9, color: "#aaa", textTransform: "uppercase", fontFamily: "monospace", marginBottom: 4 }}>Legenda (opcional)</div>
-              <input value={legenda} onChange={e => setLegenda(e.target.value)} placeholder="ex: fachada nascente, piso 2"
-                style={{ width: "100%", background: "#f8f8f8", border: "1px solid #eee", borderRadius: 8, padding: "8px 10px", fontSize: 12, outline: "none" }} />
-            </div>
             <button onClick={() => inputRef.current?.click()} disabled={!!aEnviar}
-              style={{ background: aEnviar ? "#e8e8e8" : "#16a34a", color: aEnviar ? "#999" : "#fff", border: "none", padding: "9px 20px", borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: aEnviar ? "default" : "pointer" }}>
+              style={{ background: aEnviar ? "#e8e8e8" : "#16a34a", color: aEnviar ? "#999" : "#fff", border: "none", padding: "9px 22px", borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: aEnviar ? "default" : "pointer" }}>
               {aEnviar ? `A enviar ${aEnviar.atual}/${aEnviar.total}...` : "Escolher fotos"}
             </button>
             <input ref={inputRef} type="file" accept="image/*" multiple style={{ display: "none" }}
               onChange={e => enviar(e.target.files)} />
           </div>
           <div style={{ fontSize: 10, color: "#bbb", marginTop: 8 }}>
-            As imagens são reduzidas para {MAX_LADO}px antes do envio. Podes escolher várias de uma vez.
+            Podes escolher várias de uma vez. Depois de enviadas, preenches a legenda e a data de cada uma.
+            As imagens são reduzidas para {MAX_LADO}px antes do envio.
+          </div>
+          {aEnviar && (
+            <div style={{ fontSize: 11, color: "#666", marginTop: 8, fontFamily: "monospace" }}>
+              {aEnviar.nome}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Legendagem das fotos acabadas de enviar */}
+      {porLegendar.length > 0 && (
+        <div style={{ background: "#fff", border: "2px solid #16a34a", borderRadius: 12, padding: 18 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, marginBottom: 6, flexWrap: "wrap" }}>
+            <div>
+              <div style={{ fontSize: 15, fontWeight: 700, color: "#1a1a2e", fontFamily: "Georgia,serif" }}>
+                {fmtInt(porLegendar.length)} {porLegendar.length === 1 ? "foto enviada" : "fotos enviadas"}
+              </div>
+              <div style={{ fontSize: 11, color: "#888", marginTop: 2 }}>
+                Preenche a legenda e a data de cada uma. Já estão guardadas — isto é só para as identificar.
+              </div>
+            </div>
+            <div style={{ display: "flex", gap: 8 }}>
+              {porLegendar.length > 1 && (
+                <button onClick={aplicarDataATodas}
+                  style={{ background: "#fff", border: "1px solid #e0e0e0", color: "#666", padding: "8px 14px", borderRadius: 8, fontSize: 12, cursor: "pointer" }}>
+                  Usar a 1.ª data em todas
+                </button>
+              )}
+              <button onClick={guardarLegendas} disabled={aGuardar}
+                style={{ background: aGuardar ? "#e8e8e8" : "#16a34a", color: aGuardar ? "#999" : "#fff", border: "none", padding: "8px 20px", borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: aGuardar ? "default" : "pointer" }}>
+                {aGuardar ? "A guardar..." : "Concluir"}
+              </button>
+            </div>
+          </div>
+
+          <div style={{ display: "flex", flexDirection: "column", gap: 10, marginTop: 12 }}>
+            {porLegendar.map(f => (
+              <div key={f.id} style={{ display: "flex", gap: 12, alignItems: "center", background: "#fafbfc", borderRadius: 10, padding: 10, flexWrap: "wrap" }}>
+                <img src={f._preview} alt=""
+                  style={{ width: 86, height: 64, objectFit: "cover", borderRadius: 7, flexShrink: 0, background: "#eee" }} />
+                <div style={{ flex: "2 1 240px", minWidth: 200 }}>
+                  <div style={{ fontSize: 9, color: "#aaa", textTransform: "uppercase", fontFamily: "monospace", marginBottom: 3 }}>Legenda</div>
+                  <input value={f.legenda} autoFocus={porLegendar[0]?.id === f.id}
+                    onChange={e => alterarPendente(f.id, "legenda", e.target.value)}
+                    placeholder="ex: fachada nascente, piso 2"
+                    style={{ width: "100%", background: "#fff", border: "1px solid #e8e8e8", borderRadius: 7, padding: "7px 10px", fontSize: 12, outline: "none" }} />
+                </div>
+                <div style={{ flex: "0 0 140px" }}>
+                  <div style={{ fontSize: 9, color: "#aaa", textTransform: "uppercase", fontFamily: "monospace", marginBottom: 3 }}>Data</div>
+                  <input type="date" value={f.data}
+                    onChange={e => alterarPendente(f.id, "data", e.target.value)}
+                    style={{ width: "100%", background: "#fff", border: "1px solid #e8e8e8", borderRadius: 7, padding: "6px 9px", fontSize: 12, outline: "none", fontFamily: "monospace" }} />
+                </div>
+                <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 4 }}>
+                  <span style={{ fontSize: 9, color: "#bbb", fontFamily: "monospace" }}>{fmtTamanho(f.tamanho)}</span>
+                  <button onClick={() => descartarPendente(f)} title="Apagar esta foto"
+                    style={{ background: "#fff0f0", border: "none", color: "#dc2626", padding: "4px 9px", borderRadius: 6, fontSize: 11, cursor: "pointer" }}>
+                    Apagar
+                  </button>
+                </div>
+              </div>
+            ))}
           </div>
         </div>
       )}

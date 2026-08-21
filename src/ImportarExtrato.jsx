@@ -2,6 +2,7 @@ import { useState, useRef } from "react";
 import { CATEGORIAS } from "./categorias.js";
 import { supabase } from "./supabase.js";
 import { EMPRESAS_IMPORT, buildContaId as buildContaIdCfg } from "./empresas.js";
+import { fmtEUR, fmtTamanho } from "./formato.js";
 
 // Constrói o conta_id seguindo a mesma convenção do App.jsx
 function buildContaId(empresaId, bancoNome) {
@@ -325,7 +326,7 @@ function parseMovimentos(rows) {
 }
 
 
-const fmt = (v) => new Intl.NumberFormat("pt-PT", { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(v || 0) + " €";
+const fmt = (v) => fmtEUR(v);
 
 export default function ImportarExtrato({ onSaveMovimentos, onGoToExtrato }) {
   const [step, setStep] = useState(0);
@@ -511,7 +512,7 @@ export default function ImportarExtrato({ onSaveMovimentos, onGoToExtrato }) {
           <>
             <div style={{ fontSize: 40, marginBottom: 10 }}>✅</div>
             <div style={{ fontSize: 15, fontWeight: 700, color: "#16a34a" }}>{file.name}</div>
-            <div style={{ fontSize: 12, color: "#aaa", marginTop: 4 }}>{(file.size / 1024).toFixed(1)} KB · Clica para trocar</div>
+            <div style={{ fontSize: 12, color: "#aaa", marginTop: 4 }}>{fmtTamanho(file.size)} · Clica para trocar</div>
           </>
         ) : (
           <>

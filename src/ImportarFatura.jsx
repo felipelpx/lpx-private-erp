@@ -1,6 +1,7 @@
 import { useState, useRef } from "react";
 import { CATEGORIAS_FATURA as CATEGORIAS } from "./categorias.js";
 import { EMPRESAS_SIMPLE } from "./empresas.js";
+import { fmtEUR, fmtTamanho } from "./formato.js";
 
 // Lista de empresas — ver src/empresas.js
 const EMPRESAS_LIST = EMPRESAS_SIMPLE;
@@ -8,7 +9,7 @@ const EMPRESAS_LIST = EMPRESAS_SIMPLE;
 
 const STATUS_LIST = ["Pendente","Aprovada","Paga","Em disputa"];
 
-const fmt = (v) => new Intl.NumberFormat("pt-PT",{minimumFractionDigits:2,maximumFractionDigits:2}).format(v||0)+" €";
+const fmt = (v) => fmtEUR(v);
 
 function toBase64(file) {
   return new Promise((res, rej) => {
@@ -393,7 +394,7 @@ export default function ImportarFatura({ onSave }) {
           <>
             <div style={{fontSize:40,marginBottom:10}}>✅</div>
             <div style={{fontSize:15,fontWeight:700,color:"#16a34a"}}>{file.name}</div>
-            <div style={{fontSize:12,color:"#aaa",marginTop:4}}>{(file.size/1024).toFixed(1)} KB · Clica para trocar</div>
+            <div style={{fontSize:12,color:"#aaa",marginTop:4}}>{fmtTamanho(file.size)} · Clica para trocar</div>
           </>
         ) : (
           <>

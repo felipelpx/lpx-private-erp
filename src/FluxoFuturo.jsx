@@ -2,14 +2,15 @@ import React, { useState, useMemo, useEffect } from "react";
 import { useVendas, useSaldosAtuais } from "./hooks.js";
 import { CATEGORIAS } from "./categorias.js";
 import { EMPRESAS as EMPRESAS_CFG } from "./empresas.js";
+import { fmtEUR, fmtEUR0, fmtInt } from "./formato.js";
 
-const fmt = (v) => new Intl.NumberFormat("pt-PT", { minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(v || 0) + " €";
+const fmt = (v) => fmtEUR0(v);
 // Valor exato com 2 casas decimais (para parcelas individuais)
-const fmtFull = (v) => new Intl.NumberFormat("pt-PT", { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(v || 0) + " €";
+const fmtFull = (v) => fmtEUR(v);
 // Formato pt-PT com 2 decimais para todos os valores monetários no Fluxo Futuro.
 // (Antes este helper devolvia "1,3k €" ou "1,30M €"; agora sempre "1 234,56 €")
 const fmtK = (v) => {
-  return new Intl.NumberFormat("pt-PT", { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(v || 0) + " €";
+  return fmtEUR(v);
 };
 const fmtDate = (s) => {
   if (!s || typeof s !== "string" || s.length < 10) return s || "";
