@@ -201,16 +201,33 @@ function TabelaVendas({ fracoes, vendas, canEdit, onAddFatura, onUpdateFracao, o
   const [editVenda, setEditVenda] = useState(null);
   const [editComissao, setEditComissao] = useState(null);
 
-  const projetos = useMemo(()=>["Todos",...new Set(fracoes.map(f=>f.projeto).filter(Boolean))],[fracoes]);
+  const projetos = useMemo(()=>["Todos",...new Set([...fracoes.map(f=>f.projeto),...vendas.map(v=>v.projeto)].filter(Boolean))],[fracoes,vendas]);
 
-  const rows = useMemo(()=>vendas.map(v=>{
-    const frac = fracoes.find(f=>f.id===v.fracao_id);
-    return {...v,_frac:frac};
-  }).filter(v=>
-    (filterProj==="Todos"||v._frac?.projeto===filterProj)&&
-    (filterStatus==="Todos"||v._frac?.status===filterStatus)&&
-    (!search||(v.cliente||"").toLowerCase().includes(search.toLowerCase())||(v._frac?.fracao||"").toLowerCase().includes(search.toLowerCase()))
-  ),[vendas,fracoes,filterProj,filterStatus,search]);
+  // A tabela parte do INVENTÁRIO (frações) e junta-lhe a venda, quando existe.
+  // Assim aparecem também as unidades ainda disponíveis, não só as vendidas.
+  const rows = useMemo(()=>{
+    const porFracao = new Map();
+    vendas.forEach(v=>{ if(v.fracao_id) porFracao.set(v.fracao_id, v); });
+
+    const doInventario = fracoes.map(f=>{
+      const v = porFracao.get(f.id);
+      return v
+        ? {...v, _frac:f, _semVenda:false}
+        : { id:"sv_"+f.id, fracao_id:f.id, preco_tabela:f.preco_tabela,
+            _frac:f, _semVenda:true };
+    });
+
+    // Vendas órfãs (sem fração correspondente) continuam visíveis
+    const orfas = vendas
+      .filter(v=>!v.fracao_id || !fracoes.some(f=>f.id===v.fracao_id))
+      .map(v=>({...v, _frac:null, _semVenda:false}));
+
+    return [...doInventario, ...orfas].filter(v=>
+      (filterProj==="Todos"||v._frac?.projeto===filterProj||v.projeto===filterProj)&&
+      (filterStatus==="Todos"||v._frac?.status===filterStatus)&&
+      (!search||(v.cliente||"").toLowerCase().includes(search.toLowerCase())||(v._frac?.fracao||"").toLowerCase().includes(search.toLowerCase()))
+    );
+  },[vendas,fracoes,filterProj,filterStatus,search]);
 
   const totais = useMemo(()=>({
     vgv:rows.reduce((s,v)=>s+(v.valor_venda||0),0),
@@ -282,7 +299,7 @@ function TabelaVendas({ fracoes, vendas, canEdit, onAddFatura, onUpdateFracao, o
             </thead>
             <tbody>
               {rows.length===0
-                ?<tr><td colSpan={17} style={{padding:"40px",textAlign:"center",color:"#ccc"}}>Nenhuma venda encontrada.</td></tr>
+                ?<tr><td colSpan={17} style={{padding:"40px",textAlign:"center",color:"#ccc"}}>Nenhuma fração encontrada.</td></tr>
                 :rows.map(v=>{
                   const comPago=(v.comissao_paga_sinal||0)+(v.comissao_paga_escritura||0);
                   const comPend=(v.comissao_pendente_sinal||0)+(v.comissao_pendente_escritura||0);
@@ -297,7 +314,7 @@ function TabelaVendas({ fracoes, vendas, canEdit, onAddFatura, onUpdateFracao, o
                       <td style={{padding:"8px 10px",color:"#888",fontSize:10}}>{v._frac?.andar||"—"}</td>
                       <td style={{padding:"8px 10px",color:"#333",maxWidth:130,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{v.cliente||"—"}</td>
                       <td style={{padding:"8px 10px",color:"#888",fontSize:10,whiteSpace:"nowrap"}}>{v.mediador||"—"}</td>
-                      <td style={{padding:"8px 10px",color:"#aaa",fontFamily:"monospace",whiteSpace:"nowrap"}}>{fmt(v.preco_tabela)}</td>
+                      <td style={{padding:"8px 10px",color:"#aaa",fontFamily:"monospace",whiteSpace:"nowrap"}}>{fmt(v.preco_tabela??v._frac?.preco_tabela)}</td>
                       <td style={{padding:"8px 10px",fontWeight:700,color:"#1a1a2e",fontFamily:"monospace",whiteSpace:"nowrap"}}>{fmt(v.valor_venda)}</td>
                       <td style={{padding:"8px 10px",color:"#16a34a",fontFamily:"monospace",whiteSpace:"nowrap"}}>{fmt(v.recebemos)}</td>
                       <td style={{padding:"8px 10px",color:((v.valor_venda||0)-(v.recebemos||0))>0?"#d97706":"#aaa",fontFamily:"monospace",fontWeight:((v.valor_venda||0)-(v.recebemos||0))>0?700:400,whiteSpace:"nowrap"}}>{((v.valor_venda||0)-(v.recebemos||0))>0?fmt((v.valor_venda||0)-(v.recebemos||0)):"—"}</td>
@@ -315,8 +332,8 @@ function TabelaVendas({ fracoes, vendas, canEdit, onAddFatura, onUpdateFracao, o
                       <td style={{padding:"8px 10px"}}>
                         <div style={{display:"flex",gap:4,alignItems:"center",flexWrap:"nowrap"}}>
                           {canEdit&&<>
-                            <button onClick={()=>setEditVenda(v)} title="Editar venda"
-                              style={{background:"#f0f4ff",border:"none",color:"#4a6fa5",padding:"3px 7px",borderRadius:5,fontSize:10,cursor:"pointer"}}>✎</button>
+                            <button onClick={()=>setEditVenda(v)} title={v._semVenda?"Registar venda":"Editar venda"}
+                              style={{background:v._semVenda?"#f0fdf4":"#f0f4ff",border:"none",color:v._semVenda?"#16a34a":"#4a6fa5",padding:"3px 7px",borderRadius:5,fontSize:10,cursor:"pointer",fontWeight:600}}>{v._semVenda?"+":"✎"}</button>
                             <button onClick={()=>setEditComissao(v)} title="Editar comissão"
                               style={{background:"#fffbeb",border:"1px solid #fde68a",color:"#d97706",padding:"3px 7px",borderRadius:5,fontSize:10,cursor:"pointer",fontWeight:600}}>🤝</button>
                           </>}
@@ -332,7 +349,7 @@ function TabelaVendas({ fracoes, vendas, canEdit, onAddFatura, onUpdateFracao, o
               <tfoot>
                 <tr style={{background:"#f0f4ff",borderTop:"2px solid #dde3f0"}}>
                   <td colSpan={6} style={{padding:"9px 10px",fontSize:10,color:"#4a6fa5",fontWeight:700}}>TOTAIS ({rows.length})</td>
-                  <td style={{padding:"9px 10px",fontFamily:"monospace",fontWeight:700,color:"#aaa"}}>{fmt(rows.reduce((s,v)=>s+(v.preco_tabela||0),0))}</td>
+                  <td style={{padding:"9px 10px",fontFamily:"monospace",fontWeight:700,color:"#aaa"}}>{fmt(rows.reduce((s,v)=>s+(v.preco_tabela||v._frac?.preco_tabela||0),0))}</td>
                   <td style={{padding:"9px 10px",fontFamily:"monospace",fontWeight:700,color:"#1a1a2e"}}>{fmt(totais.vgv)}</td>
                   <td style={{padding:"9px 10px",fontFamily:"monospace",fontWeight:700,color:"#16a34a"}}>{fmt(totais.recebido)}</td>
                   <td style={{padding:"9px 10px",fontFamily:"monospace",fontWeight:700,color:"#d97706"}}>{fmt(totais.aReceber)}</td>
@@ -349,7 +366,20 @@ function TabelaVendas({ fracoes, vendas, canEdit, onAddFatura, onUpdateFracao, o
       </div>
 
       {editVenda&&<EditVendaModal venda={editVenda} fracao={editVenda._frac}
-        onSave={u=>{onUpdateVenda?.(editVenda.id,u);setEditVenda(null);}}
+        onSave={u=>{
+          if (editVenda._semVenda) {
+            // primeira venda desta fração — cria o registo
+            const f = editVenda._frac;
+            onUpsertVenda?.({
+              id: "v_" + f.id + "_" + Date.now().toString(36),
+              fracao_id: f.id, projeto: f.projeto, fracao: f.fracao,
+              preco_tabela: f.preco_tabela, ...u,
+            });
+          } else {
+            onUpdateVenda?.(editVenda.id, u);
+          }
+          setEditVenda(null);
+        }}
         onClose={()=>setEditVenda(null)}/>}
       {editComissao&&<ComissaoModal venda={editComissao} fracao={editComissao._frac}
         onSave={u=>{onUpdateVenda?.(editComissao.id,u);setEditComissao(null);}}

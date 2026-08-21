@@ -10,7 +10,8 @@ import ComercialView from "./ComercialView.jsx";
 import EntidadesView from "./EntidadesView.jsx";
 import PagamentosView from "./PagamentosView.jsx";
 import { CATEGORIAS_FATURA } from "./categorias.js";
-import { EMPRESAS, BANCO_COLORS as BANCO_COLORS_CFG } from "./empresas.js";
+import { EMPRESAS as EMPRESAS_ALL, BANCO_COLORS as BANCO_COLORS_CFG } from "./empresas.js";
+const EMPRESAS = EMPRESAS_ALL;
 import FotosView from "./FotosView.jsx";
 import { BRAND } from "./brand.js";
 
@@ -450,7 +451,13 @@ function SaldosView({extrato, caixaUnico}) {
 }
 
 // ─── CONTAS A PAGAR ────────────────────────────────────────────────────────────
-function ContasPagar({canEdit, faturas, setFaturas, addFatura, updateFatura, deleteFatura}) {
+function ContasPagar({canEdit, faturas: faturasTodas, setFaturas, addFatura, updateFatura, deleteFatura, EMPRESAS: EMPRESAS_PROP}) {
+  // Um investidor só vê as faturas das empresas que lhe foram atribuídas.
+  const EMPRESAS = EMPRESAS_PROP || EMPRESAS_ALL;
+  const faturas = EMPRESAS_PROP
+    ? faturasTodas.filter(f => EMPRESAS_PROP.some(e => e.id === f.empresa))
+    : faturasTodas;
+
   const [showForm,setShowForm]=useState(false);
   const [editId,setEditId]=useState(null);
   const [fStatus,setFStatus]=useState("Todos");
@@ -1142,7 +1149,7 @@ const TABS_CONFIG = [
   {id:"clientes",  label:"Clientes",           roles:["admin","gestor","viewer"]},
   {id:"orcado",    label:"Real × Orçado",      roles:["admin","gestor","viewer"]},
   {id:"fluxo",     label:"Fluxo Futuro",       roles:["admin","gestor","viewer"]},
-  {id:"pagar",     label:"Contas a Pagar",     roles:["admin","gestor","viewer"]},
+  {id:"pagar",     label:"Contas a Pagar",     roles:["admin","gestor","viewer","investidor"]},
   {id:"pagamentos",label:"Pagamentos",         roles:["admin","gestor","viewer"]},
   {id:"entidades", label:"Entidades",          roles:["admin","gestor","viewer"]},
   {id:"importar",  label:"Importar",           roles:["admin","gestor"]},
@@ -1317,7 +1324,7 @@ export default function App() {
           {tab==="fotos"     && <FotosView currentUser={currentUser} empresasVisiveis={empresasVisiveis}/>}
           {tab==="orcado"    && <RealOrcado/>}
           {tab==="fluxo"     && <FluxoFuturo faturas={faturas} faturasLoading={faturasLoading} pagamentosExtras={pagamentosExtras} pagamentosLoading={pagamentosLoading} onAddPagamento={addPagamento} onUpdatePagamento={updatePagamento} onDeletePagamento={deletePagamento} onUpdateFatura={updateFatura} onDeleteFatura={deleteFatura} currentUser={currentUser} EMPRESAS={empresasVisiveis} caixaUnico={caixaUnico}/>}
-          {tab==="pagar"     && <ContasPagar canEdit={canEdit} faturas={faturas} setFaturas={handleSetFaturas} addFatura={addFatura} updateFatura={updateFatura} deleteFatura={deleteFatura}/>}
+          {tab==="pagar"     && <ContasPagar canEdit={canEdit && !isInvestidor} EMPRESAS={empresasVisiveis} faturas={faturas} setFaturas={handleSetFaturas} addFatura={addFatura} updateFatura={updateFatura} deleteFatura={deleteFatura}/>}
           {tab==="pagamentos"&& <PagamentosView faturas={faturas} pagamentosExtras={pagamentosExtras} currentUser={currentUser} profiles={profiles}/>}
           {tab==="users"     && <Utilizadores currentUser={currentUser}/>}
           {tab==="entidades" && <EntidadesView currentUser={currentUser}/>}
