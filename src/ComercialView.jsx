@@ -195,170 +195,245 @@ function EditVendaModal({ venda, fracao, onSave, onClose }) {
 }
 
 // ─── TABELA DE VENDAS ──────────────────────────────────────────────────────────
-function TabelaVendas({ fracoes, vendas, canEdit, onAddFatura, onUpdateFracao, onUpdateVenda, onUpsertVenda }) {
+function TabelaVendas({ fracoes, vendas, canEdit, onAddFatura, onUpdateFracao, onUpdateVenda, onUpsertVenda, onUpsertFracao, onDeleteFracao, projetosDisponiveis }) {
   const [filterProj, setFilterProj] = useState("Todos");
   const [filterStatus, setFilterStatus] = useState("Todos");
   const [search, setSearch] = useState("");
   const [editVenda, setEditVenda] = useState(null);
   const [editComissao, setEditComissao] = useState(null);
+  const [rascunhos, setRascunhos] = useState({});   // edições por confirmar, por célula
 
-  const projetos = useMemo(()=>["Todos",...new Set([...fracoes.map(f=>f.projeto),...vendas.map(v=>v.projeto)].filter(Boolean))],[fracoes,vendas]);
+  const projetos = useMemo(
+    () => ["Todos", ...new Set([...(projetosDisponiveis||[]), ...fracoes.map(f => f.projeto)].filter(Boolean))],
+    [fracoes, projetosDisponiveis]
+  );
 
-  // A tabela parte do INVENTÁRIO (frações) e junta-lhe a venda, quando existe.
-  // Assim aparecem também as unidades ainda disponíveis, não só as vendidas.
-  const rows = useMemo(()=>{
-    const porFracao = new Map();
-    vendas.forEach(v=>{ if(v.fracao_id) porFracao.set(v.fracao_id, v); });
+  // Venda associada a cada fração (para os botões de venda/comissão)
+  const vendaDe = useMemo(() => {
+    const m = new Map();
+    vendas.forEach(v => { if (v.fracao_id) m.set(v.fracao_id, v); });
+    return m;
+  }, [vendas]);
 
-    const doInventario = fracoes.map(f=>{
-      const v = porFracao.get(f.id);
-      return v
-        ? {...v, _frac:f, _semVenda:false}
-        : { id:"sv_"+f.id, fracao_id:f.id, preco_tabela:f.preco_tabela,
-            _frac:f, _semVenda:true };
-    });
+  const rows = useMemo(() => fracoes.filter(f =>
+    (filterProj === "Todos" || f.projeto === filterProj) &&
+    (filterStatus === "Todos" || f.status === filterStatus) &&
+    (!search || (f.fracao || "").toLowerCase().includes(search.toLowerCase())
+             || (f.tipologia || "").toLowerCase().includes(search.toLowerCase())
+             || (vendaDe.get(f.id)?.cliente || "").toLowerCase().includes(search.toLowerCase()))
+  ), [fracoes, filterProj, filterStatus, search, vendaDe]);
 
-    // Vendas órfãs (sem fração correspondente) continuam visíveis
-    const orfas = vendas
-      .filter(v=>!v.fracao_id || !fracoes.some(f=>f.id===v.fracao_id))
-      .map(v=>({...v, _frac:null, _semVenda:false}));
+  const totais = useMemo(() => {
+    const area = rows.reduce((s, f) => s + (Number(f.area) || 0), 0);
+    const preco = rows.reduce((s, f) => s + (Number(f.preco_tabela) || 0), 0);
+    return { area, preco, precoM2: area > 0 ? preco / area : 0 };
+  }, [rows]);
 
-    return [...doInventario, ...orfas].filter(v=>
-      (filterProj==="Todos"||v._frac?.projeto===filterProj||v.projeto===filterProj)&&
-      (filterStatus==="Todos"||v._frac?.status===filterStatus)&&
-      (!search||(v.cliente||"").toLowerCase().includes(search.toLowerCase())||(v._frac?.fracao||"").toLowerCase().includes(search.toLowerCase()))
-    );
-  },[vendas,fracoes,filterProj,filterStatus,search]);
-
-  const totais = useMemo(()=>({
-    vgv:rows.reduce((s,v)=>s+(v.valor_venda||0),0),
-    recebido:rows.reduce((s,v)=>s+(v.recebemos||0),0),
-    aReceber:rows.reduce((s,v)=>s+(v.falta_receber||0),0),
-    comPago:rows.reduce((s,v)=>s+(v.comissao_paga_sinal||0)+(v.comissao_paga_escritura||0),0),
-    comPend:rows.reduce((s,v)=>s+(v.comissao_pendente_sinal||0)+(v.comissao_pendente_escritura||0),0),
-    liquido:rows.reduce((s,v)=>s+(v.liquido_empresa||0),0),
-  }),[rows]);
-
-  const handleGerarFatura = (venda) => {
-    const frac = fracoes.find(f=>f.id===venda.fracao_id);
-    onAddFatura?.({
-      id:"fat_com_"+venda.id, empresa:EMPRESA_COMISSOES,
-      projeto:frac?.projeto||"",
-      fatura:`COM-${venda.id.slice(-6).toUpperCase()}`,
-      fornecedor:venda.mediador||"Mediador",
-      categoria:"Comissão", tipo_projeto:frac?.projeto||"",
-      valor:venda.comissao_valor||0,
-      vencimento:(venda.comissao_parcelas||[]).find(p=>!p.pago)?.data||"",
-      status:"Pendente",
-      obs:`Comissão venda — ${frac?.fracao||""} — ${venda.cliente||""}`,
-      anexo_nome:"",anexo_b64:"",
-    });
-    onUpsertVenda?.({...venda, fatura_criada:true});
+  // Guarda uma célula na base de dados
+  const guardar = (frac, campo, valor) => {
+    const numerico = campo === "area" || campo === "preco_tabela";
+    const v = numerico ? (parseFloat(String(valor).replace(",", ".")) || 0) : valor;
+    if ((frac[campo] ?? "") === v) return;
+    onUpsertFracao?.({ ...frac, [campo]: v });
   };
 
+  const valorCelula = (frac, campo) => {
+    const chave = frac.id + ":" + campo;
+    return rascunhos[chave] !== undefined ? rascunhos[chave] : (frac[campo] ?? "");
+  };
+  const escrever = (frac, campo, valor) =>
+    setRascunhos(r => ({ ...r, [frac.id + ":" + campo]: valor }));
+  const confirmar = (frac, campo) => {
+    const chave = frac.id + ":" + campo;
+    if (rascunhos[chave] === undefined) return;
+    guardar(frac, campo, rascunhos[chave]);
+    setRascunhos(r => { const c = { ...r }; delete c[chave]; return c; });
+  };
+
+  const novaFracao = () => {
+    const projeto = filterProj !== "Todos" ? filterProj : projetos[1];
+    if (!projeto) { alert("Escolhe primeiro um projeto no filtro."); return; }
+    onUpsertFracao?.({
+      id: "fr_" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
+      projeto, fracao: "", tipologia: "", piso: "", andar: "",
+      area: 0, preco_tabela: 0, status: "Disponível", notas: "",
+    });
+  };
+
+  const apagarFracao = (frac) => {
+    if (vendaDe.get(frac.id)) { alert("Esta fração tem uma venda associada. Apaga a venda primeiro."); return; }
+    if (!confirm(`Apagar a fração ${frac.fracao || "(sem nome)"}?`)) return;
+    onDeleteFracao?.(frac.id);
+  };
+
+  const handleGerarFatura = (venda) => {
+    const frac = fracoes.find(f => f.id === venda.fracao_id);
+    onAddFatura?.({
+      id: "fat_com_" + venda.id, empresa: EMPRESA_COMISSOES,
+      projeto: frac?.projeto || "",
+      fatura: `COM-${venda.id.slice(-6).toUpperCase()}`,
+      fornecedor: venda.mediador || "Mediador",
+      categoria: "Comissão", valor: venda.comissao_valor || 0,
+      vencimento: (venda.comissao_parcelas || []).find(p => !p.pago)?.data || "",
+      status: "Pendente",
+      obs: `Comissão ${frac?.fracao || ""} · ${venda.cliente || ""}`,
+    });
+    onUpdateVenda?.(venda.id, { fatura_criada: true });
+  };
+
+  // Estilo comum das células editáveis
+  const inputCelula = (extra = {}) => ({
+    width: "100%", background: "transparent", border: "1px solid transparent",
+    borderRadius: 5, padding: "4px 6px", fontSize: 11, outline: "none",
+    fontFamily: "inherit", color: "#1a1a2e", ...extra,
+  });
+  const foco = (e) => { e.target.style.background = "#fff"; e.target.style.borderColor = "#c7d2e5"; };
+  const desfoco = (e) => { e.target.style.background = "transparent"; e.target.style.borderColor = "transparent"; };
+
   return (
-    <div style={{display:"flex",flexDirection:"column",gap:16}}>
-      {/* KPIs */}
-      <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:10}}>
-        {[
-          {label:"VGV Total",value:fmt(totais.vgv),color:"#1a1a2e"},
-          {label:"Recebido",value:fmt(totais.recebido),color:"#16a34a"},
-          {label:"A Receber",value:fmt(totais.aReceber),color:"#d97706"},
-          {label:"Comissão Paga",value:fmt(totais.comPago),color:"#888"},
-          {label:"Comissão Pendente",value:fmt(totais.comPend),color:"#dc2626"},
-          {label:"Líquido Empresa",value:fmt(totais.liquido),color:"#1a1a2e"},
-        ].map((k,i)=>(
-          <div key={i} style={{background:"#fff",border:"1px solid #f0f0f0",borderRadius:10,padding:"12px 16px",borderTop:`3px solid ${k.color}`}}>
-            <div style={{fontSize:9,color:"#aaa",textTransform:"uppercase",fontFamily:"monospace",marginBottom:4}}>{k.label}</div>
-            <div style={{fontSize:16,fontWeight:700,color:k.color,fontFamily:"monospace"}}>{k.value}</div>
-          </div>
-        ))}
+    <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+
+      {/* Filtros */}
+      <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
+        <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Pesquisar fração, tipologia ou cliente..."
+          style={{ flex: "2 1 260px", background: "#fff", border: "1px solid #eee", borderRadius: 10, padding: "10px 14px", fontSize: 13, outline: "none" }} />
+        <select value={filterProj} onChange={e => setFilterProj(e.target.value)}
+          style={{ flex: "1 1 200px", background: "#fff", border: "1px solid #eee", borderRadius: 10, padding: "10px 14px", fontSize: 13, outline: "none" }}>
+          {projetos.map(p => <option key={p}>{p}</option>)}
+        </select>
+        <select value={filterStatus} onChange={e => setFilterStatus(e.target.value)}
+          style={{ flex: "1 1 150px", background: "#fff", border: "1px solid #eee", borderRadius: 10, padding: "10px 14px", fontSize: 13, outline: "none" }}>
+          {["Todos", ...STATUS_OPTIONS].map(s => <option key={s}>{s}</option>)}
+        </select>
+        {canEdit && (
+          <button onClick={novaFracao}
+            style={{ background: "#1a1a2e", color: "#fff", border: "none", padding: "10px 18px", borderRadius: 10, fontSize: 13, fontWeight: 600, cursor: "pointer", whiteSpace: "nowrap" }}>
+            + Nova fração
+          </button>
+        )}
       </div>
 
-      {/* Filters */}
-      <div style={{display:"flex",gap:8,flexWrap:"wrap",alignItems:"center"}}>
-        <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Pesquisar cliente ou fração..."
-          style={{flex:2,minWidth:160,...inp,padding:"8px 14px"}}/>
-        <select value={filterProj} onChange={e=>setFilterProj(e.target.value)} style={{...inp,flex:1,minWidth:130}}>
-          {projetos.map(p=><option key={p}>{p}</option>)}
-        </select>
-        <select value={filterStatus} onChange={e=>setFilterStatus(e.target.value)} style={{...inp,flex:1,minWidth:120}}>
-          {["Todos",...STATUS_OPTIONS].map(s=><option key={s}>{s}</option>)}
-        </select>
-      </div>
+      {canEdit && rows.length > 0 && (
+        <div style={{ fontSize: 11, color: "#aaa" }}>
+          Clica numa célula para editar. As alterações são guardadas ao sair do campo.
+        </div>
+      )}
 
-      {/* Table */}
-      <div style={{background:"#fff",border:"1px solid #f0f0f0",borderRadius:14,overflow:"hidden"}}>
-        <div style={{overflowX:"auto"}}>
-          <table style={{width:"100%",borderCollapse:"collapse",fontSize:11}}>
+      {/* Tabela */}
+      <div style={{ background: "#fff", border: "1px solid #f0f0f0", borderRadius: 14, overflow: "hidden" }}>
+        <div style={{ overflowX: "auto" }}>
+          <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 11 }}>
             <thead>
-              <tr style={{background:"#f8f9fc"}}>
-                {["Projeto","Fração","Tipo","Andar","Cliente","Mediador","Preço Tab.","Valor Venda","Recebido","A Receber","Prev. Escritura","Com. %","Com. Paga","Com. Pend.","Líquido","Status","Ações"].map(h=>(
-                  <th key={h} style={{padding:"9px 10px",textAlign:"left",color:"#aaa",fontSize:9,letterSpacing:"0.07em",textTransform:"uppercase",fontFamily:"monospace",borderBottom:"1px solid #f0f0f0",whiteSpace:"nowrap"}}>{h}</th>
+              <tr style={{ background: "#f8f9fc" }}>
+                {["Projeto", "Fração", "Piso", "Tipologia", "Área (m²)", "Preço", "Preço/m²", "Status", "Cliente", "Ações"].map(h => (
+                  <th key={h} style={{ padding: "10px", textAlign: "left", color: "#aaa", fontSize: 9, letterSpacing: "0.07em", textTransform: "uppercase", fontFamily: "monospace", borderBottom: "1px solid #f0f0f0", whiteSpace: "nowrap" }}>{h}</th>
                 ))}
               </tr>
             </thead>
             <tbody>
-              {rows.length===0
-                ?<tr><td colSpan={17} style={{padding:"40px",textAlign:"center",color:"#ccc"}}>Nenhuma fração encontrada.</td></tr>
-                :rows.map(v=>{
-                  const comPago=(v.comissao_paga_sinal||0)+(v.comissao_paga_escritura||0);
-                  const comPend=(v.comissao_pendente_sinal||0)+(v.comissao_pendente_escritura||0);
-                  const comPct=v.comissao_valor&&v.valor_venda?(v.comissao_valor/v.valor_venda*100):(v.comissao_pct||0);
+              {rows.length === 0
+                ? <tr><td colSpan={10} style={{ padding: 40, textAlign: "center", color: "#ccc" }}>Nenhuma fração encontrada.</td></tr>
+                : rows.map(f => {
+                  const venda = vendaDe.get(f.id);
+                  const area = Number(f.area) || 0;
+                  const preco = Number(f.preco_tabela) || 0;
+                  const precoM2 = area > 0 ? preco / area : 0;
                   return (
-                    <tr key={v.id} style={{borderBottom:"1px solid #fafafa"}}
-                      onMouseEnter={e=>e.currentTarget.style.background="#f8f9fc"}
-                      onMouseLeave={e=>e.currentTarget.style.background=""}>
-                      <td style={{padding:"8px 10px",color:"#888",whiteSpace:"nowrap",fontSize:10}}>{v._frac?.projeto||"—"}</td>
-                      <td style={{padding:"8px 10px",fontWeight:700,color:"#1a1a2e",whiteSpace:"nowrap"}}>{v._frac?.fracao||"—"}</td>
-                      <td style={{padding:"8px 10px"}}><span style={{background:"#f0f4ff",color:"#4a6fa5",fontSize:9,padding:"1px 6px",borderRadius:4}}>{v._frac?.tipologia||"—"}</span></td>
-                      <td style={{padding:"8px 10px",color:"#888",fontSize:10}}>{v._frac?.andar||"—"}</td>
-                      <td style={{padding:"8px 10px",color:"#333",maxWidth:130,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{v.cliente||"—"}</td>
-                      <td style={{padding:"8px 10px",color:"#888",fontSize:10,whiteSpace:"nowrap"}}>{v.mediador||"—"}</td>
-                      <td style={{padding:"8px 10px",color:"#aaa",fontFamily:"monospace",whiteSpace:"nowrap"}}>{fmt(v.preco_tabela??v._frac?.preco_tabela)}</td>
-                      <td style={{padding:"8px 10px",fontWeight:700,color:"#1a1a2e",fontFamily:"monospace",whiteSpace:"nowrap"}}>{fmt(v.valor_venda)}</td>
-                      <td style={{padding:"8px 10px",color:"#16a34a",fontFamily:"monospace",whiteSpace:"nowrap"}}>{fmt(v.recebemos)}</td>
-                      <td style={{padding:"8px 10px",color:((v.valor_venda||0)-(v.recebemos||0))>0?"#d97706":"#aaa",fontFamily:"monospace",fontWeight:((v.valor_venda||0)-(v.recebemos||0))>0?700:400,whiteSpace:"nowrap"}}>{((v.valor_venda||0)-(v.recebemos||0))>0?fmt((v.valor_venda||0)-(v.recebemos||0)):"—"}</td>
-                      <td style={{padding:"8px 10px",color:"#888",fontFamily:"monospace",fontSize:10,whiteSpace:"nowrap"}}>{v.previsao_escritura||"—"}</td>
-                      <td style={{padding:"8px 10px",color:"#4a6fa5",fontFamily:"monospace",whiteSpace:"nowrap"}}>{fmtPct(comPct)}</td>
-                      <td style={{padding:"8px 10px",color:"#16a34a",fontFamily:"monospace",whiteSpace:"nowrap"}}>{comPago>0?fmt(comPago):"—"}</td>
-                      <td style={{padding:"8px 10px",color:comPend>0?"#dc2626":"#aaa",fontFamily:"monospace",fontWeight:comPend>0?700:400,whiteSpace:"nowrap"}}>{comPend>0?fmt(comPend):"—"}</td>
-                      <td style={{padding:"8px 10px",fontFamily:"monospace",fontWeight:700,color:"#1a1a2e",whiteSpace:"nowrap"}}>{fmt((v.valor_venda||0)-(v.comissao_valor||0))}</td>
-                      <td style={{padding:"8px 10px"}}>
-                        {v._frac&&<select value={v._frac.status} onChange={e=>onUpdateFracao?.(v._frac.id, {status:e.target.value})}
-                          style={{background:"none",border:"none",fontSize:10,cursor:canEdit?"pointer":"default",color:STATUS_STYLES[v._frac.status]?.text||"#888",fontWeight:600,outline:"none",pointerEvents:canEdit?"auto":"none"}}>
-                          {STATUS_OPTIONS.map(s=><option key={s}>{s}</option>)}
-                        </select>}
+                    <tr key={f.id} style={{ borderBottom: "1px solid #fafafa" }}>
+                      <td style={{ padding: "6px 10px", color: "#888", fontSize: 10, whiteSpace: "nowrap" }}>{f.projeto || "—"}</td>
+
+                      <td style={{ padding: "4px 6px", minWidth: 70 }}>
+                        {canEdit
+                          ? <input value={valorCelula(f, "fracao")} onFocus={foco} onBlur={e => { desfoco(e); confirmar(f, "fracao"); }}
+                              onChange={e => escrever(f, "fracao", e.target.value)}
+                              style={inputCelula({ fontWeight: 700 })} />
+                          : <span style={{ fontWeight: 700, color: "#1a1a2e" }}>{f.fracao || "—"}</span>}
                       </td>
-                      <td style={{padding:"8px 10px"}}>
-                        <div style={{display:"flex",gap:4,alignItems:"center",flexWrap:"nowrap"}}>
-                          {canEdit&&<>
-                            <button onClick={()=>setEditVenda(v)} title={v._semVenda?"Registar venda":"Editar venda"}
-                              style={{background:v._semVenda?"#f0fdf4":"#f0f4ff",border:"none",color:v._semVenda?"#16a34a":"#4a6fa5",padding:"3px 7px",borderRadius:5,fontSize:10,cursor:"pointer",fontWeight:600}}>{v._semVenda?"+":"✎"}</button>
-                            <button onClick={()=>setEditComissao(v)} title="Editar comissão"
-                              style={{background:"#fffbeb",border:"1px solid #fde68a",color:"#d97706",padding:"3px 7px",borderRadius:5,fontSize:10,cursor:"pointer",fontWeight:600}}>🤝</button>
+
+                      <td style={{ padding: "4px 6px", minWidth: 60 }}>
+                        {canEdit
+                          ? <input value={valorCelula(f, "piso")} onFocus={foco} onBlur={e => { desfoco(e); confirmar(f, "piso"); }}
+                              onChange={e => escrever(f, "piso", e.target.value)}
+                              style={inputCelula({ color: "#666" })} />
+                          : <span style={{ color: "#666" }}>{f.piso || "—"}</span>}
+                      </td>
+
+                      <td style={{ padding: "4px 6px", minWidth: 90 }}>
+                        {canEdit
+                          ? <input value={valorCelula(f, "tipologia")} onFocus={foco} onBlur={e => { desfoco(e); confirmar(f, "tipologia"); }}
+                              onChange={e => escrever(f, "tipologia", e.target.value)}
+                              style={inputCelula({ color: "#4a6fa5" })} />
+                          : <span style={{ background: "#f0f4ff", color: "#4a6fa5", fontSize: 9, padding: "1px 6px", borderRadius: 4 }}>{f.tipologia || "—"}</span>}
+                      </td>
+
+                      <td style={{ padding: "4px 6px", minWidth: 80, textAlign: "right" }}>
+                        {canEdit
+                          ? <input value={valorCelula(f, "area")} onFocus={foco} onBlur={e => { desfoco(e); confirmar(f, "area"); }}
+                              onChange={e => escrever(f, "area", e.target.value)} inputMode="decimal"
+                              style={inputCelula({ textAlign: "right", fontFamily: "monospace", color: "#666" })} />
+                          : <span style={{ fontFamily: "monospace", color: "#666" }}>{fmtNum(area)}</span>}
+                      </td>
+
+                      <td style={{ padding: "4px 6px", minWidth: 110, textAlign: "right" }}>
+                        {canEdit
+                          ? <input value={valorCelula(f, "preco_tabela")} onFocus={foco} onBlur={e => { desfoco(e); confirmar(f, "preco_tabela"); }}
+                              onChange={e => escrever(f, "preco_tabela", e.target.value)} inputMode="decimal"
+                              style={inputCelula({ textAlign: "right", fontFamily: "monospace", fontWeight: 700 })} />
+                          : <span style={{ fontFamily: "monospace", fontWeight: 700, color: "#1a1a2e" }}>{fmt(preco)}</span>}
+                      </td>
+
+                      {/* Calculado a partir da área e do preço */}
+                      <td style={{ padding: "6px 10px", textAlign: "right", fontFamily: "monospace", color: "#888", whiteSpace: "nowrap" }}
+                          title="Calculado: preço ÷ área">
+                        {area > 0 ? fmt(precoM2) : "—"}
+                      </td>
+
+                      <td style={{ padding: "6px 10px" }}>
+                        <select value={f.status || "Disponível"} disabled={!canEdit}
+                          onChange={e => onUpsertFracao?.({ ...f, status: e.target.value })}
+                          style={{ background: "none", border: "none", fontSize: 10, cursor: canEdit ? "pointer" : "default", color: STATUS_STYLES[f.status]?.text || "#888", fontWeight: 600, outline: "none" }}>
+                          {STATUS_OPTIONS.map(s => <option key={s}>{s}</option>)}
+                        </select>
+                      </td>
+
+                      <td style={{ padding: "6px 10px", color: "#333", maxWidth: 140, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                        {venda?.cliente || "—"}
+                      </td>
+
+                      <td style={{ padding: "6px 10px" }}>
+                        <div style={{ display: "flex", gap: 4, alignItems: "center" }}>
+                          {canEdit && <>
+                            <button onClick={() => setEditVenda(venda ? { ...venda, _frac: f } : { _frac: f, _semVenda: true, fracao_id: f.id, preco_tabela: f.preco_tabela })}
+                              title={venda ? "Editar venda" : "Registar venda"}
+                              style={{ background: venda ? "#f0f4ff" : "#f0fdf4", border: "none", color: venda ? "#4a6fa5" : "#16a34a", padding: "3px 8px", borderRadius: 5, fontSize: 10, cursor: "pointer", fontWeight: 600 }}>
+                              {venda ? "✎" : "+"}
+                            </button>
+                            {venda && (
+                              <button onClick={() => setEditComissao({ ...venda, _frac: f })} title="Editar comissão"
+                                style={{ background: "#fffbeb", border: "1px solid #fde68a", color: "#d97706", padding: "3px 7px", borderRadius: 5, fontSize: 10, cursor: "pointer", fontWeight: 600 }}>🤝</button>
+                            )}
+                            <button onClick={() => apagarFracao(f)} title="Apagar fração"
+                              style={{ background: "#fff0f0", border: "none", color: "#dc2626", padding: "3px 8px", borderRadius: 5, fontSize: 10, cursor: "pointer" }}>✕</button>
                           </>}
-                          {v.fatura_criada&&<span style={{fontSize:9,color:"#16a34a",border:"1px solid #bbf7d0",background:"#f0fdf4",padding:"2px 5px",borderRadius:4,fontFamily:"monospace"}}>✓Fat.</span>}
+                          {venda?.fatura_criada && <span style={{ fontSize: 9, color: "#16a34a", border: "1px solid #bbf7d0", background: "#f0fdf4", padding: "2px 5px", borderRadius: 4, fontFamily: "monospace" }}>✓Fat.</span>}
                         </div>
                       </td>
                     </tr>
                   );
-                })
-              }
+                })}
             </tbody>
-            {rows.length>0&&(
+            {rows.length > 0 && (
               <tfoot>
-                <tr style={{background:"#f0f4ff",borderTop:"2px solid #dde3f0"}}>
-                  <td colSpan={6} style={{padding:"9px 10px",fontSize:10,color:"#4a6fa5",fontWeight:700}}>TOTAIS ({rows.length})</td>
-                  <td style={{padding:"9px 10px",fontFamily:"monospace",fontWeight:700,color:"#aaa"}}>{fmt(rows.reduce((s,v)=>s+(v.preco_tabela||v._frac?.preco_tabela||0),0))}</td>
-                  <td style={{padding:"9px 10px",fontFamily:"monospace",fontWeight:700,color:"#1a1a2e"}}>{fmt(totais.vgv)}</td>
-                  <td style={{padding:"9px 10px",fontFamily:"monospace",fontWeight:700,color:"#16a34a"}}>{fmt(totais.recebido)}</td>
-                  <td style={{padding:"9px 10px",fontFamily:"monospace",fontWeight:700,color:"#d97706"}}>{fmt(totais.aReceber)}</td>
-                  <td/><td/>
-                  <td style={{padding:"9px 10px",fontFamily:"monospace",fontWeight:700,color:"#16a34a"}}>{fmt(totais.comPago)}</td>
-                  <td style={{padding:"9px 10px",fontFamily:"monospace",fontWeight:700,color:"#dc2626"}}>{fmt(totais.comPend)}</td>
-                  <td style={{padding:"9px 10px",fontFamily:"monospace",fontWeight:700,color:"#1a1a2e"}}>{fmt(rows.reduce((s,v)=>s+(v.valor_venda||0)-(v.comissao_valor||0),0))}</td>
-                  <td colSpan={2}/>
+                <tr style={{ background: "#f0f4ff", borderTop: "2px solid #dde3f0" }}>
+                  <td colSpan={4} style={{ padding: "10px", fontSize: 10, color: "#4a6fa5", fontWeight: 700 }}>
+                    TOTAIS ({fmtNum(rows.length, 0)} {rows.length === 1 ? "fração" : "frações"})
+                  </td>
+                  <td style={{ padding: "10px", textAlign: "right", fontFamily: "monospace", fontWeight: 700, color: "#666" }}>{fmtNum(totais.area)}</td>
+                  <td style={{ padding: "10px", textAlign: "right", fontFamily: "monospace", fontWeight: 700, color: "#1a1a2e" }}>{fmt(totais.preco)}</td>
+                  <td style={{ padding: "10px", textAlign: "right", fontFamily: "monospace", fontWeight: 700, color: "#888" }} title="Média ponderada">
+                    {totais.area > 0 ? fmt(totais.precoM2) : "—"}
+                  </td>
+                  <td colSpan={3} />
                 </tr>
               </tfoot>
             )}
@@ -366,10 +441,9 @@ function TabelaVendas({ fracoes, vendas, canEdit, onAddFatura, onUpdateFracao, o
         </div>
       </div>
 
-      {editVenda&&<EditVendaModal venda={editVenda} fracao={editVenda._frac}
-        onSave={u=>{
+      {editVenda && <EditVendaModal venda={editVenda} fracao={editVenda._frac}
+        onSave={u => {
           if (editVenda._semVenda) {
-            // primeira venda desta fração — cria o registo
             const f = editVenda._frac;
             onUpsertVenda?.({
               id: "v_" + f.id + "_" + Date.now().toString(36),
@@ -381,11 +455,11 @@ function TabelaVendas({ fracoes, vendas, canEdit, onAddFatura, onUpdateFracao, o
           }
           setEditVenda(null);
         }}
-        onClose={()=>setEditVenda(null)}/>}
-      {editComissao&&<ComissaoModal venda={editComissao} fracao={editComissao._frac}
-        onSave={u=>{onUpdateVenda?.(editComissao.id,u);setEditComissao(null);}}
-        onClose={()=>setEditComissao(null)}
-        onGerarFatura={v=>{handleGerarFatura(v);setEditComissao(null);}}/>}
+        onClose={() => setEditVenda(null)} />}
+      {editComissao && <ComissaoModal venda={editComissao} fracao={editComissao._frac}
+        onSave={u => { onUpdateVenda?.(editComissao.id, u); setEditComissao(null); }}
+        onClose={() => setEditComissao(null)}
+        onGerarFatura={v => { handleGerarFatura(v); setEditComissao(null); }} />}
     </div>
   );
 }
@@ -545,6 +619,9 @@ export default function ComercialView({ currentUser, onAddFatura }) {
           onUpdateFracao={updateFracao}
           onUpdateVenda={updateVenda}
           onUpsertVenda={upsertVenda}
+          onUpsertFracao={upsertFracao}
+          onDeleteFracao={deleteFracao}
+          projetosDisponiveis={EMPRESAS.map(e => e.nome)}
         />
       )}
       {subTab === "comissoes" && (
