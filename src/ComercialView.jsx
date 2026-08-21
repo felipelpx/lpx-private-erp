@@ -1,7 +1,7 @@
 import { useState, useMemo, useEffect } from "react";
 import { useFracoes, useVendas } from "./hooks.js";
 import { EMPRESAS } from "./empresas.js";
-import { fmtEUR, fmtPct as fmtPctCfg, fmtNum, fmtArea } from "./formato.js";
+import { fmtEUR, fmtPct as fmtPctCfg, fmtNum, fmtArea, parseNumero } from "./formato.js";
 
 // Empresa a que são imputadas as faturas de comissão geradas a partir das vendas.
 const EMPRESA_COMISSOES = EMPRESAS[EMPRESAS.length - 1]?.id || "";
@@ -195,6 +195,46 @@ function EditVendaModal({ venda, fracao, onSave, onClose }) {
 }
 
 // ─── TABELA DE VENDAS ──────────────────────────────────────────────────────────
+// Célula numérica editável: mostra o número formatado em repouso e o valor
+// em bruto enquanto está a ser editada (senão os separadores atrapalham a escrita).
+function CelulaNumero({ valor, onGuardar, editavel, formatar, alinhar = "right", estilo = {} }) {
+  const [aEditar, setAEditar] = useState(false);
+  const [rascunho, setRascunho] = useState("");
+
+  if (!editavel) {
+    return <span style={{ fontFamily: "monospace", ...estilo }}>{formatar(valor)}</span>;
+  }
+
+  const base = {
+    width: "100%", background: "transparent", border: "1px solid transparent",
+    borderRadius: 5, padding: "4px 6px", fontSize: 11, outline: "none",
+    textAlign: alinhar, fontFamily: "monospace", color: "#1a1a2e", ...estilo,
+  };
+
+  return (
+    <input
+      value={aEditar ? rascunho : formatar(valor)}
+      onFocus={(e) => {
+        setRascunho(valor === 0 || valor == null ? "" : String(valor).replace(".", ","));
+        setAEditar(true);
+        e.target.style.background = "#fff";
+        e.target.style.borderColor = "#c7d2e5";
+      }}
+      onChange={(e) => setRascunho(e.target.value)}
+      onBlur={(e) => {
+        setAEditar(false);
+        e.target.style.background = "transparent";
+        e.target.style.borderColor = "transparent";
+        const n = parseNumero(rascunho);
+        if (n !== (Number(valor) || 0)) onGuardar(n);
+      }}
+      onKeyDown={(e) => { if (e.key === "Enter") e.target.blur(); }}
+      inputMode="decimal"
+      style={base}
+    />
+  );
+}
+
 function TabelaVendas({ fracoes, vendas, canEdit, onAddFatura, onUpdateFracao, onUpdateVenda, onUpsertVenda, onUpsertFracao, onDeleteFracao, projetosDisponiveis }) {
   const [filterProj, setFilterProj] = useState("Todos");
   const [filterStatus, setFilterStatus] = useState("Todos");
@@ -232,7 +272,7 @@ function TabelaVendas({ fracoes, vendas, canEdit, onAddFatura, onUpdateFracao, o
   // Guarda uma célula na base de dados
   const guardar = (frac, campo, valor) => {
     const numerico = campo === "area" || campo === "preco_tabela";
-    const v = numerico ? (parseFloat(String(valor).replace(",", ".")) || 0) : valor;
+    const v = numerico ? parseNumero(valor) : valor;
     if ((frac[campo] ?? "") === v) return;
     onUpsertFracao?.({ ...frac, [campo]: v });
   };
@@ -320,13 +360,27 @@ function TabelaVendas({ fracoes, vendas, canEdit, onAddFatura, onUpdateFracao, o
       )}
 
       {/* Tabela */}
-      <div style={{ background: "#fff", border: "1px solid #f0f0f0", borderRadius: 14, overflow: "hidden" }}>
+      <div style={{ background: "#fff", border: "1px solid #f0f0f0", borderRadius: 14, overflow: "hidden", maxWidth: 1180 }}>
         <div style={{ overflowX: "auto" }}>
-          <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 11 }}>
+          <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 11, tableLayout: "fixed" }}>
+            <colgroup>
+              <col style={{ width: "17%" }} />{/* Projeto   */}
+              <col style={{ width: "7%"  }} />{/* Fração    */}
+              <col style={{ width: "6%"  }} />{/* Piso      */}
+              <col style={{ width: "9%"  }} />{/* Tipologia */}
+              <col style={{ width: "9%"  }} />{/* Área      */}
+              <col style={{ width: "12%" }} />{/* Preço     */}
+              <col style={{ width: "11%" }} />{/* Preço/m²  */}
+              <col style={{ width: "10%" }} />{/* Status    */}
+              <col style={{ width: "12%" }} />{/* Cliente   */}
+              <col style={{ width: "7%"  }} />{/* Ações     */}
+            </colgroup>
             <thead>
               <tr style={{ background: "#f8f9fc" }}>
-                {["Projeto", "Fração", "Piso", "Tipologia", "Área (m²)", "Preço", "Preço/m²", "Status", "Cliente", "Ações"].map(h => (
-                  <th key={h} style={{ padding: "10px", textAlign: "left", color: "#aaa", fontSize: 9, letterSpacing: "0.07em", textTransform: "uppercase", fontFamily: "monospace", borderBottom: "1px solid #f0f0f0", whiteSpace: "nowrap" }}>{h}</th>
+                {[["Projeto","left"],["Fração","center"],["Piso","center"],["Tipologia","center"],
+                  ["Área (m²)","right"],["Preço","right"],["Preço/m²","right"],
+                  ["Status","center"],["Cliente","left"],["Ações","center"]].map(([h,al]) => (
+                  <th key={h} style={{ padding: "9px 8px", textAlign: al, color: "#aaa", fontSize: 9, letterSpacing: "0.05em", textTransform: "uppercase", fontFamily: "monospace", borderBottom: "1px solid #f0f0f0", whiteSpace: "nowrap" }}>{h}</th>
                 ))}
               </tr>
             </thead>
@@ -340,55 +394,51 @@ function TabelaVendas({ fracoes, vendas, canEdit, onAddFatura, onUpdateFracao, o
                   const precoM2 = area > 0 ? preco / area : 0;
                   return (
                     <tr key={f.id} style={{ borderBottom: "1px solid #fafafa" }}>
-                      <td style={{ padding: "6px 10px", color: "#888", fontSize: 10, whiteSpace: "nowrap" }}>{f.projeto || "—"}</td>
+                      <td style={{ padding: "6px 8px", color: "#888", fontSize: 10, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={f.projeto}>{f.projeto || "—"}</td>
 
-                      <td style={{ padding: "4px 6px", minWidth: 70 }}>
+                      <td style={{ padding: "4px 4px", textAlign: "center" }}>
                         {canEdit
                           ? <input value={valorCelula(f, "fracao")} onFocus={foco} onBlur={e => { desfoco(e); confirmar(f, "fracao"); }}
                               onChange={e => escrever(f, "fracao", e.target.value)}
-                              style={inputCelula({ fontWeight: 700 })} />
+                              style={inputCelula({ fontWeight: 700, textAlign: "center" })} />
                           : <span style={{ fontWeight: 700, color: "#1a1a2e" }}>{f.fracao || "—"}</span>}
                       </td>
 
-                      <td style={{ padding: "4px 6px", minWidth: 60 }}>
+                      <td style={{ padding: "4px 4px", textAlign: "center" }}>
                         {canEdit
                           ? <input value={valorCelula(f, "piso")} onFocus={foco} onBlur={e => { desfoco(e); confirmar(f, "piso"); }}
                               onChange={e => escrever(f, "piso", e.target.value)}
-                              style={inputCelula({ color: "#666" })} />
+                              style={inputCelula({ color: "#666", textAlign: "center" })} />
                           : <span style={{ color: "#666" }}>{f.piso || "—"}</span>}
                       </td>
 
-                      <td style={{ padding: "4px 6px", minWidth: 90 }}>
+                      <td style={{ padding: "4px 4px", textAlign: "center" }}>
                         {canEdit
                           ? <input value={valorCelula(f, "tipologia")} onFocus={foco} onBlur={e => { desfoco(e); confirmar(f, "tipologia"); }}
                               onChange={e => escrever(f, "tipologia", e.target.value)}
-                              style={inputCelula({ color: "#4a6fa5" })} />
+                              style={inputCelula({ color: "#4a6fa5", textAlign: "center" })} />
                           : <span style={{ background: "#f0f4ff", color: "#4a6fa5", fontSize: 9, padding: "1px 6px", borderRadius: 4 }}>{f.tipologia || "—"}</span>}
                       </td>
 
-                      <td style={{ padding: "4px 6px", minWidth: 80, textAlign: "right" }}>
-                        {canEdit
-                          ? <input value={valorCelula(f, "area")} onFocus={foco} onBlur={e => { desfoco(e); confirmar(f, "area"); }}
-                              onChange={e => escrever(f, "area", e.target.value)} inputMode="decimal"
-                              style={inputCelula({ textAlign: "right", fontFamily: "monospace", color: "#666" })} />
-                          : <span style={{ fontFamily: "monospace", color: "#666" }}>{fmtNum(area)}</span>}
+                      <td style={{ padding: "4px 8px", textAlign: "right" }}>
+                        <CelulaNumero valor={area} editavel={canEdit} formatar={v => fmtNum(v)}
+                          onGuardar={v => onUpsertFracao?.({ ...f, area: v })}
+                          estilo={{ color: "#666" }} />
                       </td>
 
-                      <td style={{ padding: "4px 6px", minWidth: 110, textAlign: "right" }}>
-                        {canEdit
-                          ? <input value={valorCelula(f, "preco_tabela")} onFocus={foco} onBlur={e => { desfoco(e); confirmar(f, "preco_tabela"); }}
-                              onChange={e => escrever(f, "preco_tabela", e.target.value)} inputMode="decimal"
-                              style={inputCelula({ textAlign: "right", fontFamily: "monospace", fontWeight: 700 })} />
-                          : <span style={{ fontFamily: "monospace", fontWeight: 700, color: "#1a1a2e" }}>{fmt(preco)}</span>}
+                      <td style={{ padding: "4px 8px", textAlign: "right" }}>
+                        <CelulaNumero valor={preco} editavel={canEdit} formatar={v => fmt(v)}
+                          onGuardar={v => onUpsertFracao?.({ ...f, preco_tabela: v })}
+                          estilo={{ fontWeight: 700 }} />
                       </td>
 
                       {/* Calculado a partir da área e do preço */}
-                      <td style={{ padding: "6px 10px", textAlign: "right", fontFamily: "monospace", color: "#888", whiteSpace: "nowrap" }}
+                      <td style={{ padding: "6px 8px", textAlign: "right", fontFamily: "monospace", color: "#888", whiteSpace: "nowrap" }}
                           title="Calculado: preço ÷ área">
                         {area > 0 ? fmt(precoM2) : "—"}
                       </td>
 
-                      <td style={{ padding: "6px 10px" }}>
+                      <td style={{ padding: "6px 4px", textAlign: "center" }}>
                         <select value={f.status || "Disponível"} disabled={!canEdit}
                           onChange={e => onUpsertFracao?.({ ...f, status: e.target.value })}
                           style={{ background: "none", border: "none", fontSize: 10, cursor: canEdit ? "pointer" : "default", color: STATUS_STYLES[f.status]?.text || "#888", fontWeight: 600, outline: "none" }}>
@@ -396,12 +446,12 @@ function TabelaVendas({ fracoes, vendas, canEdit, onAddFatura, onUpdateFracao, o
                         </select>
                       </td>
 
-                      <td style={{ padding: "6px 10px", color: "#333", maxWidth: 140, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                      <td style={{ padding: "6px 8px", color: "#333", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={venda?.cliente || ""}>
                         {venda?.cliente || "—"}
                       </td>
 
-                      <td style={{ padding: "6px 10px" }}>
-                        <div style={{ display: "flex", gap: 4, alignItems: "center" }}>
+                      <td style={{ padding: "6px 4px" }}>
+                        <div style={{ display: "flex", gap: 3, alignItems: "center", justifyContent: "center" }}>
                           {canEdit && <>
                             <button onClick={() => setEditVenda(venda ? { ...venda, _frac: f } : { _frac: f, _semVenda: true, fracao_id: f.id, preco_tabela: f.preco_tabela })}
                               title={venda ? "Editar venda" : "Registar venda"}
@@ -425,12 +475,12 @@ function TabelaVendas({ fracoes, vendas, canEdit, onAddFatura, onUpdateFracao, o
             {rows.length > 0 && (
               <tfoot>
                 <tr style={{ background: "#f0f4ff", borderTop: "2px solid #dde3f0" }}>
-                  <td colSpan={4} style={{ padding: "10px", fontSize: 10, color: "#4a6fa5", fontWeight: 700 }}>
+                  <td colSpan={4} style={{ padding: "10px 8px", fontSize: 10, color: "#4a6fa5", fontWeight: 700, whiteSpace: "nowrap" }}>
                     TOTAIS ({fmtNum(rows.length, 0)} {rows.length === 1 ? "fração" : "frações"})
                   </td>
-                  <td style={{ padding: "10px", textAlign: "right", fontFamily: "monospace", fontWeight: 700, color: "#666" }}>{fmtNum(totais.area)}</td>
-                  <td style={{ padding: "10px", textAlign: "right", fontFamily: "monospace", fontWeight: 700, color: "#1a1a2e" }}>{fmt(totais.preco)}</td>
-                  <td style={{ padding: "10px", textAlign: "right", fontFamily: "monospace", fontWeight: 700, color: "#888" }} title="Média ponderada">
+                  <td style={{ padding: "10px 8px", textAlign: "right", fontFamily: "monospace", fontWeight: 700, color: "#666" }}>{fmtNum(totais.area)}</td>
+                  <td style={{ padding: "10px 8px", textAlign: "right", fontFamily: "monospace", fontWeight: 700, color: "#1a1a2e" }}>{fmt(totais.preco)}</td>
+                  <td style={{ padding: "10px 8px", textAlign: "right", fontFamily: "monospace", fontWeight: 700, color: "#888" }} title="Média ponderada">
                     {totais.area > 0 ? fmt(totais.precoM2) : "—"}
                   </td>
                   <td colSpan={3} />
@@ -580,10 +630,25 @@ function GestaoComissoes({ vendas, fracoes, canEdit, onAddFatura, onUpdateVenda 
 }
 
 // ─── MAIN ──────────────────────────────────────────────────────────────────────
-export default function ComercialView({ currentUser, onAddFatura }) {
+export default function ComercialView({ currentUser, onAddFatura, empresasVisiveis }) {
+  // Um investidor só vê os projetos que lhe foram atribuídos. A base de dados já
+  // filtra as linhas por RLS; aqui filtra-se também a lista de projetos, para os
+  // nomes dos outros nem aparecerem no seletor.
+  // Atenção: uma lista VAZIA é uma restrição válida (investidor sem projetos
+  // atribuídos não vê nada). Só se a prop não vier de todo é que se usa tudo.
+  const empresas = Array.isArray(empresasVisiveis) ? empresasVisiveis : EMPRESAS;
+  const projetosPermitidos = empresas.map(e => e.nome);
+  const limitado = Array.isArray(empresasVisiveis) && empresasVisiveis.length < EMPRESAS.length;
+
   const [subTab, setSubTab] = useState("tabela");
-  const { fracoes, loaded: fracoesLoaded, upsertFracao, deleteFracao } = useFracoes();
-  const { vendas, loaded: vendasLoaded, upsertVenda, deleteVenda } = useVendas();
+  const { fracoes: fracoesTodas, loaded: fracoesLoaded, upsertFracao, deleteFracao } = useFracoes();
+  const { vendas: vendasTodas, loaded: vendasLoaded, upsertVenda, deleteVenda } = useVendas();
+
+  const fracoes = limitado ? fracoesTodas.filter(f => projetosPermitidos.includes(f.projeto)) : fracoesTodas;
+  const vendas  = limitado ? vendasTodas.filter(v => {
+    const f = fracoesTodas.find(x => x.id === v.fracao_id);
+    return projetosPermitidos.includes(f?.projeto || v.projeto);
+  }) : vendasTodas;
 
   const canEdit = currentUser?.role === "admin" || currentUser?.role === "gestor";
 
@@ -621,7 +686,7 @@ export default function ComercialView({ currentUser, onAddFatura }) {
           onUpsertVenda={upsertVenda}
           onUpsertFracao={upsertFracao}
           onDeleteFracao={deleteFracao}
-          projetosDisponiveis={EMPRESAS.map(e => e.nome)}
+          projetosDisponiveis={projetosPermitidos}
         />
       )}
       {subTab === "comissoes" && (

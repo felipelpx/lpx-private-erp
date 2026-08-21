@@ -42,7 +42,8 @@ function reduzirImagem(file) {
 }
 
 export default function FotosView({ currentUser, empresasVisiveis }) {
-  const empresas = empresasVisiveis && empresasVisiveis.length ? empresasVisiveis : EMPRESAS;
+  // Lista vazia é restrição válida — não cair para "todas as empresas".
+  const empresas = Array.isArray(empresasVisiveis) ? empresasVisiveis : EMPRESAS;
   const podeEditar = currentUser?.role === "admin" || currentUser?.role === "gestor";
 
   const [fotos, setFotos] = useState([]);

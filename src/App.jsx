@@ -1320,8 +1320,8 @@ export default function App() {
       <div style={{padding:"28px",maxWidth:1500,margin:"0 auto"}}>
         <TabErrorBoundary key={tab}>
           {tab==="extrato"   && <ExtratosView EMPRESAS={empresasVisiveis} extrato={[]} caixaUnico={caixaUnico} setCaixaUnico={handleSetCaixaUnico} currentUser={currentUser} autoOpenConta={lastImportedConta} movCounts={movCounts} faturas={faturas} pagamentosExtras={pagamentosExtras} onUpdateFatura={updateFatura} onUpdatePagamento={updatePagamento}/>}
-          {tab==="comercial" && <ComercialView currentUser={currentUser} onAddFatura={addFatura}/>}
-          {tab==="clientes"  && <ComercialView currentUser={currentUser} onAddFatura={addFatura}/>}
+          {tab==="comercial" && <ComercialView currentUser={currentUser} onAddFatura={addFatura} empresasVisiveis={empresasVisiveis}/>}
+          {tab==="clientes"  && <ComercialView currentUser={currentUser} onAddFatura={addFatura} empresasVisiveis={empresasVisiveis}/>}
           {tab==="fotos"     && <FotosView currentUser={currentUser} empresasVisiveis={empresasVisiveis}/>}
           {tab==="orcado"    && <RealOrcado/>}
           {tab==="fluxo"     && <FluxoFuturo faturas={faturas} faturasLoading={faturasLoading} pagamentosExtras={pagamentosExtras} pagamentosLoading={pagamentosLoading} onAddPagamento={addPagamento} onUpdatePagamento={updatePagamento} onDeletePagamento={deletePagamento} onUpdateFatura={updateFatura} onDeleteFatura={deleteFatura} currentUser={currentUser} EMPRESAS={empresasVisiveis} caixaUnico={caixaUnico}/>}

@@ -64,6 +64,38 @@ export function fmtTamanho(bytes) {
   return fmtNum(b, 0) + " B";
 }
 
+// Lê um número escrito pelo utilizador, aceitando os dois formatos:
+//   "369000" · "369.000,00" · "369 000,00 €" · "1234.56" → 369000 / 1234.56
+export function parseNumero(texto) {
+  if (typeof texto === "number") return isFinite(texto) ? texto : 0;
+  let t = String(texto ?? "").trim();
+  if (!t) return 0;
+
+  // Remove tudo o que não seja dígito, separador ou sinal (moeda, espaços, m²)
+  t = t.replace(/[^\d.,-]/g, "");
+  if (!t) return 0;
+
+  const temVirgula = t.includes(",");
+  const temPonto = t.includes(".");
+
+  if (temVirgula && temPonto) {
+    // "369.000,00" → ponto é milhar, vírgula é decimal
+    t = t.replace(/\./g, "").replace(",", ".");
+  } else if (temVirgula) {
+    // "56,04" → vírgula decimal
+    t = t.replace(",", ".");
+  } else if (temPonto) {
+    // Ambíguo: "369.000" é milhar; "89.54" é decimal.
+    // Se depois do último ponto vierem exatamente 3 dígitos, trata-se de milhar.
+    const partes = t.split(".");
+    const ultima = partes[partes.length - 1];
+    if (partes.length > 2 || ultima.length === 3) t = partes.join("");
+  }
+
+  const n = parseFloat(t);
+  return isFinite(n) ? n : 0;
+}
+
 // ─── Datas ───────────────────────────────────────────────────────────────────
 
 // "2026-08-19" → "19/08/2026"
