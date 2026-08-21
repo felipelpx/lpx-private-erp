@@ -62,10 +62,31 @@ function Login({onLogin}) {
   const [erro,setErro]=useState("");
   const [loading,setLoading]=useState(false);
 
+  // Distingue falha de credenciais de falha de ligação — uma mensagem genérica
+  // faz perder tempo a mexer em passwords quando o problema é a configuração.
   const submit = async () => {
     setLoading(true); setErro("");
-    const { error } = await supabase.auth.signInWithPassword({ email, password: senha });
-    if (error) { setErro("Email ou senha incorretos"); setLoading(false); }
+    try {
+      const { error } = await supabase.auth.signInWithPassword({ email, password: senha });
+      if (!error) return;
+
+      const msg = (error.message || "").toLowerCase();
+      if (msg.includes("invalid login credentials")) {
+        setErro("Email ou senha incorretos");
+      } else if (msg.includes("email not confirmed")) {
+        setErro("Utilizador por confirmar. No Supabase, cria-o com 'Auto Confirm User' ligado.");
+      } else if (msg.includes("failed to fetch") || msg.includes("networkerror") || error.status === 0) {
+        setErro("Sem ligação à base de dados. Faltam as variáveis VITE_SUPABASE_* no Netlify, ou é preciso 'Clear cache and deploy site'.");
+      } else if (error.status === 401 || msg.includes("api key")) {
+        setErro("Chave do Supabase inválida. Confirma a VITE_SUPABASE_ANON_KEY (anon public, não service_role).");
+      } else {
+        setErro(`${error.message || "Erro desconhecido"}${error.status ? ` [${error.status}]` : ""}`);
+      }
+    } catch (e) {
+      setErro(`Falha de ligação: ${e?.message || e}. Verifica as variáveis de ambiente no Netlify.`);
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -94,6 +115,13 @@ function Login({onLogin}) {
             style={{background:"#1a1a2e",color:"#fff",border:"none",padding:"14px",borderRadius:10,fontSize:14,fontWeight:700,cursor:"pointer",marginTop:4,opacity:loading?0.7:1}}>
             {loading?"A entrar...":"Entrar"}
           </button>
+          <div style={{fontSize:9,color:"#ddd",textAlign:"center",fontFamily:"monospace",marginTop:6}}>
+            {(() => {
+              const u = supabase?.supabaseUrl || "";
+              if (!u || u.includes("SUBSTITUIR")) return "⚠ Supabase por configurar";
+              try { return new URL(u).hostname.split(".")[0]; } catch { return ""; }
+            })()}
+          </div>
         </div>
       </div>
     </div>
