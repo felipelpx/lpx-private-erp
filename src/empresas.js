@@ -20,24 +20,29 @@ export const buildContaId = (empresaId, banco) =>
 
 // Definição compacta: para cada empresa, o id, o nome e a lista de bancos.
 const DEF = [
-  { id: "favcloset", nome: "Favorite Closet",   nipc: "", projeto: "Favorite Closet",   bancos: ["BCP", "RED"] },
-  { id: "simplify",  nome: "Simplify Rubric",   nipc: "", projeto: "Simplify Rubric",   bancos: ["BCP", "RED"] },
-  { id: "enchanted", nome: "Enchanted Vortex",  nipc: "", projeto: "Enchanted Vortex",  bancos: ["BCP"] },
-  { id: "blessed",   nome: "Blessed Legion",    nipc: "", projeto: "Blessed Legion",    bancos: ["BCP"] },
-  { id: "pearl",     nome: "Pearl Syntax",      nipc: "", projeto: "Pearl Syntax",      bancos: ["BCP"] },
-  { id: "genero",    nome: "Género Prudente",   nipc: "", projeto: "Género Prudente",   bancos: ["BCP"] },
-  { id: "fluffy",    nome: "Fluffy Rithm",      nipc: "", projeto: "Fluffy Rithm",      bancos: ["BCP"] },
-  { id: "adseq",     nome: "Admirable Sequence",nipc: "", projeto: "Admirable Sequence",bancos: ["BCP", "RED"] },
-  { id: "infinite",  nome: "Infinite Change",   nipc: "", projeto: "Infinite Change",   bancos: ["BCP", "RED"] },
-  { id: "lpx",       nome: "LPX Private",       nipc: "", projeto: "LPX Private",       bancos: ["BCP", "Revolut", "CGD"] },
+  { id: "favcloset", nome: "Favorite Closet",    projeto: "Amadeu 07",           bancos: ["BCP", "RED"] },
+  { id: "simplify",  nome: "Simplify Rubric",    projeto: "Alto dos 7 Moinhos",  bancos: ["BCP", "RED"] },
+  { id: "enchanted", nome: "Enchanted Vortex",   projeto: "Developer A07",       bancos: ["BCP"] },
+  { id: "blessed",   nome: "BlessedLegion",      projeto: "Developer 7M",        bancos: ["BCP"] },
+  { id: "pearl",     nome: "Pearl Syntax",       projeto: "Aura Properties",     bancos: ["BCP"] },
+  { id: "genero",    nome: "Genero Prudente",    projeto: "Maria Pia",           bancos: ["BCP"] },
+  { id: "fluffy",    nome: "Fluffy Rithm",       projeto: "Tax SPV",             bancos: ["BCP"] },
+  { id: "adseq",     nome: "Admirable Sequence", projeto: "Cinq Etoiles",        bancos: ["BCP", "RED"] },
+  { id: "infinite",  nome: "Infinite Change",    projeto: "Paço D'arcos",        bancos: ["BCP", "RED"] },
+  { id: "lpx",       nome: "LPX Private",        projeto: "Holding",             bancos: ["BCP", "Revolut", "CGD"] },
 ];
+
+// Nome apresentado na interface: razão social + projeto entre parênteses.
+export const nomeCompleto = (e) => e.projeto ? `${e.nome} (${e.projeto})` : e.nome;
+
 
 // Forma completa usada pelo App / Extratos / Fluxo Futuro.
 // Saldos a zero — a app passa a ler o saldo real do último movimento importado.
 export const EMPRESAS = DEF.map((e) => ({
   id: e.id,
-  nome: e.nome,
-  nipc: e.nipc,
+  nome: `${e.nome} (${e.projeto})`,  // apresentado na UI
+  razaoSocial: e.nome,               // razão social isolada
+  nipc: "",
   projeto: e.projeto,
   contas: e.bancos.map((banco) => ({
     id: buildContaId(e.id, banco),
@@ -51,12 +56,15 @@ export const EMPRESAS = DEF.map((e) => ({
 // Forma usada pelo ecrã "Importar Extrato" (lista de bancos por empresa).
 export const EMPRESAS_IMPORT = DEF.map((e) => ({
   id: e.id,
-  nome: e.nome,
+  nome: `${e.nome} (${e.projeto})`,
   contas: e.bancos,
 }));
 
 // Forma simples (id + nome) usada pelo ecrã "Importar Fatura".
-export const EMPRESAS_SIMPLE = DEF.map((e) => ({ id: e.id, nome: e.nome }));
+export const EMPRESAS_SIMPLE = DEF.map((e) => ({ id: e.id, nome: `${e.nome} (${e.projeto})` }));
+
+// Lista de projetos (usada nos filtros de Fotos e Comercial)
+export const PROJETOS = DEF.map((e) => ({ id: e.id, projeto: e.projeto, empresa: e.nome }));
 
 // Cores por banco (usadas nos chips da UI).
 export const BANCO_COLORS = {

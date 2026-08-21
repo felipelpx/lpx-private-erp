@@ -11,10 +11,11 @@ import EntidadesView from "./EntidadesView.jsx";
 import PagamentosView from "./PagamentosView.jsx";
 import { CATEGORIAS_FATURA } from "./categorias.js";
 import { EMPRESAS, BANCO_COLORS as BANCO_COLORS_CFG } from "./empresas.js";
+import FotosView from "./FotosView.jsx";
 import { BRAND } from "./brand.js";
 
-const ROLE_LABELS = { admin: "Administrador", gestor: "Gestor", viewer: "Visualizador" };
-const ROLE_COLORS = { admin: "#dc2626", gestor: "#2563eb", viewer: "#16a34a" };
+const ROLE_LABELS = { admin: "Administrador", gestor: "Gestor", viewer: "Visualizador", investidor: "Investidor" };
+const ROLE_COLORS = { admin: "#dc2626", gestor: "#2563eb", viewer: "#16a34a", investidor: "#9333ea" };
 
 // ─── EMPRESAS ────────────────────────────────────────────────────────────────
 // A lista de empresas e contas vive em ./empresas.js (fonte única de verdade).
@@ -767,6 +768,12 @@ function UtilizadoresInner({ currentUser }) {
     const parts = [];
     if (r === "admin") parts.push("Gere o ERP e os utilizadores");
     else if (r === "gestor") parts.push("Edita faturas, movimentos e fluxo");
+    else if (r === "investidor") {
+      const n = Array.isArray(u.empresas) ? u.empresas.length : 0;
+      parts.push(n
+        ? `Consulta extratos, vendas e fotos de ${n} ${n === 1 ? "projeto" : "projetos"}`
+        : "Investidor sem projetos atribuídos — não vê nada");
+    }
     else parts.push("Apenas consulta dados");
     if (lvl === 1) parts.push("Aprova mapas em 1.º nível");
     else if (lvl === 2) parts.push("Aprova mapas em 2.º nível (final)");
@@ -798,7 +805,7 @@ function UtilizadoresInner({ currentUser }) {
           const podeEditarOutros = (currentUser?.approval_level ?? 0) >= 1;
           const editavel = podeEditarOutros && !isCurrent;
           const fb = feedback[u.id];
-          const roleColor = u.role === "admin" ? "#dc2626" : u.role === "gestor" ? "#2563eb" : "#16a34a";
+          const roleColor = u.role === "admin" ? "#dc2626" : u.role === "gestor" ? "#2563eb" : u.role === "investidor" ? "#9333ea" : "#16a34a";
           const lvlColor = u.approval_level === 1 ? "#f59e0b" : u.approval_level === 2 ? "#3b82f6" : "#bbb";
 
           return (
@@ -835,6 +842,7 @@ function UtilizadoresInner({ currentUser }) {
                   <select value={u.role || "viewer"} disabled={!editavel}
                     onChange={e => updateField(u.id, "role", e.target.value)}
                     style={{ width: "100%", background: "#f8f8f8", border: `1px solid ${roleColor}40`, borderRadius: 6, padding: "6px 8px", fontSize: 11, outline: "none", cursor: editavel ? "pointer" : "not-allowed", color: roleColor, fontWeight: 600 }}>
+                    <option value="investidor">Investidor</option>
                     <option value="viewer">Visualizador</option>
                     <option value="gestor">Gestor</option>
                     <option value="admin">Administrador</option>
@@ -851,6 +859,39 @@ function UtilizadoresInner({ currentUser }) {
                   </select>
                 </div>
               </div>
+
+              {/* Projetos visíveis — só relevante para investidores */}
+              {u.role === "investidor" && (
+                <div style={{ borderTop: "1px solid #f5f5f5", paddingTop: 10 }}>
+                  <div style={{ fontSize: 9, color: "#aaa", textTransform: "uppercase", fontFamily: "monospace", letterSpacing: "0.07em", marginBottom: 6 }}>
+                    Projetos a que tem acesso
+                  </div>
+                  <div style={{ display: "flex", flexDirection: "column", gap: 4, maxHeight: 168, overflowY: "auto" }}>
+                    {EMPRESAS.map(emp => {
+                      const lista = Array.isArray(u.empresas) ? u.empresas : [];
+                      const marcado = lista.includes(emp.id);
+                      return (
+                        <label key={emp.id} style={{ display: "flex", alignItems: "center", gap: 7, cursor: editavel ? "pointer" : "not-allowed", opacity: editavel ? 1 : 0.6 }}>
+                          <input type="checkbox" checked={marcado} disabled={!editavel}
+                            onChange={e => {
+                              const nova = e.target.checked
+                                ? [...lista, emp.id]
+                                : lista.filter(x => x !== emp.id);
+                              updateField(u.id, "empresas", nova);
+                            }}
+                            style={{ width: 14, height: 14, cursor: editavel ? "pointer" : "not-allowed" }} />
+                          <span style={{ fontSize: 11, color: marcado ? "#1a1a2e" : "#999" }}>{emp.nome}</span>
+                        </label>
+                      );
+                    })}
+                  </div>
+                  {(!u.empresas || u.empresas.length === 0) && (
+                    <div style={{ fontSize: 10, color: "#d97706", marginTop: 6 }}>
+                      Sem projetos marcados — este utilizador não vê dados nenhuns.
+                    </div>
+                  )}
+                </div>
+              )}
 
               <label style={{ display: "flex", alignItems: "center", gap: 8, cursor: editavel ? "pointer" : "not-allowed", paddingTop: 4, borderTop: "1px solid #f5f5f5", opacity: editavel ? 1 : 0.6 }}>
                 <input type="checkbox" checked={!!u.can_create_mapas} disabled={!editavel}
@@ -876,6 +917,7 @@ function UtilizadoresInner({ currentUser }) {
             { label: "Administrador", color: "#dc2626", perms: ["Ver tudo no ERP", "Editar tudo", "Gerir utilizadores", "Aceder a dados sensíveis"] },
             { label: "Gestor", color: "#2563eb", perms: ["Ver tudo", "Editar faturas", "Adicionar movimentos", "Exportar dados"] },
             { label: "Visualizador", color: "#16a34a", perms: ["Ver saldos", "Ver extratos", "Ver Real×Orçado", "Sem edição"] },
+            { label: "Investidor", color: "#9333ea", perms: ["Só os projetos marcados", "Extratos do seu projeto", "Vendas do seu projeto", "Fotos do seu projeto"] },
           ].map((p, i) => (
             <div key={i} style={{ background: "#fafafa", borderRadius: 10, padding: 16, borderLeft: `4px solid ${p.color}` }}>
               <div style={{ fontWeight: 700, color: "#1a1a2e", marginBottom: 10, fontSize: 14 }}>{p.label}</div>
@@ -1091,9 +1133,12 @@ function ImportarView({faturas, setFaturas, caixaUnico, setCaixaUnico, setTab, a
 }
 
 // ─── ROOT ─────────────────────────────────────────────────────────────────────
+// O perfil "investidor" vê apenas Extratos, Comercial e Fotos — e, dentro
+// desses, só as empresas que lhe forem atribuídas (profiles.empresas).
 const TABS_CONFIG = [
-  {id:"extrato",   label:"Extratos",          roles:["admin","gestor","viewer"]},
-  {id:"comercial", label:"Comercial",          roles:["admin","gestor","viewer"]},
+  {id:"extrato",   label:"Extratos",          roles:["admin","gestor","viewer","investidor"]},
+  {id:"comercial", label:"Comercial",          roles:["admin","gestor","viewer","investidor"]},
+  {id:"fotos",     label:"Fotos",              roles:["admin","gestor","viewer","investidor"]},
   {id:"clientes",  label:"Clientes",           roles:["admin","gestor","viewer"]},
   {id:"orcado",    label:"Real × Orçado",      roles:["admin","gestor","viewer"]},
   {id:"fluxo",     label:"Fluxo Futuro",       roles:["admin","gestor","viewer"]},
@@ -1208,10 +1253,18 @@ export default function App() {
     role: profile?.role || 'viewer',
     approval_level: profile?.approval_level || 0,
     can_create_mapas: profile?.can_create_mapas || false,
+    empresas: Array.isArray(profile?.empresas) ? profile.empresas : [],
   };
 
   const canEdit = currentUser.role === "admin" || currentUser.role === "gestor";
   const availTabs = TABS_CONFIG.filter(t => t.roles.includes(currentUser.role));
+
+  // Empresas visíveis: o investidor só vê as que lhe foram atribuídas.
+  // Isto é a camada de UI — o isolamento real é imposto por RLS na base de dados.
+  const isInvestidor = currentUser.role === "investidor";
+  const empresasVisiveis = isInvestidor
+    ? EMPRESAS.filter(e => currentUser.empresas.includes(e.id))
+    : EMPRESAS;
 
   return (
     <div style={{minHeight:"100vh",background:"#f4f5f7",fontFamily:"Georgia,sans-serif"}}>
@@ -1258,11 +1311,12 @@ export default function App() {
 
       <div style={{padding:"28px",maxWidth:1500,margin:"0 auto"}}>
         <TabErrorBoundary key={tab}>
-          {tab==="extrato"   && <ExtratosView EMPRESAS={EMPRESAS} extrato={[]} caixaUnico={caixaUnico} setCaixaUnico={handleSetCaixaUnico} currentUser={currentUser} autoOpenConta={lastImportedConta} movCounts={movCounts} faturas={faturas} pagamentosExtras={pagamentosExtras} onUpdateFatura={updateFatura} onUpdatePagamento={updatePagamento}/>}
+          {tab==="extrato"   && <ExtratosView EMPRESAS={empresasVisiveis} extrato={[]} caixaUnico={caixaUnico} setCaixaUnico={handleSetCaixaUnico} currentUser={currentUser} autoOpenConta={lastImportedConta} movCounts={movCounts} faturas={faturas} pagamentosExtras={pagamentosExtras} onUpdateFatura={updateFatura} onUpdatePagamento={updatePagamento}/>}
           {tab==="comercial" && <ComercialView currentUser={currentUser} onAddFatura={addFatura}/>}
           {tab==="clientes"  && <ComercialView currentUser={currentUser} onAddFatura={addFatura}/>}
+          {tab==="fotos"     && <FotosView currentUser={currentUser} empresasVisiveis={empresasVisiveis}/>}
           {tab==="orcado"    && <RealOrcado/>}
-          {tab==="fluxo"     && <FluxoFuturo faturas={faturas} faturasLoading={faturasLoading} pagamentosExtras={pagamentosExtras} pagamentosLoading={pagamentosLoading} onAddPagamento={addPagamento} onUpdatePagamento={updatePagamento} onDeletePagamento={deletePagamento} onUpdateFatura={updateFatura} onDeleteFatura={deleteFatura} currentUser={currentUser} EMPRESAS={EMPRESAS} caixaUnico={caixaUnico}/>}
+          {tab==="fluxo"     && <FluxoFuturo faturas={faturas} faturasLoading={faturasLoading} pagamentosExtras={pagamentosExtras} pagamentosLoading={pagamentosLoading} onAddPagamento={addPagamento} onUpdatePagamento={updatePagamento} onDeletePagamento={deletePagamento} onUpdateFatura={updateFatura} onDeleteFatura={deleteFatura} currentUser={currentUser} EMPRESAS={empresasVisiveis} caixaUnico={caixaUnico}/>}
           {tab==="pagar"     && <ContasPagar canEdit={canEdit} faturas={faturas} setFaturas={handleSetFaturas} addFatura={addFatura} updateFatura={updateFatura} deleteFatura={deleteFatura}/>}
           {tab==="pagamentos"&& <PagamentosView faturas={faturas} pagamentosExtras={pagamentosExtras} currentUser={currentUser} profiles={profiles}/>}
           {tab==="users"     && <Utilizadores currentUser={currentUser}/>}

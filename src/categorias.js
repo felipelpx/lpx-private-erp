@@ -87,6 +87,53 @@ export const CATEGORIAS = [
   "Ajuste",
   "Ajuste Contábil",
   "Outro",
+
+  // ─── LPX · aportes e resgates por entidade ───
+  "Lpx Private - Aporte/Resgate",
+  "Blessed - Aporte/Resgate",
+  "Big Mouse - Aporte/Resgate",
+  "Morning Steps - Aporte/Resgate",
+  "Parcela Emergente - Aporte/Resgate",
+  "Efeito Impecável - Aporte/Resgate",
+  "Aura Temperamental - Aporte/Resgate",
+  "RHCS - Aporte/Resgate",
+  "Aporte / Resgate investida",
+  "Aporte Big Mouse",
+  "Aporte Efeito Impecável",
+  "Aporte Enchanted",
+  "Aporte Findmore",
+  "Aporte Ideias Vidradas",
+  "Aporte Magic Biz",
+  "Aporte Morning Steps",
+  "Aporte Parcela Emergente",
+  "Aporte Pompous Measures",
+
+  // ─── LPX · mútuos ───
+  "Mútuo investida",
+  "Mútuo Terceiros",
+  "Mútuo Bombastic Gadget",
+  "Mútuo Findmore",
+  "Mútuo Fatima Serra",
+  "Mútuo Vanillapotential",
+
+  // ─── LPX · development fees e comissões ───
+  "Development Fee (Receitas)",
+  "Development Fee @ Lpx Private",
+  "Development Fee @ Morning Steps",
+  "Development Fee @ Efeito Impecável",
+  "Development Fee @ Big Mouse",
+  "Comissão Interna @ Lpx Private",
+  "Comissão Interna @ Aura Temperamental",
+  "Comissão Interna @ XIZODIS",
+  "Comissão Terceiros",
+  "Receitas de comissão",
+
+  // ─── LPX · marketing e estrutura ───
+  "Idealista",
+  "Google / Facebook Ads",
+  "Vídeos / Fotos",
+  "Office",
+  "Reservas",
 ];
 
 // Subconjunto usado em faturas (Contas a Pagar) — não inclui aportes/resgates,
@@ -98,5 +145,8 @@ export const CATEGORIAS_FATURA = CATEGORIAS.filter(c =>
     "Receita Cambial", "Receita de Comissões", "Receita de Rendas",
     "Receita de Rendimentos Financeiros", "Receita de Venda de Projeto",
     "Receita de Venda de Unidades", "Receita de Operações",
-    "Vendas", "Recebimento"].includes(c)
+    "Vendas", "Recebimento",
+    "Development Fee (Receitas)", "Receitas de comissão"].includes(c)
+  && !/^(Aporte|Mútuo)\b/.test(c)
+  && !/- Aporte\/Resgate$/.test(c)
 );
