@@ -126,6 +126,7 @@ export const CATEGORIAS = [
   "Comissão Interna @ Aura Temperamental",
   "Comissão Interna @ XIZODIS",
   "Comissão Terceiros",
+  "Comissões",
   "Receitas de comissão",
 
   // ─── LPX · marketing e estrutura ───
