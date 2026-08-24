@@ -20,20 +20,39 @@ export const buildContaId = (empresaId, banco) =>
 
 // Definição compacta: para cada empresa, o id, o nome e a lista de bancos.
 const DEF = [
-  { id: "favcloset", nome: "Favorite Closet",    projeto: "Amadeu 07",           bancos: ["BCP", "RED"] },
-  { id: "simplify",  nome: "Simplify Rubric",    projeto: "Alto dos 7 Moinhos",  bancos: ["BCP", "RED"] },
-  { id: "enchanted", nome: "Enchanted Vortex",   projeto: "Developer A07",       bancos: ["BCP"] },
-  { id: "blessed",   nome: "BlessedLegion",      projeto: "Developer 7M",        bancos: ["BCP"] },
-  { id: "pearl",     nome: "Pearl Syntax",       projeto: "Aura Properties",     bancos: ["BCP"] },
-  { id: "genero",    nome: "Genero Prudente",    projeto: "Maria Pia",           bancos: ["BCP"] },
-  { id: "fluffy",    nome: "Fluffy Rithm",       projeto: "Tax SPV",             bancos: ["BCP"] },
-  { id: "adseq",     nome: "Admirable Sequence", projeto: "Cinq Etoiles",        bancos: ["BCP", "RED"] },
-  { id: "infinite",  nome: "Infinite Change",    projeto: "Paço D'arcos",        bancos: ["BCP", "RED"] },
-  { id: "lpx",       nome: "LPX Private",        projeto: "Holding",             bancos: ["BCP", "Revolut", "CGD"] },
+  { id: "favcloset", nome: "Favorite Closet",    projeto: "Amadeu 07",           grupo: "LPX", bancos: ["BCP", "RED"] },
+  { id: "simplify",  nome: "Simplify Rubric",    projeto: "Alto dos 7 Moinhos",  grupo: "LPX", bancos: ["BCP", "RED"] },
+  { id: "enchanted", nome: "Enchanted Vortex",   projeto: "Developer A07",       grupo: "LPX", bancos: ["BCP"] },
+  { id: "blessed",   nome: "BlessedLegion",      projeto: "Developer 7M",        grupo: "LPX", bancos: ["BCP"] },
+  { id: "pearl",     nome: "Pearl Syntax",       projeto: "Aura Properties",     grupo: "LPX", bancos: ["BCP"] },
+  { id: "genero",    nome: "Genero Prudente",    projeto: "Maria Pia",           grupo: "LPX", bancos: ["BCP"] },
+  { id: "fluffy",    nome: "Fluffy Rithm",       projeto: "Tax SPV",             grupo: "LPX", bancos: ["BCP"] },
+  { id: "adseq",     nome: "Admirable Sequence", projeto: "Cinq Etoiles",        grupo: "HDG", bancos: ["BCP", "RED"] },
+  { id: "infinite",  nome: "Infinite Change",    projeto: "Paço D'arcos",        grupo: "HDG", bancos: ["BCP", "RED"] },
+  { id: "lpx",       nome: "LPX Private",        projeto: "Holding",             grupo: "LPX", bancos: ["BCP", "Revolut", "CGD"] },
 ];
+
+// ─── GRUPOS ──────────────────────────────────────────────────────────────────
+// Cada empresa pertence a um grupo. Para acrescentar um grupo novo basta usar
+// outro valor em `grupo` acima e registá-lo em GRUPOS_INFO.
+export const GRUPOS_INFO = {
+  LPX: { nome: "LPX",  descricao: "Grupo LPX",             cor: "#1a1a2e" },
+  HDG: { nome: "HDG",  descricao: "Grupo HDG",             cor: "#4a6fa5" },
+};
+
+// Lista de grupos existentes, pela ordem em que aparecem em DEF
+export const GRUPOS = [...new Set(DEF.map((e) => e.grupo))];
 
 // Nome apresentado na interface: razão social + projeto entre parênteses.
 export const nomeCompleto = (e) => e.projeto ? `${e.nome} (${e.projeto})` : e.nome;
+
+// Agrupa uma lista de empresas por grupo, preservando a ordem de GRUPOS.
+export const agruparPorGrupo = (empresas) =>
+  GRUPOS
+    .map((g) => ({ grupo: g, info: GRUPOS_INFO[g] || { nome: g, cor: "#888" },
+                   empresas: empresas.filter((e) => e.grupo === g) }))
+    .filter((bloco) => bloco.empresas.length > 0);
+
 
 
 // Forma completa usada pelo App / Extratos / Fluxo Futuro.
@@ -42,6 +61,7 @@ export const EMPRESAS = DEF.map((e) => ({
   id: e.id,
   nome: `${e.nome} (${e.projeto})`,  // apresentado na UI
   razaoSocial: e.nome,               // razão social isolada
+  grupo: e.grupo,
   nipc: "",
   projeto: e.projeto,
   contas: e.bancos.map((banco) => ({
@@ -56,15 +76,16 @@ export const EMPRESAS = DEF.map((e) => ({
 // Forma usada pelo ecrã "Importar Extrato" (lista de bancos por empresa).
 export const EMPRESAS_IMPORT = DEF.map((e) => ({
   id: e.id,
+  grupo: e.grupo,
   nome: `${e.nome} (${e.projeto})`,
   contas: e.bancos,
 }));
 
 // Forma simples (id + nome) usada pelo ecrã "Importar Fatura".
-export const EMPRESAS_SIMPLE = DEF.map((e) => ({ id: e.id, nome: `${e.nome} (${e.projeto})` }));
+export const EMPRESAS_SIMPLE = DEF.map((e) => ({ id: e.id, grupo: e.grupo, nome: `${e.nome} (${e.projeto})` }));
 
 // Lista de projetos (usada nos filtros de Fotos e Comercial)
-export const PROJETOS = DEF.map((e) => ({ id: e.id, projeto: e.projeto, empresa: e.nome }));
+export const PROJETOS = DEF.map((e) => ({ id: e.id, projeto: e.projeto, empresa: e.nome, grupo: e.grupo }));
 
 // Cores por banco (usadas nos chips da UI).
 export const BANCO_COLORS = {

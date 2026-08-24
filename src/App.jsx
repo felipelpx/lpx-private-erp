@@ -10,7 +10,7 @@ import ComercialView from "./ComercialView.jsx";
 import EntidadesView from "./EntidadesView.jsx";
 import PagamentosView from "./PagamentosView.jsx";
 import { CATEGORIAS_FATURA } from "./categorias.js";
-import { EMPRESAS as EMPRESAS_ALL, BANCO_COLORS as BANCO_COLORS_CFG } from "./empresas.js";
+import { EMPRESAS as EMPRESAS_ALL, BANCO_COLORS as BANCO_COLORS_CFG, GRUPOS, GRUPOS_INFO } from "./empresas.js";
 const EMPRESAS = EMPRESAS_ALL;
 import FotosView from "./FotosView.jsx";
 import { BRAND } from "./brand.js";
@@ -597,7 +597,11 @@ function ContasPagar({canEdit, faturas: faturasTodas, setFaturas, addFatura, upd
           ))}
           <select value={fEmp} onChange={e=>setFEmp(e.target.value)} style={{background:"#f8f8f8",border:"1px solid #eee",borderRadius:20,padding:"6px 14px",fontSize:12,outline:"none"}}>
             <option value="Todas">Todas</option>
-            {EMPRESAS.map(e=><option key={e.id} value={e.id}>{e.nome}</option>)}
+            {GRUPOS.filter(g=>EMPRESAS.some(e=>e.grupo===g)).map(g=>(
+              <optgroup key={g} label={GRUPOS_INFO[g]?.nome||g}>
+                {EMPRESAS.filter(e=>e.grupo===g).map(e=><option key={e.id} value={e.id}>{e.nome}</option>)}
+              </optgroup>
+            ))}
           </select>
           <div style={{position:"relative",display:"flex",alignItems:"center"}}>
             <span style={{position:"absolute",left:12,fontSize:12,color:"#aaa",pointerEvents:"none"}}>🔎</span>
@@ -633,7 +637,7 @@ function ContasPagar({canEdit, faturas: faturasTodas, setFaturas, addFatura, upd
               <button onClick={()=>{setShowForm(false);reset();}} style={{background:"none",border:"none",fontSize:20,cursor:"pointer",color:"#aaa"}}>✕</button>
             </div>
             <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:14}}>
-              <div style={{display:"flex",flexDirection:"column",gap:4}}><label style={{fontSize:10,color:"#aaa",fontFamily:"monospace",textTransform:"uppercase"}}>Empresa</label><select value={form.empresa||""} onChange={e=>setForm(f=>({...f,empresa:e.target.value}))} style={{background:"#f8f8f8",border:"1px solid #e8e8e8",borderRadius:8,padding:"9px 12px",fontSize:13,outline:"none"}}><option value="">Selecionar...</option>{EMPRESAS.map(o=><option key={o.id} value={o.id}>{o.nome}</option>)}</select></div>
+              <div style={{display:"flex",flexDirection:"column",gap:4}}><label style={{fontSize:10,color:"#aaa",fontFamily:"monospace",textTransform:"uppercase"}}>Empresa</label><select value={form.empresa||""} onChange={e=>setForm(f=>({...f,empresa:e.target.value}))} style={{background:"#f8f8f8",border:"1px solid #e8e8e8",borderRadius:8,padding:"9px 12px",fontSize:13,outline:"none"}}><option value="">Selecionar...</option>{GRUPOS.filter(g=>EMPRESAS.some(e=>e.grupo===g)).map(g=>(<optgroup key={g} label={GRUPOS_INFO[g]?.nome||g}>{EMPRESAS.filter(e=>e.grupo===g).map(o=><option key={o.id} value={o.id}>{o.nome}</option>)}</optgroup>))}</select></div>
               <div style={{display:"flex",flexDirection:"column",gap:4}}><label style={{fontSize:10,color:"#aaa",fontFamily:"monospace",textTransform:"uppercase"}}>Projeto</label><input type="text" value={form.projeto||""} onChange={e=>setForm(f=>({...f,projeto:e.target.value}))} style={{background:"#f8f8f8",border:"1px solid #e8e8e8",borderRadius:8,padding:"9px 12px",fontSize:13,outline:"none"}}/></div>
               <div style={{display:"flex",flexDirection:"column",gap:4}}><label style={{fontSize:10,color:"#aaa",fontFamily:"monospace",textTransform:"uppercase"}}>Nº Fatura</label><input type="text" value={form.fatura||""} onChange={e=>setForm(f=>({...f,fatura:e.target.value}))} style={{background:"#f8f8f8",border:"1px solid #e8e8e8",borderRadius:8,padding:"9px 12px",fontSize:13,outline:"none"}}/></div>
               <div style={{display:"flex",flexDirection:"column",gap:4}}><label style={{fontSize:10,color:"#aaa",fontFamily:"monospace",textTransform:"uppercase"}}>Fornecedor</label><input type="text" value={form.fornecedor||""} onChange={e=>setForm(f=>({...f,fornecedor:e.target.value}))} style={{background:"#f8f8f8",border:"1px solid #e8e8e8",borderRadius:8,padding:"9px 12px",fontSize:13,outline:"none"}}/></div>
@@ -1267,6 +1271,14 @@ export default function App() {
   }, [theme]);
   const toggleTheme = () => setTheme(t => t === "dark" ? "light" : "dark");
 
+  // Grupo ativo (Todos / LPX / HDG) — filtra todos os separadores de uma vez
+  const [grupo, setGrupo] = useState(() => {
+    try { return localStorage.getItem("lpx_grupo") || "Todos"; } catch { return "Todos"; }
+  });
+  useEffect(() => {
+    try { localStorage.setItem("lpx_grupo", grupo); } catch {}
+  }, [grupo]);
+
   // caixaUnico is built from Supabase contas + local JSON for movimentos structure
   const [caixaUnico, setCaixaUnico] = useState({});
 
@@ -1331,9 +1343,15 @@ export default function App() {
   // Empresas visíveis: o investidor só vê as que lhe foram atribuídas.
   // Isto é a camada de UI — o isolamento real é imposto por RLS na base de dados.
   const isInvestidor = currentUser.role === "investidor";
-  const empresasVisiveis = isInvestidor
+  const empresasDoUtilizador = isInvestidor
     ? EMPRESAS.filter(e => currentUser.empresas.includes(e.id))
     : EMPRESAS;
+
+  // Filtro de grupo (LPX / HDG) — aplica-se a todos os separadores de uma vez.
+  const gruposDisponiveis = GRUPOS.filter(g => empresasDoUtilizador.some(e => e.grupo === g));
+  const empresasVisiveis = grupo === "Todos"
+    ? empresasDoUtilizador
+    : empresasDoUtilizador.filter(e => e.grupo === grupo);
 
   return (
     <div style={{minHeight:"100vh",background:"#f4f5f7",fontFamily:"Georgia,sans-serif"}}>
@@ -1343,7 +1361,27 @@ export default function App() {
           <div style={{background:BRAND.dark,borderRadius:8,padding:"7px 12px",marginRight:8,display:"flex",alignItems:"center"}}>
             <img src={BRAND.logo} alt={BRAND.nome} style={{height:20,display:"block"}}/>
           </div>
-          <div style={{fontSize:17,fontWeight:700,color:"#1a1a2e",fontFamily:"Georgia,serif",flex:1}}>{BRAND.tagline}</div>
+          <div style={{fontSize:17,fontWeight:700,color:"#1a1a2e",fontFamily:"Georgia,serif"}}>{BRAND.tagline}</div>
+
+          {/* Seletor de grupo — filtra todos os separadores */}
+          {gruposDisponiveis.length > 1 && (
+            <div style={{display:"flex",alignItems:"center",gap:6,marginLeft:16,flex:1}}>
+              <span style={{fontSize:9,color:"#bbb",fontFamily:"monospace",textTransform:"uppercase",letterSpacing:"0.08em"}}>Grupo</span>
+              <div style={{display:"flex",background:"#f0f0f0",borderRadius:8,padding:2,gap:2}}>
+                {["Todos",...gruposDisponiveis].map(g=>{
+                  const ativo = grupo===g;
+                  const cor = g==="Todos" ? "#1a1a2e" : (GRUPOS_INFO[g]?.cor || "#1a1a2e");
+                  return (
+                    <button key={g} onClick={()=>setGrupo(g)} title={g==="Todos"?"Ver todas as empresas":GRUPOS_INFO[g]?.descricao||g}
+                      style={{background:ativo?cor:"transparent",color:ativo?"#fff":"#777",border:"none",padding:"5px 13px",borderRadius:6,fontSize:11,fontWeight:700,cursor:"pointer",fontFamily:"monospace",letterSpacing:"0.03em"}}>
+                      {g}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+          {gruposDisponiveis.length <= 1 && <div style={{flex:1}}/>}
           <div style={{display:"flex",gap:2,flexWrap:"wrap"}}>
             {availTabs.map(t=>(
               <button key={t.id} onClick={()=>{
@@ -1387,7 +1425,7 @@ export default function App() {
           {tab==="orcado"    && <RealOrcado/>}
           {tab==="fluxo"     && <FluxoFuturo faturas={faturas} faturasLoading={faturasLoading} pagamentosExtras={pagamentosExtras} pagamentosLoading={pagamentosLoading} onAddPagamento={addPagamento} onUpdatePagamento={updatePagamento} onDeletePagamento={deletePagamento} onUpdateFatura={updateFatura} onDeleteFatura={deleteFatura} currentUser={currentUser} EMPRESAS={empresasVisiveis} caixaUnico={caixaUnico}/>}
           {tab==="pagar"     && <ContasPagar canEdit={canEdit && !isInvestidor} EMPRESAS={empresasVisiveis} faturas={faturas} setFaturas={handleSetFaturas} addFatura={addFatura} updateFatura={updateFatura} deleteFatura={deleteFatura}/>}
-          {tab==="pagamentos"&& <PagamentosView faturas={faturas} pagamentosExtras={pagamentosExtras} currentUser={currentUser} profiles={profiles}/>}
+          {tab==="pagamentos"&& <PagamentosView faturas={faturas.filter(f=>empresasVisiveis.some(e=>e.id===f.empresa)||!f.empresa)} pagamentosExtras={pagamentosExtras.filter(p=>empresasVisiveis.some(e=>e.id===p.empresa)||!p.empresa)} currentUser={currentUser} profiles={profiles}/>}
           {tab==="users"     && <Utilizadores currentUser={currentUser}/>}
           {tab==="entidades" && <EntidadesView currentUser={currentUser}/>}
           {tab==="importar"  && <ImportarView

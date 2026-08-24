@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useMemo } from "react";
 import { supabase } from "./supabase.js";
-import { EMPRESAS } from "./empresas.js";
+import { EMPRESAS, agruparPorGrupo } from "./empresas.js";
 import { fmtData, fmtTamanho, fmtInt } from "./formato.js";
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -204,7 +204,7 @@ export default function FotosView({ currentUser, empresasVisiveis }) {
         <div style={{ fontSize: 9, color: "#aaa", textTransform: "uppercase", fontFamily: "monospace", letterSpacing: "0.08em", marginBottom: 10 }}>
           Projeto
         </div>
-        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+        <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
           <button onClick={() => setFiltro("todos")}
             style={{
               background: filtro === "todos" ? "#1a1a2e" : "#fff",
@@ -214,21 +214,28 @@ export default function FotosView({ currentUser, empresasVisiveis }) {
             }}>
             Todos <span style={{ opacity: 0.6 }}>({fotos.length})</span>
           </button>
-          {empresas.map(e => {
-            const activo = filtro === e.id;
-            const n = contagem(e.id);
-            return (
-              <button key={e.id} onClick={() => setFiltro(e.id)}
-                style={{
-                  background: activo ? "#1a1a2e" : "#fff",
-                  color: activo ? "#fff" : n ? "#666" : "#bbb",
-                  border: "1px solid " + (activo ? "#1a1a2e" : "#e8e8e8"),
-                  borderRadius: 20, padding: "6px 14px", fontSize: 12, cursor: "pointer", fontWeight: 600,
-                }}>
-                {e.projeto || e.nome} <span style={{ opacity: 0.6 }}>({n})</span>
-              </button>
-            );
-          })}
+          {agruparPorGrupo(empresas).map(bloco => (
+            <div key={bloco.grupo} style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+              <span style={{ background: bloco.info.cor, color: "#fff", fontSize: 9, fontWeight: 800, padding: "3px 9px", borderRadius: 5, fontFamily: "monospace", letterSpacing: "0.07em" }}>
+                {bloco.info.nome}
+              </span>
+              {bloco.empresas.map(e => {
+                const activo = filtro === e.id;
+                const n = contagem(e.id);
+                return (
+                  <button key={e.id} onClick={() => setFiltro(e.id)}
+                    style={{
+                      background: activo ? "#1a1a2e" : "#fff",
+                      color: activo ? "#fff" : n ? "#666" : "#bbb",
+                      border: "1px solid " + (activo ? "#1a1a2e" : "#e8e8e8"),
+                      borderRadius: 20, padding: "6px 14px", fontSize: 12, cursor: "pointer", fontWeight: 600,
+                    }}>
+                    {e.projeto || e.nome} <span style={{ opacity: 0.6 }}>({n})</span>
+                  </button>
+                );
+              })}
+            </div>
+          ))}
         </div>
       </div>
 

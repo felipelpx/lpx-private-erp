@@ -1,6 +1,6 @@
 import { useState, useMemo, useEffect } from "react";
 import { useFracoes, useVendas } from "./hooks.js";
-import { EMPRESAS } from "./empresas.js";
+import { EMPRESAS, GRUPOS, GRUPOS_INFO } from "./empresas.js";
 import { fmtEUR, fmtPct as fmtPctCfg, fmtNum, fmtArea, parseNumero } from "./formato.js";
 
 // Empresa a que são imputadas as faturas de comissão geradas a partir das vendas.
@@ -339,7 +339,17 @@ function TabelaVendas({ fracoes, vendas, canEdit, onAddFatura, onUpdateFracao, o
           style={{ flex: "2 1 260px", background: "#fff", border: "1px solid #eee", borderRadius: 10, padding: "10px 14px", fontSize: 13, outline: "none" }} />
         <select value={filterProj} onChange={e => setFilterProj(e.target.value)}
           style={{ flex: "1 1 200px", background: "#fff", border: "1px solid #eee", borderRadius: 10, padding: "10px 14px", fontSize: 13, outline: "none" }}>
-          {projetos.map(p => <option key={p}>{p}</option>)}
+          <option>Todos</option>
+          {GRUPOS.map(g => {
+            const nomes = EMPRESAS.filter(e => e.grupo === g && projetos.includes(e.nome)).map(e => e.nome);
+            return nomes.length ? (
+              <optgroup key={g} label={GRUPOS_INFO[g]?.nome || g}>
+                {nomes.map(n => <option key={n}>{n}</option>)}
+              </optgroup>
+            ) : null;
+          })}
+          {/* projetos que não correspondem a nenhuma empresa */}
+          {projetos.filter(p => p !== "Todos" && !EMPRESAS.some(e => e.nome === p)).map(p => <option key={p}>{p}</option>)}
         </select>
         <select value={filterStatus} onChange={e => setFilterStatus(e.target.value)}
           style={{ flex: "1 1 150px", background: "#fff", border: "1px solid #eee", borderRadius: 10, padding: "10px 14px", fontSize: 13, outline: "none" }}>

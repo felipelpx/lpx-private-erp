@@ -3,6 +3,7 @@ import { useMovimentosByConta, useSaldosAtuais } from "./hooks.js";
 import { supabase } from "./supabase.js";
 import { CATEGORIAS } from "./categorias.js";
 import { fmtEUR, fmtNum, fmtInt, fmtPctSinal, fmtDataHora, fmtData as fmtDataCfg } from "./formato.js";
+import { agruparPorGrupo, GRUPOS_INFO } from "./empresas.js";
 
 const BANCO_COLORS = {"Millennium":"#e84393","BNI":"#0057b7","BB Americas":"#c8a500","Eurobic":"#e74c3c","Revolut":"#6772e5","CGD":"#00a859","NovoBanco":"#ff6200","Banco Invest":"#1e3a6e","BAE":"#6c3483","BCP":"#002fa7","Miami":"#0891b2","Cartao 7449":"#f59e0b","Caixa Livre":"#8b5cf6"};
 
@@ -1935,9 +1936,22 @@ export default function ExtratosView({ EMPRESAS, extrato, caixaUnico, setCaixaUn
         />
       )}
 
-      {/* Empresa grid */}
+      {/* Empresa grid — separado por grupo (LPX / HDG) */}
+      {agruparPorGrupo(empresasEnriquecidas).map(bloco => (
+      <div key={bloco.grupo} style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          <span style={{ background: bloco.info.cor, color: "#fff", fontSize: 11, fontWeight: 800, padding: "3px 12px", borderRadius: 6, fontFamily: "monospace", letterSpacing: "0.08em" }}>
+            {bloco.info.nome}
+          </span>
+          <span style={{ fontSize: 11, color: "#bbb", fontFamily: "monospace" }}>
+            {bloco.empresas.length} {bloco.empresas.length === 1 ? "empresa" : "empresas"}
+            {"  ·  "}
+            {fmtN(bloco.empresas.reduce((s, e) => s + e.contas.reduce((t, c) => t + c.saldo, 0), 0))}
+          </span>
+          <div style={{ flex: 1, height: 1, background: "#eee" }} />
+        </div>
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))", gap: 14 }}>
-        {empresasEnriquecidas.map(emp => {
+        {bloco.empresas.map(emp => {
           const total = emp.contas.reduce((s, c) => s + c.saldo, 0);
           const nMovs = emp.contas.reduce((s, c) => s + (c.movCount || 0), 0);
           const active = activeEmp && activeEmp.id === emp.id;
@@ -2096,6 +2110,8 @@ export default function ExtratosView({ EMPRESAS, extrato, caixaUnico, setCaixaUn
           );
         })}
       </div>
+      </div>
+      ))}
 
       {/* Contas */}
       {activeEmp && (
