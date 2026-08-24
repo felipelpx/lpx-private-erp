@@ -31,8 +31,11 @@ export default function PagamentosView({ faturas, pagamentosExtras, currentUser,
 
   // permissões
   const canCreate = currentUser?.can_create_mapas || currentUser?.role === "admin";
-  const isN1 = currentUser?.approval_level === 1;
-  const isN2 = currentUser?.approval_level === 2;
+  // Hierarquia: quem aprova ao nível 2 também aprova ao nível 1.
+  // (Antes era igualdade exata, e um aprovador de nível 2 ficava sem poder
+  //  aprovar mapas parados no nível 1.)
+  const isN1 = (currentUser?.approval_level || 0) >= 1;
+  const isN2 = (currentUser?.approval_level || 0) >= 2;
 
   const profileById = useMemo(() => {
     const map = {};
@@ -511,8 +514,8 @@ function DetalheMapa({ mapaId, mapas, currentUser, profileById, faturas = [], pa
   }
 
   const st = STATUS_INFO[mapa.status] || { label: mapa.status, color: "#888", bg: "#eee" };
-  const isN1 = currentUser?.approval_level === 1;
-  const isN2 = currentUser?.approval_level === 2;
+  const isN1 = (currentUser?.approval_level || 0) >= 1;
+  const isN2 = (currentUser?.approval_level || 0) >= 2;
   const podeAprovarN1 = isN1 && mapa.status === "pendente_nivel_1";
   const podeAprovarN2 = isN2 && mapa.status === "pendente_nivel_2";
   const podeRecusar = (podeAprovarN1 || podeAprovarN2);
@@ -524,15 +527,36 @@ function DetalheMapa({ mapaId, mapas, currentUser, profileById, faturas = [], pa
       return;
     }
     console.log(`[aprovar] N${nivel}`, { mapaId, currentUser: { id: currentUser.id, email: currentUser.email, level: currentUser.approval_level } });
+    const agora = new Date().toISOString();
     const updates = {};
+
     if (nivel === 1) {
-      updates.status = "pendente_nivel_2";
-      updates.aprovado_n1_por = currentUser.id;
-      updates.aprovado_n1_em = new Date().toISOString();
+      // Quem tem nível 2 pode fechar o mapa de uma vez. Perguntamos primeiro:
+      // saltar o segundo visto elimina a validação por duas pessoas, por isso
+      // a decisão é explícita e não silenciosa.
+      const podeFecharJa = (currentUser.approval_level || 0) >= 2;
+      const fecharJa = podeFecharJa && confirm(
+        "Aprovar este mapa por completo?\n\n" +
+        "OK — aprova os dois níveis de uma vez e o mapa fica fechado.\n" +
+        "Cancelar — dá só a 1.ª aprovação e o mapa fica à espera do 2.º visto.\n\n" +
+        "Nota: aprovar os dois níveis dispensa a validação por uma segunda pessoa."
+      );
+
+      if (fecharJa) {
+        updates.status = "aprovado";
+        updates.aprovado_n1_por = currentUser.id;
+        updates.aprovado_n1_em = agora;
+        updates.aprovado_n2_por = currentUser.id;
+        updates.aprovado_n2_em = agora;
+      } else {
+        updates.status = "pendente_nivel_2";
+        updates.aprovado_n1_por = currentUser.id;
+        updates.aprovado_n1_em = agora;
+      }
     } else {
       updates.status = "aprovado";
       updates.aprovado_n2_por = currentUser.id;
-      updates.aprovado_n2_em = new Date().toISOString();
+      updates.aprovado_n2_em = agora;
     }
     console.log(`[aprovar] updates:`, updates);
     const res = await onUpdate(mapaId, updates);
@@ -572,15 +596,27 @@ function DetalheMapa({ mapaId, mapas, currentUser, profileById, faturas = [], pa
     if (eDel) { alert("Erro ao remover itens:\n\n" + eDel.message); return; }
 
     // 2. Atualiza total_valor + aprova o nível
+    const agora = new Date().toISOString();
     const updates = { total_valor: novoTotal };
     if (nivel === 1) {
-      updates.status = "pendente_nivel_2";
+      // Mesma escolha da aprovação total: quem tem nível 2 pode fechar já
+      const podeFecharJa = (currentUser.approval_level || 0) >= 2;
+      const fecharJa = podeFecharJa && confirm(
+        "Aprovar por completo os itens selecionados?\n\n" +
+        "OK — aprova os dois níveis e o mapa fica fechado.\n" +
+        "Cancelar — dá só a 1.ª aprovação."
+      );
+      updates.status = fecharJa ? "aprovado" : "pendente_nivel_2";
       updates.aprovado_n1_por = currentUser.id;
-      updates.aprovado_n1_em = new Date().toISOString();
+      updates.aprovado_n1_em = agora;
+      if (fecharJa) {
+        updates.aprovado_n2_por = currentUser.id;
+        updates.aprovado_n2_em = agora;
+      }
     } else {
       updates.status = "aprovado";
       updates.aprovado_n2_por = currentUser.id;
-      updates.aprovado_n2_em = new Date().toISOString();
+      updates.aprovado_n2_em = agora;
     }
     const res = await onUpdate(mapaId, updates);
     if (res?.error) { alert("Erro ao aprovar:\n\n" + (res.error.message || JSON.stringify(res.error))); return; }
