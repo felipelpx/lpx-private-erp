@@ -13,6 +13,7 @@ import { CATEGORIAS_FATURA } from "./categorias.js";
 import { EMPRESAS as EMPRESAS_ALL, BANCO_COLORS as BANCO_COLORS_CFG, GRUPOS, GRUPOS_INFO } from "./empresas.js";
 const EMPRESAS = EMPRESAS_ALL;
 import FotosView from "./FotosView.jsx";
+import IRView from "./IRView.jsx";
 import { BRAND } from "./brand.js";
 import { fmtEUR, fmtCompacto, fmtPct, fmtInt, fmtData } from "./formato.js";
 
@@ -1209,6 +1210,7 @@ function ImportarView({faturas, setFaturas, caixaUnico, setCaixaUnico, setTab, a
 // O perfil "investidor" vê apenas Extratos, Comercial e Fotos — e, dentro
 // desses, só as empresas que lhe forem atribuídas (profiles.empresas).
 const TABS_CONFIG = [
+  {id:"ir",        label:"Investor Relations", roles:["admin","gestor","viewer","investidor"]},
   {id:"extrato",   label:"Extratos",          roles:["admin","gestor","viewer","investidor"]},
   {id:"comercial", label:"Comercial",          roles:["admin","gestor","viewer","investidor"]},
   {id:"fotos",     label:"Fotos",              roles:["admin","gestor","viewer","investidor"]},
@@ -1421,6 +1423,7 @@ export default function App() {
           {tab==="extrato"   && <ExtratosView EMPRESAS={empresasVisiveis} extrato={[]} caixaUnico={caixaUnico} setCaixaUnico={handleSetCaixaUnico} currentUser={currentUser} autoOpenConta={lastImportedConta} movCounts={movCounts} faturas={faturas} pagamentosExtras={pagamentosExtras} onUpdateFatura={updateFatura} onUpdatePagamento={updatePagamento}/>}
           {tab==="comercial" && <ComercialView currentUser={currentUser} onAddFatura={addFatura} empresasVisiveis={empresasVisiveis}/>}
           {tab==="clientes"  && <ComercialView currentUser={currentUser} onAddFatura={addFatura} empresasVisiveis={empresasVisiveis}/>}
+          {tab==="ir"        && <IRView currentUser={currentUser} empresasVisiveis={empresasVisiveis}/>}
           {tab==="fotos"     && <FotosView currentUser={currentUser} empresasVisiveis={empresasVisiveis}/>}
           {tab==="orcado"    && <RealOrcado/>}
           {tab==="fluxo"     && <FluxoFuturo faturas={faturas} faturasLoading={faturasLoading} pagamentosExtras={pagamentosExtras} pagamentosLoading={pagamentosLoading} onAddPagamento={addPagamento} onUpdatePagamento={updatePagamento} onDeletePagamento={deletePagamento} onUpdateFatura={updateFatura} onDeleteFatura={deleteFatura} currentUser={currentUser} EMPRESAS={empresasVisiveis} caixaUnico={caixaUnico}/>}

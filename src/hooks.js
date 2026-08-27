@@ -480,3 +480,43 @@ export function useEntidades() {
   }
   return { entidades: data, loading, addEntidade, updateEntidade, deleteEntidade }
 }
+
+// ─── MOVIMENTOS de VÁRIAS contas num período ─────────────────────────────────
+// Usado pelo painel de Investor Relations, que precisa de agregar por categoria
+// e por mês em vez de listar conta a conta.
+export function useMovimentosPeriodo(contaIds = [], de = null, ate = null) {
+  const [movimentos, setMovimentos] = useState([])
+  const [loading, setLoading] = useState(false)
+  const idsKey = JSON.stringify((contaIds || []).slice().sort())
+
+  const load = useCallback(async () => {
+    const ids = JSON.parse(idsKey)
+    if (!ids.length) { setMovimentos([]); return }
+    setLoading(true)
+    try {
+      // Paginação: o Supabase devolve no máximo 1000 linhas por pedido
+      const pagina = 1000
+      let inicio = 0
+      let todos = []
+      for (;;) {
+        let q = supabase.from('movimentos')
+          .select('conta_id, empresa_id, banco, data, movimento, valor, saldo, categoria, seq')
+          .in('conta_id', ids)
+          .order('data', { ascending: true })
+          .order('seq', { ascending: true })
+          .range(inicio, inicio + pagina - 1)
+        if (de) q = q.gte('data', de)
+        if (ate) q = q.lte('data', ate)
+        const { data, error } = await q
+        if (error) { console.warn('useMovimentosPeriodo:', error.message); break }
+        todos = todos.concat(data || [])
+        if (!data || data.length < pagina) break
+        inicio += pagina
+      }
+      setMovimentos(todos.map(m => ({ ...m, valor: parseFloat(m.valor) || 0, saldo: parseFloat(m.saldo) || 0 })))
+    } finally { setLoading(false) }
+  }, [idsKey, de, ate])
+
+  useEffect(() => { load() }, [load])
+  return { movimentos, loading, reload: load }
+}
