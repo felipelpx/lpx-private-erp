@@ -1,7 +1,7 @@
 import React, { useState, useMemo, useEffect } from "react";
 import { useVendas, useSaldosAtuais } from "./hooks.js";
 import { CATEGORIAS } from "./categorias.js";
-import { EMPRESAS as EMPRESAS_CFG } from "./empresas.js";
+import { EMPRESAS as EMPRESAS_CFG, EMPRESAS as EMPRESAS_TODAS } from "./empresas.js";
 import { fmtEUR, fmtEUR0, fmtInt } from "./formato.js";
 
 const fmt = (v) => fmtEUR0(v);
@@ -29,9 +29,24 @@ const PROJETO_EMPRESA_MAP = Object.fromEntries(
 const EMPRESA_DEFAULT = EMPRESAS_CFG[0]?.id || "";
 
 
-export default function FluxoFuturo({ faturas, faturasLoading, pagamentosExtras, pagamentosLoading, onAddPagamento, onUpdatePagamento, onDeletePagamento, onUpdateFatura, onDeleteFatura, currentUser, EMPRESAS, caixaUnico }) {
+export default function FluxoFuturo({ faturas: faturasTodas, faturasLoading, pagamentosExtras: pagamentosTodos, pagamentosLoading, onAddPagamento, onUpdatePagamento, onDeletePagamento, onUpdateFatura, onDeleteFatura, currentUser, EMPRESAS, caixaUnico }) {
+  // Só as empresas visíveis (filtro de grupo / investidor). Itens cuja empresa
+  // não corresponde a nenhuma empresa conhecida ficam visíveis para admin e
+  // gestor — caso contrário desapareciam do sistema sem aviso.
+  const idsVisiveis = (EMPRESAS || []).map(e => e.id);
+  const podeVerOrfaos = currentUser?.role === "admin" || currentUser?.role === "gestor";
+  const pertence = (x) => {
+    if (!x?.empresa) return podeVerOrfaos;
+    if (idsVisiveis.includes(x.empresa)) return true;
+    return podeVerOrfaos && !EMPRESAS_TODAS.some(e => e.id === x.empresa);
+  };
+  const faturas = (faturasTodas || []).filter(pertence);
+  const pagamentosExtras = (pagamentosTodos || []).filter(pertence);
+
   const { vendas, loading: vendasLoading, updateVenda } = useVendas();
-  const isAdmin = currentUser?.role === "admin";
+  // Editar, marcar como pago e eliminar: admin e gestor.
+  // (Antes era só admin, o que deixava os gestores sem poder corrigir nada.)
+  const isAdmin = currentUser?.role === "admin" || currentUser?.role === "gestor";
   const stillLoading = !!(pagamentosLoading || faturasLoading || vendasLoading);
 
   // Constrói a lista das empresas dinamicamente, com saldo somado das contas em caixaUnico.
@@ -103,6 +118,40 @@ export default function FluxoFuturo({ faturas, faturasLoading, pagamentosExtras,
     });
   };
   const closeEdit = () => { setEditPagamento(null); setEditForm(null); };
+
+  // ─── Editar uma FATURA diretamente a partir do fluxo ───────────────────────
+  // As linhas com origem em Contas a Pagar (incluindo as vencidas) não tinham
+  // forma de ser corrigidas sem sair deste ecrã.
+  const [editFatura, setEditFatura] = useState(null);
+  const [editFaturaForm, setEditFaturaForm] = useState(null);
+
+  const openEditFatura = (fat) => {
+    setEditFatura(fat);
+    setEditFaturaForm({
+      fornecedor: fat.fornecedor || "",
+      categoria: fat.categoria || "",
+      valor: fat.valor ?? "",
+      vencimento: fat.vencimento || "",
+      status: fat.status || "Pendente",
+      obs: fat.obs || "",
+    });
+  };
+  const closeEditFatura = () => { setEditFatura(null); setEditFaturaForm(null); };
+  const handleSaveEditFatura = async () => {
+    if (!editFatura || !editFaturaForm) return;
+    if (!editFaturaForm.vencimento) { alert("Indica a data de vencimento."); return; }
+    const res = await onUpdateFatura?.(editFatura.id, {
+      ...editFatura,
+      fornecedor: editFaturaForm.fornecedor,
+      categoria: editFaturaForm.categoria,
+      valor: parseFloat(String(editFaturaForm.valor).replace(",", ".")) || 0,
+      vencimento: editFaturaForm.vencimento,
+      status: editFaturaForm.status,
+      obs: editFaturaForm.obs,
+    });
+    if (res?.error) { alert("Erro a guardar:\n\n" + (res.error.message || res.error)); return; }
+    closeEditFatura();
+  };
   const handleSaveEdit = async () => {
     if (!editPagamento || !editForm) return;
     if (!editForm.descricao) { alert("Indica uma descrição."); return; }
@@ -797,6 +846,9 @@ export default function FluxoFuturo({ faturas, faturasLoading, pagamentosExtras,
                             <button onClick={(e) => { e.stopPropagation(); handleMarkFaturaPaid(item.fatura); }}
                               title="Marcar fatura como Paga"
                               style={{ background: "#dcfce7", border: "none", color: "#16a34a", padding: "3px 8px", borderRadius: 5, fontSize: 10, cursor: "pointer", marginLeft: 4, fontWeight: 700 }}>✓</button>
+                            <button onClick={(e) => { e.stopPropagation(); openEditFatura(item.fatura); }}
+                              title="Editar fatura"
+                              style={{ background: "#f0f4ff", border: "none", color: "#4a6fa5", padding: "3px 7px", borderRadius: 5, fontSize: 10, cursor: "pointer" }}>✎</button>
                             <button onClick={(e) => { e.stopPropagation(); handleDeleteFatura(item.fatura); }}
                               title="Eliminar fatura"
                               style={{ background: "#fff0f0", border: "none", color: "#dc2626", padding: "3px 7px", borderRadius: 5, fontSize: 10, cursor: "pointer" }}>✕</button>
@@ -891,6 +943,60 @@ export default function FluxoFuturo({ faturas, faturasLoading, pagamentosExtras,
       </div>
 
       {/* Modal editar pagamento manual */}
+      {/* Modal — editar fatura a partir do fluxo */}
+      {editFatura && editFaturaForm && (
+        <div onClick={(e) => { if (e.target === e.currentTarget) closeEditFatura(); }}
+          style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", zIndex: 300, display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
+          <div style={{ background: "#fff", borderRadius: 14, padding: 22, width: "100%", maxWidth: 460, display: "flex", flexDirection: "column", gap: 12 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              <div>
+                <div style={{ fontSize: 15, fontWeight: 700, color: "#1a1a2e", fontFamily: "Georgia,serif" }}>Editar fatura</div>
+                <div style={{ fontSize: 10, color: "#bbb", fontFamily: "monospace", marginTop: 2 }}>{editFatura.fatura || editFatura.id}</div>
+              </div>
+              <button onClick={closeEditFatura} style={{ background: "none", border: "none", fontSize: 20, cursor: "pointer", color: "#aaa" }}>✕</button>
+            </div>
+
+            {[["Fornecedor", "fornecedor", "text"],
+              ["Categoria", "categoria", "text"],
+              ["Valor (€)", "valor", "number"],
+              ["Vencimento", "vencimento", "date"],
+              ["Observações", "obs", "text"]].map(([rot, campo, tipo]) => (
+              <div key={campo}>
+                <div style={{ fontSize: 9, color: "#aaa", textTransform: "uppercase", fontFamily: "monospace", marginBottom: 4 }}>{rot}</div>
+                <input type={tipo} value={editFaturaForm[campo]}
+                  onChange={e => setEditFaturaForm(f => ({ ...f, [campo]: e.target.value }))}
+                  style={{ width: "100%", background: "#f8f8f8", border: "1px solid #eee", borderRadius: 8, padding: "9px 11px", fontSize: 13, outline: "none" }} />
+              </div>
+            ))}
+
+            <div>
+              <div style={{ fontSize: 9, color: "#aaa", textTransform: "uppercase", fontFamily: "monospace", marginBottom: 4 }}>Estado</div>
+              <select value={editFaturaForm.status}
+                onChange={e => setEditFaturaForm(f => ({ ...f, status: e.target.value }))}
+                style={{ width: "100%", background: "#f8f8f8", border: "1px solid #eee", borderRadius: 8, padding: "9px 11px", fontSize: 13, outline: "none" }}>
+                {["Pendente", "Aprovada", "Paga", "Vencida", "Em disputa", "Rejeitada"].map(o => <option key={o}>{o}</option>)}
+              </select>
+            </div>
+
+            <div style={{ display: "flex", gap: 8, marginTop: 6 }}>
+              <button onClick={() => { handleDeleteFatura(editFatura); closeEditFatura(); }}
+                style={{ background: "#fff0f0", border: "1px solid #fecaca", color: "#dc2626", padding: "10px 16px", borderRadius: 9, fontSize: 12, cursor: "pointer" }}>
+                Eliminar
+              </button>
+              <div style={{ flex: 1 }} />
+              <button onClick={closeEditFatura}
+                style={{ background: "#f4f5f7", border: "none", color: "#666", padding: "10px 18px", borderRadius: 9, fontSize: 13, cursor: "pointer" }}>
+                Cancelar
+              </button>
+              <button onClick={handleSaveEditFatura}
+                style={{ background: "#1a1a2e", border: "none", color: "#fff", padding: "10px 22px", borderRadius: 9, fontSize: 13, fontWeight: 600, cursor: "pointer" }}>
+                Guardar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {editPagamento && editForm && (
         <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.4)", zIndex: 200, display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}
           onClick={e => { if (e.target === e.currentTarget) closeEdit(); }}>

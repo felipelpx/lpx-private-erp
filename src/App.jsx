@@ -456,9 +456,20 @@ function SaldosView({extrato, caixaUnico}) {
 function ContasPagar({canEdit, faturas: faturasTodas, setFaturas, addFatura, updateFatura, deleteFatura, EMPRESAS: EMPRESAS_PROP}) {
   // Um investidor só vê as faturas das empresas que lhe foram atribuídas.
   const EMPRESAS = EMPRESAS_PROP || EMPRESAS_ALL;
+  // Uma fatura cuja empresa não corresponda a nenhuma empresa conhecida (ou que
+  // ficou sem empresa) continua visível para admin e gestor — de outra forma
+  // desaparecia do sistema sem qualquer aviso.
+  const podeVerOrfas = canEdit;
   const faturas = EMPRESAS_PROP
-    ? faturasTodas.filter(f => EMPRESAS_PROP.some(e => e.id === f.empresa))
+    ? faturasTodas.filter(f => {
+        if (EMPRESAS_PROP.some(e => e.id === f.empresa)) return true;
+        const conhecida = EMPRESAS_ALL.some(e => e.id === f.empresa);
+        return podeVerOrfas && !conhecida;   // órfã: empresa vazia ou desconhecida
+      })
     : faturasTodas;
+  const nOrfas = faturas.filter(f => !EMPRESAS_ALL.some(e => e.id === f.empresa)).length;
+  // Quantas faturas o filtro de grupo está a esconder (explica o "sumiço")
+  const nEscondidas = (faturasTodas?.length || 0) - faturas.length;
 
   const [showForm,setShowForm]=useState(false);
   const [editId,setEditId]=useState(null);
@@ -696,6 +707,26 @@ function ContasPagar({canEdit, faturas: faturasTodas, setFaturas, addFatura, upd
           </div>
         </div>
       )}
+      {nEscondidas > 0 && (
+        <div style={{background:"#fffbeb",border:"1px solid #fde68a",borderRadius:10,padding:"10px 16px",display:"flex",alignItems:"center",gap:10,fontSize:12,color:"#92400e"}}>
+          <span>ℹ</span>
+          <span>
+            <strong>{nEscondidas}</strong> {nEscondidas===1?"fatura está":"faturas estão"} fora deste filtro de grupo.
+            Muda o grupo para <strong>Todos</strong> na barra de cima para {nEscondidas===1?"a ver":"as ver"}.
+          </span>
+        </div>
+      )}
+
+      {nOrfas > 0 && (
+        <div style={{background:"#fff7ed",border:"1px solid #fdba74",borderRadius:10,padding:"10px 16px",display:"flex",alignItems:"center",gap:10,fontSize:12,color:"#c2410c"}}>
+          <span>⚠</span>
+          <span>
+            <strong>{nOrfas}</strong> {nOrfas===1?"fatura sem empresa atribuída":"faturas sem empresa atribuída"}.
+            Edita {nOrfas===1?"a":"as"} com o ✎ e escolhe a empresa, senão não {nOrfas===1?"entra":"entram"} nos totais por projeto.
+          </span>
+        </div>
+      )}
+
       {haFiltro && (
         <div style={{background:"#fff",border:"1px solid #e8eefc",borderLeft:"3px solid #4a6fa5",borderRadius:10,padding:"12px 18px",display:"flex",gap:26,flexWrap:"wrap",alignItems:"center"}}>
           <div style={{fontSize:10,color:"#4a6fa5",fontFamily:"monospace",textTransform:"uppercase",letterSpacing:"0.07em",fontWeight:700}}>Subtotal do filtro</div>
@@ -736,7 +767,7 @@ function ContasPagar({canEdit, faturas: faturasTodas, setFaturas, addFatura, upd
                     <td style={{padding:"11px 14px"}}>
                       {!rejeitada&&f.status!=="Paga"&&<input type="checkbox" checked={inMapa} onChange={()=>toggleMapa(f.id)} style={{cursor:"pointer",width:15,height:15}}/>}
                     </td>
-                    <td style={{padding:"11px 14px"}}><div style={{fontWeight:600,color:"#1a1a2e",fontSize:12}}>{emp?.nome||f.empresa}</div><div style={{fontSize:10,color:"#bbb",fontFamily:"monospace"}}>NIPC:{emp?.nipc}</div></td>
+                    <td style={{padding:"11px 14px"}}><div style={{fontWeight:600,color:emp?"#1a1a2e":"#c2410c",fontSize:12}}>{emp?.nome||(f.empresa||"— sem empresa —")}</div><div style={{fontSize:10,color:"#bbb",fontFamily:"monospace"}}>{emp?`NIPC:${emp.nipc||""}`:"por atribuir"}</div></td>
                     <td style={{padding:"11px 14px",color:"#555"}}>{f.projeto}</td>
                     <td style={{padding:"11px 14px",fontFamily:"monospace",fontSize:11,color:"#888"}}>{f.fatura}</td>
                     <td style={{padding:"11px 14px",color:"#444",maxWidth:140,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{f.fornecedor}</td>
@@ -1195,6 +1226,10 @@ function ImportarView({faturas, setFaturas, caixaUnico, setCaixaUnico, setTab, a
               const msg = `${error.message || 'insert falhou'}${error.details ? ' · ' + error.details : ''}${error.hint ? ' · ' + error.hint : ''}${error.code ? ' ['+error.code+']' : ''}`;
               return { ok: false, inserted: 0, error: msg };
             }
+            // Se a fatura pertence a um grupo diferente do que está filtrado,
+            // muda para "Todos" — senão ela é guardada mas fica invisível.
+            const empGravada = EMPRESAS_ALL.find(e => e.id === rows[0]?.empresa);
+            if (empGravada && grupo !== "Todos" && empGravada.grupo !== grupo) setGrupo("Todos");
             // Vai para Contas a Pagar após sucesso
             setTimeout(()=>setTab("pagar"), 1500);
             return { ok: true, inserted: (data?.length ?? rows.length), error: "" };
