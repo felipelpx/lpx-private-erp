@@ -1669,6 +1669,9 @@ export default function ExtratosView({ EMPRESAS, extrato, caixaUnico, setCaixaUn
   const allContaIds = useMemo(() => (EMPRESAS || []).flatMap(e => e.contas.map(c => c.id)), [EMPRESAS]);
   const { saldos: saldosAtuais, reload: reloadSaldos } = useSaldosAtuais(allContaIds);
   const [editingMov, setEditingMov] = useState(null);
+  // Editar/eliminar movimentos: admin e gestor (antes era só admin, o que
+  // deixava os gestores sem forma de corrigir lançamentos).
+  const podeEditarMov = currentUser?.role === "admin" || currentUser?.role === "gestor";
   const [descFilter, setDescFilter] = useState("");
   const [catFilter, setCatFilter] = useState("");
   const [perPage, setPerPage] = useState(15);
@@ -2160,7 +2163,7 @@ export default function ExtratosView({ EMPRESAS, extrato, caixaUnico, setCaixaUn
                 style={{ background: exportando ? "#e8e8e8" : "#16a34a", color: exportando ? "#999" : "#fff", border: "none", padding: "5px 12px", borderRadius: 7, fontSize: 11, cursor: exportando ? "default" : "pointer", fontWeight: 600 }}>
                 {exportando ? "A gerar..." : "⬇ Exportar Excel"}
               </button>
-              {currentUser?.role === "admin" && (
+              {podeEditarMov && (
                 <button onClick={() => setEditingMov({ data: new Date().toISOString().slice(0,10), movimento: "", valor: 0, saldo: 0, categoria: "", detalhes: "", _isNew: true, _contaId: activeConta.id, _empId: activeEmp.id })}
                   style={{ background: "#1a1a2e", color: "#6B7C93", border: "none", padding: "5px 12px", borderRadius: 7, fontSize: 11, cursor: "pointer", fontWeight: 600 }}>
                   + Nova Linha
@@ -2213,7 +2216,7 @@ export default function ExtratosView({ EMPRESAS, extrato, caixaUnico, setCaixaUn
                 <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
                   <thead>
                     <tr style={{ background: "#fafafa" }}>
-                      {["Data", "Descrição", "Valor", "Saldo", "Categoria", "Detalhes", ...(currentUser?.role==="admin"?[""]:[])].map(h => (
+                      {["Data", "Descrição", "Valor", "Saldo", "Categoria", "Detalhes", ...(podeEditarMov?["Ações"]:[])].map(h => (
                         <th key={h} style={{ padding: "9px 16px", textAlign: "left", color: "#aaa", fontSize: 10, letterSpacing: "0.07em", textTransform: "uppercase", fontFamily: "monospace", borderBottom: "1px solid #f0f0f0", whiteSpace: "nowrap" }}>{h}</th>
                       ))}
                     </tr>
@@ -2247,7 +2250,7 @@ export default function ExtratosView({ EMPRESAS, extrato, caixaUnico, setCaixaUn
                             onSave={sbUpdate}
                           />
                         </td>
-                        {currentUser?.role === "admin" && (
+                        {podeEditarMov && (
                           <td style={{ padding: "10px 16px" }}>
                             <div style={{ display: "flex", gap: 4 }}>
                               {m.valor < 0 && (

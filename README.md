@@ -28,8 +28,25 @@ VITE_SUPABASE_ANON_KEY=sb_publishable_xxxxxxxx
 ```
 
 No Netlify, as mesmas duas variáveis vão em *Site settings → Environment
-variables*. A chave `ANTHROPIC_API_KEY` é opcional e só é usada pela leitura
-automática de faturas por IA (função `netlify/functions/ai-proxy.js`).
+variables*.
+
+### Leitura automática de faturas (opcional)
+
+O botão "Extrair dados com IA" no ecrã Importar precisa de uma chave da API da
+Anthropic:
+
+1. Criar conta em <https://console.anthropic.com>
+2. *Billing* → adicionar créditos (a leitura de faturas custa cêntimos por
+   documento; 5 € dão para centenas)
+3. *API keys* → **Create key** → copiar (só é mostrada uma vez, começa por `sk-ant-`)
+4. Netlify → *Site configuration* → *Environment variables* → **Add**:
+   `ANTHROPIC_API_KEY` = a chave
+5. *Deploys* → *Trigger deploy* → **Clear cache and deploy site**
+
+A chave fica só no servidor, dentro da função `netlify/functions/ai-proxy.js`,
+e nunca é enviada para o browser. Sem ela, o resto do ERP funciona
+normalmente — só a extração automática é que fica indisponível, e os dados da
+fatura podem ser preenchidos à mão.
 
 ## 3. Correr localmente
 

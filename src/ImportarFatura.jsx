@@ -106,7 +106,10 @@ Responde APENAS o objeto JSON. Sem \`\`\`json, sem prefácio, sem sufixo.`;
 
   if (!response.ok) {
     const errText = await response.text().catch(() => "");
-    throw new Error(`Servidor AI retornou ${response.status}: ${errText.slice(0, 200)}`);
+    // O proxy já devolve mensagens em português para os casos conhecidos
+    let msg = "";
+    try { msg = JSON.parse(errText)?.error?.message || ""; } catch {}
+    throw new Error(msg || `Servidor AI retornou ${response.status}: ${errText.slice(0, 200)}`);
   }
 
   const data = await response.json();
