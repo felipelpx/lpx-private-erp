@@ -290,7 +290,7 @@ export function useFracoes() {
         clearTimeout(timeout)
       })
       .catch(() => { setLoading(false); clearTimeout(timeout) })
-    const ch = supabase.channel('realtime-fracoes')
+    const ch = supabase.channel(`realtime-fracoes-${Math.random().toString(36).slice(2,10)}`)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'fracoes' }, () => {
         supabase.from('fracoes').select('*').order('projeto').order('fracao')
           .then(({ data }) => { if (data) setFracoes(data) })
@@ -298,9 +298,34 @@ export function useFracoes() {
     return () => { supabase.removeChannel(ch); clearTimeout(timeout) }
   }, [])
 
-  const upsertFracao = (f) =>
-    supabase.from('fracoes').upsert({ ...f, updated_at: new Date().toISOString() })
-  const deleteFracao = (id) => supabase.from('fracoes').delete().eq('id', id)
+  // Atualização otimista + erro devolvido. Antes a escrita era disparada sem
+  // await e o estado local só mudava se o realtime entregasse o evento — se
+  // falhasse, o ecrã revertia sozinho e parecia que "não guardava".
+  const upsertFracao = async (f) => {
+    const linha = { ...f, updated_at: new Date().toISOString() }
+    delete linha._frac
+    delete linha._semVenda
+    const anterior = fracoes
+    setFracoes(list => {
+      const existe = list.some(x => x.id === linha.id)
+      return existe ? list.map(x => (x.id === linha.id ? { ...x, ...linha } : x)) : [...list, linha]
+    })
+    const { data, error } = await supabase.from('fracoes').upsert(linha).select()
+    if (error) {
+      console.error('upsertFracao:', error)
+      setFracoes(anterior)          // repõe o que estava
+    }
+    return { data, error }
+  }
+
+  const deleteFracao = async (id) => {
+    const anterior = fracoes
+    setFracoes(list => list.filter(x => x.id !== id))
+    const { error } = await supabase.from('fracoes').delete().eq('id', id)
+    if (error) { console.error('deleteFracao:', error); setFracoes(anterior) }
+    return { error }
+  }
+
   return { fracoes, loading, upsertFracao, deleteFracao }
 }
 
@@ -318,7 +343,7 @@ export function useVendas() {
         clearTimeout(timeout)
       })
       .catch(() => { setLoading(false); clearTimeout(timeout) })
-    const ch = supabase.channel('realtime-vendas')
+    const ch = supabase.channel(`realtime-vendas-${Math.random().toString(36).slice(2,10)}`)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'vendas' }, () => {
         supabase.from('vendas').select('*').order('data', { ascending: false })
           .then(({ data }) => { if (data) setVendas(data) })

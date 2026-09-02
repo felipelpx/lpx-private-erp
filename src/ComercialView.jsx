@@ -195,6 +195,110 @@ function EditVendaModal({ venda, fracao, onSave, onClose }) {
 }
 
 // ─── TABELA DE VENDAS ──────────────────────────────────────────────────────────
+// ─── EXPORTAÇÃO PARA EXCEL ───────────────────────────────────────────────────
+let _xlsxLoader = null;
+function loadXLSX() {
+  if (window.XLSX) return Promise.resolve(window.XLSX);
+  if (_xlsxLoader) return _xlsxLoader;
+  _xlsxLoader = new Promise((resolve, reject) => {
+    const el = document.createElement("script");
+    el.src = "https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js";
+    el.onload = () => resolve(window.XLSX);
+    el.onerror = () => reject(new Error("Falha a carregar a biblioteca de Excel"));
+    document.head.appendChild(el);
+  });
+  return _xlsxLoader;
+}
+
+const FMT_EUR_X = '#,##0.00\\ "€"';
+const limparNome = (t) => String(t || "")
+  .normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+  .replace(/[^a-zA-Z0-9]+/g, "_").replace(/^_+|_+$/g, "");
+
+async function exportarComercialExcel({ linhas, vendaDe, projetoFiltro, statusFiltro }) {
+  const XLSX = await loadXLSX();
+
+  // ─ Folha 1: Tabela de vendas (inventário) ─
+  const cab = [
+    ["TABELA DE VENDAS"],
+    ["Projeto", projetoFiltro],
+    ["Estado", statusFiltro],
+    ["Frações", linhas.length],
+    ["Exportado em", new Date().toLocaleString("pt-PT")],
+    [],
+    ["Projeto", "Fração", "Piso", "Tipologia", "Área (m²)", "Preço", "Preço/m²", "Status", "Cliente", "Valor venda", "Recebido", "Falta receber"],
+  ];
+  const LINHA_CAB = cab.length;
+
+  const dados = linhas.map(f => {
+    const v = vendaDe.get(f.id);
+    const area = Number(f.area) || 0;
+    const preco = Number(f.preco_tabela) || 0;
+    return [
+      f.projeto || "", f.fracao || "", f.piso || "", f.tipologia || "",
+      area, preco, area > 0 ? preco / area : null,
+      f.status || "", v?.cliente || "",
+      v ? Number(v.valor_venda) || 0 : null,
+      v ? Number(v.recebemos) || 0 : null,
+      v ? Number(v.falta_receber) || 0 : null,
+    ];
+  });
+
+  const somaArea = dados.reduce((s, r) => s + (r[4] || 0), 0);
+  const somaPreco = dados.reduce((s, r) => s + (r[5] || 0), 0);
+  const totais = [[], ["TOTAIS", linhas.length, "", "", somaArea, somaPreco,
+                       somaArea > 0 ? somaPreco / somaArea : null]];
+
+  const ws = XLSX.utils.aoa_to_sheet([...cab, ...dados, ...totais]);
+  dados.forEach((_, i) => {
+    [4, 5, 6, 9, 10, 11].forEach(c => {
+      const cel = ws[XLSX.utils.encode_cell({ r: LINHA_CAB + i, c })];
+      if (cel && cel.t === "n") cel.z = c === 4 ? "#,##0.00" : FMT_EUR_X;
+    });
+  });
+  [4, 5, 6].forEach(c => {
+    const cel = ws[XLSX.utils.encode_cell({ r: LINHA_CAB + dados.length + 1, c })];
+    if (cel && cel.t === "n") cel.z = c === 4 ? "#,##0.00" : FMT_EUR_X;
+  });
+  ws["!cols"] = [{ wch: 34 }, { wch: 9 }, { wch: 7 }, { wch: 12 }, { wch: 11 }, { wch: 15 },
+                 { wch: 13 }, { wch: 13 }, { wch: 26 }, { wch: 15 }, { wch: 14 }, { wch: 14 }];
+  ws["!autofilter"] = { ref: XLSX.utils.encode_range(
+    { r: LINHA_CAB - 1, c: 0 },
+    { r: LINHA_CAB + Math.max(dados.length - 1, 0), c: 11 }) };
+
+  // ─ Folha 2: Resumo por estado ─
+  const porEstado = {};
+  linhas.forEach(f => {
+    const k = f.status || "Disponível";
+    if (!porEstado[k]) porEstado[k] = { n: 0, area: 0, preco: 0 };
+    porEstado[k].n++;
+    porEstado[k].area += Number(f.area) || 0;
+    porEstado[k].preco += Number(f.preco_tabela) || 0;
+  });
+  const resumo = [
+    ["RESUMO POR ESTADO"], ["Projeto", projetoFiltro], [],
+    ["Estado", "Frações", "Área (m²)", "Valor", "% do VGV"],
+    ...Object.entries(porEstado).map(([k, v]) => [k, v.n, v.area, v.preco, somaPreco ? v.preco / somaPreco : 0]),
+    [], ["TOTAL", linhas.length, somaArea, somaPreco, somaPreco ? 1 : 0],
+  ];
+  const ws2 = XLSX.utils.aoa_to_sheet(resumo);
+  for (let r = 4; r < resumo.length; r++) {
+    const cp = ws2[XLSX.utils.encode_cell({ r, c: 3 })];
+    if (cp && cp.t === "n") cp.z = FMT_EUR_X;
+    const cpc = ws2[XLSX.utils.encode_cell({ r, c: 4 })];
+    if (cpc && cpc.t === "n") cpc.z = "0.0%";
+  }
+  ws2["!cols"] = [{ wch: 16 }, { wch: 10 }, { wch: 12 }, { wch: 16 }, { wch: 11 }];
+
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, "Tabela de Vendas");
+  XLSX.utils.book_append_sheet(wb, ws2, "Resumo por estado");
+
+  const nome = `Comercial_${limparNome(projetoFiltro)}_${new Date().toISOString().slice(0, 10).replace(/-/g, "")}.xlsx`;
+  XLSX.writeFile(wb, nome, { compression: true });
+  return nome;
+}
+
 // Célula numérica editável: mostra o número formatado em repouso e o valor
 // em bruto enquanto está a ser editada (senão os separadores atrapalham a escrita).
 function CelulaNumero({ valor, onGuardar, editavel, formatar, alinhar = "right", estilo = {} }) {
@@ -270,11 +374,18 @@ function TabelaVendas({ fracoes, vendas, canEdit, onAddFatura, onUpdateFracao, o
   }, [rows]);
 
   // Guarda uma célula na base de dados
-  const guardar = (frac, campo, valor) => {
+  const guardar = async (frac, campo, valor) => {
     const numerico = campo === "area" || campo === "preco_tabela";
     const v = numerico ? parseNumero(valor) : valor;
     if ((frac[campo] ?? "") === v) return;
-    onUpsertFracao?.({ ...frac, [campo]: v });
+    const res = await onUpsertFracao?.({ ...frac, [campo]: v });
+    if (res?.error) alert("Não foi possível guardar:\n\n" + (res.error.message || res.error));
+  };
+
+  // Alterar o estado da fração (dropdown na tabela)
+  const alterarStatus = async (frac, novo) => {
+    const res = await onUpsertFracao?.({ ...frac, status: novo });
+    if (res?.error) alert("Não foi possível alterar o estado:\n\n" + (res.error.message || res.error));
   };
 
   const valorCelula = (frac, campo) => {
@@ -288,6 +399,20 @@ function TabelaVendas({ fracoes, vendas, canEdit, onAddFatura, onUpdateFracao, o
     if (rascunhos[chave] === undefined) return;
     guardar(frac, campo, rascunhos[chave]);
     setRascunhos(r => { const c = { ...r }; delete c[chave]; return c; });
+  };
+
+  const [exportando, setExportando] = useState(false);
+  const handleExportar = async () => {
+    if (!rows.length) { alert("Não há frações para exportar."); return; }
+    setExportando(true);
+    try {
+      await exportarComercialExcel({
+        linhas: rows, vendaDe,
+        projetoFiltro: filterProj, statusFiltro: filterStatus,
+      });
+    } catch (e) {
+      alert("Não foi possível exportar: " + (e?.message || e));
+    } finally { setExportando(false); }
   };
 
   const novaFracao = () => {
@@ -355,6 +480,11 @@ function TabelaVendas({ fracoes, vendas, canEdit, onAddFatura, onUpdateFracao, o
           style={{ flex: "1 1 150px", background: "#fff", border: "1px solid #eee", borderRadius: 10, padding: "10px 14px", fontSize: 13, outline: "none" }}>
           {["Todos", ...STATUS_OPTIONS].map(s => <option key={s}>{s}</option>)}
         </select>
+        <button onClick={handleExportar} disabled={exportando}
+          title="Exportar para Excel o que está filtrado"
+          style={{ background: exportando ? "#e8e8e8" : "#16a34a", color: exportando ? "#999" : "#fff", border: "none", padding: "10px 16px", borderRadius: 10, fontSize: 13, fontWeight: 600, cursor: exportando ? "default" : "pointer", whiteSpace: "nowrap" }}>
+          {exportando ? "A gerar..." : "⬇ Excel"}
+        </button>
         {canEdit && (
           <button onClick={novaFracao}
             style={{ background: "#1a1a2e", color: "#fff", border: "none", padding: "10px 18px", borderRadius: 10, fontSize: 13, fontWeight: 600, cursor: "pointer", whiteSpace: "nowrap" }}>
@@ -432,13 +562,13 @@ function TabelaVendas({ fracoes, vendas, canEdit, onAddFatura, onUpdateFracao, o
 
                       <td style={{ padding: "4px 8px", textAlign: "right" }}>
                         <CelulaNumero valor={area} editavel={canEdit} formatar={v => fmtNum(v)}
-                          onGuardar={v => onUpsertFracao?.({ ...f, area: v })}
+                          onGuardar={async v => { const r = await onUpsertFracao?.({ ...f, area: v }); if (r?.error) alert("Não foi possível guardar a área."); }}
                           estilo={{ color: "#666" }} />
                       </td>
 
                       <td style={{ padding: "4px 8px", textAlign: "right" }}>
                         <CelulaNumero valor={preco} editavel={canEdit} formatar={v => fmt(v)}
-                          onGuardar={v => onUpsertFracao?.({ ...f, preco_tabela: v })}
+                          onGuardar={async v => { const r = await onUpsertFracao?.({ ...f, preco_tabela: v }); if (r?.error) alert("Não foi possível guardar o preço."); }}
                           estilo={{ fontWeight: 700 }} />
                       </td>
 
@@ -450,7 +580,7 @@ function TabelaVendas({ fracoes, vendas, canEdit, onAddFatura, onUpdateFracao, o
 
                       <td style={{ padding: "6px 4px", textAlign: "center" }}>
                         <select value={f.status || "Disponível"} disabled={!canEdit}
-                          onChange={e => onUpsertFracao?.({ ...f, status: e.target.value })}
+                          onChange={e => alterarStatus(f, e.target.value)}
                           style={{ background: "none", border: "none", fontSize: 10, cursor: canEdit ? "pointer" : "default", color: STATUS_STYLES[f.status]?.text || "#888", fontWeight: 600, outline: "none" }}>
                           {STATUS_OPTIONS.map(s => <option key={s}>{s}</option>)}
                         </select>
