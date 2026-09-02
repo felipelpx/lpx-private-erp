@@ -7,7 +7,6 @@ import ExtratosView from "./ExtratosView.jsx";
 import { useAuth, useContas, useFaturas, usePagamentosExtras, useOrcamento, useMovimentosCounts, useProfiles } from "./hooks.js";
 import { supabase } from "./supabase.js";
 import ComercialView from "./ComercialView.jsx";
-import EntidadesView from "./EntidadesView.jsx";
 import PagamentosView from "./PagamentosView.jsx";
 import { CATEGORIAS_FATURA } from "./categorias.js";
 import { EMPRESAS as EMPRESAS_ALL, BANCO_COLORS as BANCO_COLORS_CFG, GRUPOS, GRUPOS_INFO } from "./empresas.js";
@@ -1054,7 +1053,7 @@ function UtilizadoresInner({ currentUser }) {
 }
 
 // ─── IMPORTAR VIEW ────────────────────────────────────────────────────────────
-function ImportarView({faturas, setFaturas, caixaUnico, setCaixaUnico, setTab, addFatura, addFaturas, setLastImportedConta}) {
+function ImportarView({faturas, setFaturas, caixaUnico, setCaixaUnico, setTab, addFatura, addFaturas, setLastImportedConta, grupo, setGrupo}) {
   const [subTab, setSubTab] = useState("fatura");
 
   const handleSaveMovimentos = async ({ empresa, banco, movimentos }) => {
@@ -1229,7 +1228,9 @@ function ImportarView({faturas, setFaturas, caixaUnico, setCaixaUnico, setTab, a
             // Se a fatura pertence a um grupo diferente do que está filtrado,
             // muda para "Todos" — senão ela é guardada mas fica invisível.
             const empGravada = EMPRESAS_ALL.find(e => e.id === rows[0]?.empresa);
-            if (empGravada && grupo !== "Todos" && empGravada.grupo !== grupo) setGrupo("Todos");
+            if (empGravada && grupo && grupo !== "Todos" && empGravada.grupo !== grupo) {
+              setGrupo?.("Todos");
+            }
             // Vai para Contas a Pagar após sucesso
             setTimeout(()=>setTab("pagar"), 1500);
             return { ok: true, inserted: (data?.length ?? rows.length), error: "" };
@@ -1254,7 +1255,6 @@ const TABS_CONFIG = [
   {id:"fluxo",     label:"Fluxo Futuro",       roles:["admin","gestor","viewer"]},
   {id:"pagar",     label:"Contas a Pagar",     roles:["admin","gestor","viewer","investidor"]},
   {id:"pagamentos",label:"Pagamentos",         roles:["admin","gestor","viewer"]},
-  {id:"entidades", label:"Entidades",          roles:["admin","gestor","viewer"]},
   {id:"importar",  label:"Importar",           roles:["admin","gestor"]},
   {id:"users",     label:"Utilizadores",       roles:["admin"]},
 ];
@@ -1465,12 +1465,12 @@ export default function App() {
           {tab==="pagar"     && <ContasPagar canEdit={canEdit && !isInvestidor} EMPRESAS={empresasVisiveis} faturas={faturas} setFaturas={handleSetFaturas} addFatura={addFatura} updateFatura={updateFatura} deleteFatura={deleteFatura}/>}
           {tab==="pagamentos"&& <PagamentosView faturas={faturas.filter(f=>empresasVisiveis.some(e=>e.id===f.empresa)||!f.empresa)} pagamentosExtras={pagamentosExtras.filter(p=>empresasVisiveis.some(e=>e.id===p.empresa)||!p.empresa)} currentUser={currentUser} profiles={profiles}/>}
           {tab==="users"     && <Utilizadores currentUser={currentUser}/>}
-          {tab==="entidades" && <EntidadesView currentUser={currentUser}/>}
           {tab==="importar"  && <ImportarView
             faturas={faturas} setFaturas={handleSetFaturas}
             caixaUnico={caixaUnico} setCaixaUnico={handleSetCaixaUnico}
             setTab={setTab} addFatura={addFatura} addFaturas={addFaturas}
             setLastImportedConta={setLastImportedConta}
+            grupo={grupo} setGrupo={setGrupo}
           />}
         </TabErrorBoundary>
       </div>

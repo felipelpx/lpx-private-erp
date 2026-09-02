@@ -488,23 +488,6 @@ export function useSaldosNaData(contaIds = [], dataISO) {
   return { saldos, loading, reload: load }
 }
 
-// ─── ENTIDADES ────────────────────────────────────────────────────────────────
-export function useEntidades() {
-  const { data, loading } = useRealtimeTable('entidades',
-    () => supabase.from('entidades').select('*').order('tipo').order('nome'))
-
-  const addEntidade = async (e) => {
-    const { error } = await supabase.from('entidades').insert([{ ...e, id: 'ent_' + Date.now() }])
-    if (error) console.warn('addEntidade error:', error)
-  }
-  const updateEntidade = async (id, u) => {
-    await supabase.from('entidades').update({ ...u, updated_at: new Date().toISOString() }).eq('id', id)
-  }
-  const deleteEntidade = async (id) => {
-    await supabase.from('entidades').delete().eq('id', id)
-  }
-  return { entidades: data, loading, addEntidade, updateEntidade, deleteEntidade }
-}
 
 // ─── MOVIMENTOS de VÁRIAS contas num período ─────────────────────────────────
 // Usado pelo painel de Investor Relations, que precisa de agregar por categoria
