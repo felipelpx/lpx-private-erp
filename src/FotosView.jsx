@@ -52,6 +52,9 @@ export default function FotosView({ currentUser, empresasVisiveis }) {
   const [filtro, setFiltro] = useState("todos");
   const [urls, setUrls] = useState({});
   const [lightbox, setLightbox] = useState(null);
+  // Edição da legenda/data de uma foto já existente (dentro do lightbox)
+  const [editLegenda, setEditLegenda] = useState(null);   // { legenda, data } ou null
+  const [aGuardarLegenda, setAGuardarLegenda] = useState(false);
   const [aEnviar, setAEnviar] = useState(null);
   const [empresaUpload, setEmpresaUpload] = useState(empresas[0]?.id || "");
   // Fotos acabadas de enviar, à espera de legenda e data
@@ -183,6 +186,29 @@ export default function FotosView({ currentUser, empresasVisiveis }) {
     foto._preview && URL.revokeObjectURL(foto._preview);
     setPorLegendar(lista => lista.filter(f => f.id !== foto.id));
     carregar();
+  };
+
+  const abrirEdicao = (foto) =>
+    setEditLegenda({ legenda: foto.legenda || "", data: foto.data || "" });
+
+  const guardarEdicao = async () => {
+    if (!lightbox || !editLegenda) return;
+    setAGuardarLegenda(true);
+    try {
+      const { error } = await supabase.from("fotos")
+        .update({ legenda: editLegenda.legenda || "", data: editLegenda.data })
+        .eq("id", lightbox.id);
+      if (error) throw error;
+      // atualiza o que está em ecrã sem esperar pelo recarregamento
+      const atualizada = { ...lightbox, legenda: editLegenda.legenda, data: editLegenda.data };
+      setFotos(lista => lista.map(f => (f.id === lightbox.id ? atualizada : f)));
+      setLightbox(atualizada);
+      setEditLegenda(null);
+    } catch (e) {
+      alert("Não foi possível guardar: " + (e?.message || e));
+    } finally {
+      setAGuardarLegenda(false);
+    }
   };
 
   const apagar = async (foto) => {
@@ -358,8 +384,15 @@ export default function FotosView({ currentUser, empresasVisiveis }) {
                   : <span style={{ fontSize: 10, color: "#ccc", fontFamily: "monospace" }}>a carregar…</span>}
               </div>
               <div style={{ padding: "10px 12px" }}>
-                <div style={{ fontSize: 11, fontWeight: 600, color: "#1a1a2e", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                  {f.legenda || "(sem legenda)"}
+                <div style={{ fontSize: 11, fontWeight: 600, color: f.legenda ? "#1a1a2e" : "#bbb", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", display: "flex", alignItems: "center", gap: 6 }}>
+                  <span style={{ overflow: "hidden", textOverflow: "ellipsis" }}>{f.legenda || "(sem legenda)"}</span>
+                  {podeEditar && (
+                    <button onClick={e => { e.stopPropagation(); setLightbox(f); abrirEdicao(f); }}
+                      title="Editar legenda"
+                      style={{ marginLeft: "auto", background: "#f0f4ff", border: "none", color: "#4a6fa5", padding: "2px 7px", borderRadius: 5, fontSize: 10, cursor: "pointer", flexShrink: 0 }}>
+                      ✎
+                    </button>
+                  )}
                 </div>
                 <div style={{ fontSize: 10, color: "#aaa", fontFamily: "monospace", marginTop: 3, display: "flex", justifyContent: "space-between" }}>
                   <span>{nomeEmpresa(f.empresa_id).split(" (")[0]}</span>
@@ -373,7 +406,7 @@ export default function FotosView({ currentUser, empresasVisiveis }) {
 
       {/* Lightbox */}
       {lightbox && (
-        <div onClick={() => setLightbox(null)}
+        <div onClick={() => { setLightbox(null); setEditLegenda(null); }}
           style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.88)", zIndex: 200, display: "flex", alignItems: "center", justifyContent: "center", padding: 26 }}>
           <div onClick={e => e.stopPropagation()} style={{ maxWidth: "94vw", maxHeight: "94vh", display: "flex", flexDirection: "column", gap: 10 }}>
             {urls[lightbox.path] && (
@@ -381,13 +414,42 @@ export default function FotosView({ currentUser, empresasVisiveis }) {
                 style={{ maxWidth: "94vw", maxHeight: "78vh", objectFit: "contain", borderRadius: 10 }} />
             )}
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 16, color: "#fff" }}>
-              <div>
-                <div style={{ fontSize: 14, fontWeight: 600 }}>{lightbox.legenda || "(sem legenda)"}</div>
-                <div style={{ fontSize: 11, color: "#aaa", fontFamily: "monospace", marginTop: 3 }}>
-                  {nomeEmpresa(lightbox.empresa_id)} · {fmtData(lightbox.data)} · {fmtTamanho(lightbox.tamanho)}
+              {editLegenda ? (
+                <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", flex: 1 }}>
+                  <input value={editLegenda.legenda} autoFocus
+                    onChange={e => setEditLegenda(v => ({ ...v, legenda: e.target.value }))}
+                    onKeyDown={e => { if (e.key === "Enter") guardarEdicao(); if (e.key === "Escape") setEditLegenda(null); }}
+                    placeholder="Legenda da foto"
+                    style={{ flex: "2 1 240px", background: "#ffffff18", border: "1px solid #ffffff44", color: "#fff", borderRadius: 7, padding: "8px 11px", fontSize: 13, outline: "none" }} />
+                  <input type="date" value={editLegenda.data}
+                    onChange={e => setEditLegenda(v => ({ ...v, data: e.target.value }))}
+                    style={{ background: "#ffffff18", border: "1px solid #ffffff44", color: "#fff", borderRadius: 7, padding: "7px 10px", fontSize: 12, outline: "none", fontFamily: "monospace", colorScheme: "dark" }} />
+                  <button onClick={guardarEdicao} disabled={aGuardarLegenda}
+                    style={{ background: "#16a34a", color: "#fff", border: "none", padding: "8px 16px", borderRadius: 7, fontSize: 12, fontWeight: 600, cursor: "pointer" }}>
+                    {aGuardarLegenda ? "A guardar..." : "Guardar"}
+                  </button>
+                  <button onClick={() => setEditLegenda(null)}
+                    style={{ background: "#ffffff22", color: "#fff", border: "none", padding: "8px 14px", borderRadius: 7, fontSize: 12, cursor: "pointer" }}>
+                    Cancelar
+                  </button>
                 </div>
-              </div>
-              <div style={{ display: "flex", gap: 8 }}>
+              ) : (
+                <div>
+                  <div style={{ fontSize: 14, fontWeight: 600, display: "flex", alignItems: "center", gap: 9 }}>
+                    <span style={{ opacity: lightbox.legenda ? 1 : 0.55 }}>{lightbox.legenda || "(sem legenda)"}</span>
+                    {podeEditar && (
+                      <button onClick={() => abrirEdicao(lightbox)} title="Editar legenda e data"
+                        style={{ background: "#ffffff22", color: "#fff", border: "none", padding: "3px 9px", borderRadius: 6, fontSize: 11, cursor: "pointer" }}>
+                        ✎ editar
+                      </button>
+                    )}
+                  </div>
+                  <div style={{ fontSize: 11, color: "#aaa", fontFamily: "monospace", marginTop: 3 }}>
+                    {nomeEmpresa(lightbox.empresa_id)} · {fmtData(lightbox.data)} · {fmtTamanho(lightbox.tamanho)}
+                  </div>
+                </div>
+              )}
+              {!editLegenda && <div style={{ display: "flex", gap: 8 }}>
                 {urls[lightbox.path] && (
                   <a href={urls[lightbox.path]} target="_blank" rel="noopener noreferrer" download
                     style={{ background: "#ffffff22", color: "#fff", textDecoration: "none", padding: "7px 14px", borderRadius: 7, fontSize: 12 }}>
@@ -400,11 +462,11 @@ export default function FotosView({ currentUser, empresasVisiveis }) {
                     Apagar
                   </button>
                 )}
-                <button onClick={() => setLightbox(null)}
+                <button onClick={() => { setLightbox(null); setEditLegenda(null); }}
                   style={{ background: "#ffffff22", color: "#fff", border: "none", padding: "7px 14px", borderRadius: 7, fontSize: 12, cursor: "pointer" }}>
                   Fechar
                 </button>
-              </div>
+              </div>}
             </div>
           </div>
         </div>
