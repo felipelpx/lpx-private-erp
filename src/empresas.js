@@ -97,3 +97,12 @@ export const BANCO_COLORS = {
 };
 
 export default EMPRESAS;
+
+// Nome legível de uma empresa a partir do id, do nome ou do projeto.
+// Usado pelo Fluxo Futuro e pelo Contas a Pagar.
+const POR_ID = Object.fromEntries(EMPRESAS.map((e) => [e.id, e]));
+export function labelEmpresa(v) {
+  if (!v) return "(sem empresa)";
+  const e = POR_ID[v] || EMPRESAS.find((x) => x.nome === v || x.projeto === v);
+  return e ? e.nome : v;
+}

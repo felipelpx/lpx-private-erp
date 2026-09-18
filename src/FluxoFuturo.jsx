@@ -1,38 +1,33 @@
 import React, { useState, useMemo, useEffect } from "react";
 import { useVendas, useSaldosAtuais } from "./hooks.js";
 import { CATEGORIAS } from "./categorias.js";
-import { EMPRESAS as EMPRESAS_CFG, EMPRESAS as EMPRESAS_TODAS } from "./empresas.js";
-import { fmtEUR, fmtEUR0, fmtInt } from "./formato.js";
+import { faturaPaga, faturaAtrasada, statusFatura } from "./status.js";
+import { fmtEUR as fmtEuro } from "./formato.js";
+import { labelEmpresa, EMPRESAS as EMPRESAS_TODAS } from "./empresas.js";
 
-const fmt = (v) => fmtEUR0(v);
+const fmt = (v) => fmtEuro(v, 0);
 // Valor exato com 2 casas decimais (para parcelas individuais)
-const fmtFull = (v) => fmtEUR(v);
+const fmtFull = (v) => fmtEuro(v);
 // Formato pt-PT com 2 decimais para todos os valores monetários no Fluxo Futuro.
 // (Antes este helper devolvia "1,3k €" ou "1,30M €"; agora sempre "1 234,56 €")
-const fmtK = (v) => {
-  return fmtEUR(v);
-};
+const fmtK = (v) => fmtEuro(v);
 const fmtDate = (s) => {
   if (!s || typeof s !== "string" || s.length < 10) return s || "";
   const m = s.substring(0, 10).match(/^(\d{4})-(\d{2})-(\d{2})$/);
   return m ? `${m[3]}-${m[2]}-${m[1]}` : s;
 };
 
-// Fallback caso o App não passe EMPRESAS — ver src/empresas.js
-const EMPRESAS_FALLBACK = EMPRESAS_CFG;
-
-// Mapeia o nome do projeto (usado nas frações/vendas) para o id da empresa.
-// Deriva automaticamente de src/empresas.js — basta manter o campo `projeto` alinhado.
-const PROJETO_EMPRESA_MAP = Object.fromEntries(
-  EMPRESAS_CFG.map(e => [e.projeto || e.nome, e.id])
-);
-const EMPRESA_DEFAULT = EMPRESAS_CFG[0]?.id || "";
-
+// Fallback caso o App não passe EMPRESAS — apenas para compatibilidade
+const EMPRESAS_FALLBACK = [
+  { id: "modernity", nome: "Vistas do Sul" },
+  { id: "arroios",   nome: "Arroios" },
+  { id: "riocap",    nome: "Rio Capital CSC" },
+];
 
 export default function FluxoFuturo({ faturas: faturasTodas, faturasLoading, pagamentosExtras: pagamentosTodos, pagamentosLoading, onAddPagamento, onUpdatePagamento, onDeletePagamento, onUpdateFatura, onDeleteFatura, currentUser, EMPRESAS, caixaUnico }) {
-  // Só as empresas visíveis (filtro de grupo / investidor). Itens cuja empresa
-  // não corresponde a nenhuma empresa conhecida ficam visíveis para admin e
-  // gestor — caso contrário desapareciam do sistema sem aviso.
+  // Só as empresas visíveis (filtro de grupo LPX/HDG e perfil investidor).
+  // Itens cuja empresa não corresponda a nenhuma conhecida ficam visíveis para
+  // admin e gestor, para não desaparecerem do sistema sem aviso.
   const idsVisiveis = (EMPRESAS || []).map(e => e.id);
   const podeVerOrfaos = currentUser?.role === "admin" || currentUser?.role === "gestor";
   const pertence = (x) => {
@@ -44,8 +39,7 @@ export default function FluxoFuturo({ faturas: faturasTodas, faturasLoading, pag
   const pagamentosExtras = (pagamentosTodos || []).filter(pertence);
 
   const { vendas, loading: vendasLoading, updateVenda } = useVendas();
-  // Editar, marcar como pago e eliminar: admin e gestor.
-  // (Antes era só admin, o que deixava os gestores sem poder corrigir nada.)
+  // Editar, marcar como pago e eliminar: admin e gestor (opção da LPX).
   const isAdmin = currentUser?.role === "admin" || currentUser?.role === "gestor";
   const stillLoading = !!(pagamentosLoading || faturasLoading || vendasLoading);
 
@@ -79,6 +73,14 @@ export default function FluxoFuturo({ faturas: faturasTodas, faturasLoading, pag
   }, [EMPRESAS, caixaUnico, saldosAtuais]);
 
   const [empresa, setEmpresa] = useState("all");
+  // Real = tem fatura emitida (ou recebível contratado). Previsto = estimativa
+  // lançada à mão que ainda não tem documento.
+  const [natureza, setNatureza] = useState("todos");   // todos | real | previsto
+  const [mostrarVazios, setMostrarVazios] = useState(false);
+  const [converter, setConverter] = useState(null);    // previsão a converter em fatura
+  const [aproximar, setAproximar] = useState(false);   // painel de aproximação em lote
+  const [escolhas, setEscolhas] = useState({});        // { pagamentoId: faturaId | "" }
+  const [aAplicar, setAAplicar] = useState(false);
   const [showForm, setShowForm] = useState(false);
   // Form simples (descrição, empresa, categoria, observação, tipo)
   const [form, setForm] = useState({
@@ -118,40 +120,6 @@ export default function FluxoFuturo({ faturas: faturasTodas, faturasLoading, pag
     });
   };
   const closeEdit = () => { setEditPagamento(null); setEditForm(null); };
-
-  // ─── Editar uma FATURA diretamente a partir do fluxo ───────────────────────
-  // As linhas com origem em Contas a Pagar (incluindo as vencidas) não tinham
-  // forma de ser corrigidas sem sair deste ecrã.
-  const [editFatura, setEditFatura] = useState(null);
-  const [editFaturaForm, setEditFaturaForm] = useState(null);
-
-  const openEditFatura = (fat) => {
-    setEditFatura(fat);
-    setEditFaturaForm({
-      fornecedor: fat.fornecedor || "",
-      categoria: fat.categoria || "",
-      valor: fat.valor ?? "",
-      vencimento: fat.vencimento || "",
-      status: fat.status || "Pendente",
-      obs: fat.obs || "",
-    });
-  };
-  const closeEditFatura = () => { setEditFatura(null); setEditFaturaForm(null); };
-  const handleSaveEditFatura = async () => {
-    if (!editFatura || !editFaturaForm) return;
-    if (!editFaturaForm.vencimento) { alert("Indica a data de vencimento."); return; }
-    const res = await onUpdateFatura?.(editFatura.id, {
-      ...editFatura,
-      fornecedor: editFaturaForm.fornecedor,
-      categoria: editFaturaForm.categoria,
-      valor: parseFloat(String(editFaturaForm.valor).replace(",", ".")) || 0,
-      vencimento: editFaturaForm.vencimento,
-      status: editFaturaForm.status,
-      obs: editFaturaForm.obs,
-    });
-    if (res?.error) { alert("Erro a guardar:\n\n" + (res.error.message || res.error)); return; }
-    closeEditFatura();
-  };
   const handleSaveEdit = async () => {
     if (!editPagamento || !editForm) return;
     if (!editForm.descricao) { alert("Indica uma descrição."); return; }
@@ -207,6 +175,114 @@ export default function FluxoFuturo({ faturas: faturasTodas, faturasLoading, pag
     }
   };
 
+  // ── Converter previsão em custo real ──────────────────────────────────────
+  // Quando chega a fatura de algo que estava previsto, a previsão tem de sair
+  // do fluxo — senão o mês fica com o valor a dobrar. Marca-se o pagamento
+  // manual como "Convertida" e regista-se na descrição a fatura que o
+  // substituiu, para haver rasto.
+  const handleConverter = async (pag, fatura) => {
+    if (!onUpdatePagamento) return;
+    const ref = fatura ? (fatura.fatura || fatura.fornecedor || `#${fatura.id}`) : null;
+    const res = await onUpdatePagamento(pag.id, {
+      status: "Convertida",
+      descricao: ref ? `${pag.descricao} [→ fatura ${ref}]` : pag.descricao,
+    });
+    if (res?.error) {
+      const msg = (res.error.message || "") + (res.error.details ? " · " + res.error.details : "");
+      if (msg.toLowerCase().includes("column") && msg.includes("status")) {
+        alert("⚠️ A coluna 'status' ainda não existe em 'pagamentos_extras'.\n\nAbre /setup-pagamentos-status.html para instruções de setup (1 minuto).");
+      } else {
+        alert("Erro ao converter:\n\n" + msg);
+      }
+      return;
+    }
+    setConverter(null);
+  };
+
+  // Faturas candidatas a substituir uma previsão: mesma empresa, por pagar e
+  // com vencimento próximo da data prevista. Ordenadas pela diferença de valor.
+  const candidatasFatura = (pag) => {
+    if (!pag) return [];
+    const alvo = parseFloat(pag.valor) || 0;
+    const base = pag.data_inicio ? new Date(pag.data_inicio + "T00:00:00").getTime() : null;
+    return (faturas || [])
+      .filter(f => !faturaPaga(f))
+      .filter(f => !pag.empresa || f.empresa === pag.empresa)
+      .filter(f => {
+        if (!base || !f.vencimento) return true;
+        const dif = Math.abs(new Date(f.vencimento + "T00:00:00").getTime() - base);
+        return dif <= 120 * 86400000;          // ±4 meses
+      })
+      .sort((a, b) => Math.abs((a.valor || 0) - alvo) - Math.abs((b.valor || 0) - alvo))
+      .slice(0, 12);
+  };
+
+  // ── Aproximação automática de previsões a faturas ─────────────────────────
+  // Para cada previsão em aberto procura-se a fatura por pagar mais parecida.
+  // A pontuação pesa três sinais: proximidade do valor, proximidade da data e
+  // palavras comuns na descrição. Nada é convertido sem o utilizador confirmar.
+  const palavras = (t) => new Set(
+    String(t || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+      .split(/[^a-z0-9]+/).filter(w => w.length > 3)
+  );
+
+  const pontua = (pag, f) => {
+    const vp = Math.abs(parseFloat(pag.valor) || 0);
+    const vf = Math.abs(parseFloat(f.valor) || 0);
+    const maior = Math.max(vp, vf, 1);
+    const difRel = Math.abs(vp - vf) / maior;
+    const sValor = Math.max(0, 1 - difRel * 4);          // 0 se diferir >25%
+
+    let sData = 0.5;
+    if (pag.data_inicio && f.vencimento) {
+      const dias = Math.abs(new Date(f.vencimento + "T00:00:00") - new Date(pag.data_inicio + "T00:00:00")) / 86400000;
+      sData = Math.max(0, 1 - dias / 90);                 // 0 a partir de 3 meses
+    }
+
+    const a = palavras(pag.descricao), b = palavras((f.fornecedor || "") + " " + (f.fatura || ""));
+    let comuns = 0; a.forEach(w => { if (b.has(w)) comuns++; });
+    const sTexto = a.size ? Math.min(1, comuns / Math.min(a.size, 3)) : 0;
+
+    const mesmaEmpresa = !pag.empresa || !f.empresa || pag.empresa === f.empresa;
+    return (sValor * 0.5 + sData * 0.25 + sTexto * 0.25) * (mesmaEmpresa ? 1 : 0.4);
+  };
+
+  const sugestoes = useMemo(() => {
+    const abertas = (faturas || []).filter(f => !faturaPaga(f));
+    const previsoes = (pagamentosExtras || []).filter(p =>
+      p.tipo !== "entrada" && !["Paga", "Pago", "Convertida"].includes(p.status)
+    );
+    return previsoes.map(p => {
+      const ranking = abertas
+        .map(f => ({ fatura: f, score: pontua(p, f) }))
+        .sort((a, b) => b.score - a.score)
+        .slice(0, 5);
+      return { pagamento: p, melhor: ranking[0] || null, ranking };
+    }).sort((a, b) => (b.melhor?.score || 0) - (a.melhor?.score || 0));
+  }, [faturas, pagamentosExtras]);
+
+  const aplicarAproximacoes = async () => {
+    const pares = Object.entries(escolhas).filter(([, fid]) => fid);
+    if (!pares.length) return;
+    setAAplicar(true);
+    let erros = 0;
+    for (const [pid, fid] of pares) {
+      const pag = (pagamentosExtras || []).find(p => String(p.id) === String(pid));
+      const fat = (faturas || []).find(f => String(f.id) === String(fid));
+      if (!pag) continue;
+      const ref = fat ? (fat.fatura || fat.fornecedor || `#${fat.id}`) : null;
+      const res = await onUpdatePagamento(pag.id, {
+        status: "Convertida",
+        descricao: ref ? `${pag.descricao} [→ fatura ${ref}]` : pag.descricao,
+      });
+      if (res?.error) erros++;
+    }
+    setAAplicar(false);
+    setEscolhas({});
+    if (erros) alert(`${erros} ${erros === 1 ? "previsão não foi convertida" : "previsões não foram convertidas"}. Verifica a coluna 'status' em pagamentos_extras.`);
+    else setAproximar(false);
+  };
+
   // VENDAS — marcar como pago/recebido = zerar o campo correspondente
   const handleMarkVendaItemPaid = async (venda, vendaTipo) => {
     if (!updateVenda) return;
@@ -222,7 +298,7 @@ export default function FluxoFuturo({ faturas: faturasTodas, faturasLoading, pag
   };
   const handleMarkFaturaPaid = async (fat) => {
     if (!onUpdateFatura) return;
-    const res = await onUpdateFatura(fat.id, { status: "Paga" });
+    const res = await onUpdateFatura(fat.id, { status: "Pago" });
     if (res?.error) {
       alert("Erro ao marcar fatura como paga:\n\n" + (res.error.message || res.error));
       return;
@@ -277,12 +353,15 @@ export default function FluxoFuturo({ faturas: faturasTodas, faturasLoading, pag
 
   // Add contas a pagar (saídas)
   faturas.forEach(f => {
-    if (!f.vencimento) return;
+    // A data que conta no fluxo é a previsão de pagamento, quando existe: é
+    // quando o dinheiro sai mesmo. Sem previsão, usa-se o vencimento.
+    const dataFluxo = f.previsao_pagamento || f.vencimento;
+    if (!dataFluxo) return;
     if (empresa !== "all" && f.empresa !== empresa) return;
-    if (f.status === "Paga") return;
-    const key = getMesKey(f.vencimento);
+    if (faturaPaga(f)) return;
+    const key = getMesKey(dataFluxo);
     // Se a fatura já está marcada como Vencida, ou se a data passou (independentemente do mês) → bucket "vencidas"
-    if (f.status === "Vencida" || f.vencimento < hojeISO) {
+    if (faturaAtrasada(f)) {
       vencidas.saidas += parseFloat(f.valor) || 0;
       vencidas.items.push({
         tipo: "saida",
@@ -290,7 +369,8 @@ export default function FluxoFuturo({ faturas: faturasTodas, faturasLoading, pag
         valor: f.valor,
         cat: f.categoria,
         origem: "Vencida",
-        vencimento: f.vencimento,
+        natureza: "real",
+        vencimento: dataFluxo,
         fatura: f,
       });
       return;
@@ -298,13 +378,13 @@ export default function FluxoFuturo({ faturas: faturasTodas, faturasLoading, pag
     const m = meses.find(m => m.key === key);
     if (m) {
       m.saidas += parseFloat(f.valor) || 0;
-      m.items.push({ tipo: "saida", desc: f.fornecedor || f.fatura, valor: f.valor, cat: f.categoria, origem: "Contas a Pagar", fatura: f });
+      m.items.push({ tipo: "saida", desc: f.fornecedor || f.fatura, valor: f.valor, cat: f.categoria, origem: "Contas a Pagar", natureza: "real", fatura: f });
     }
   });
 
   // Add vendas receivables (entradas)
   vendas.forEach(v => {
-    const projEmpMap = PROJETO_EMPRESA_MAP;
+    const projEmpMap = { "Vistas do Sul": "modernity", "Arroios": "arroios" };
     const empId = projEmpMap[v.projeto];
     if (empresa !== "all" && empId !== empresa) return;
     // A receber na escritura
@@ -312,12 +392,12 @@ export default function FluxoFuturo({ faturas: faturasTodas, faturasLoading, pag
       const key = getMesKey(v.previsao_escritura);
       if (v.previsao_escritura < hojeISO) {
         vencidas.entradas += v.falta_receber;
-        vencidas.items.push({ tipo: "entrada", desc: `${v.fracao} - ${v.cliente}`, valor: v.falta_receber, cat: "Vendas", origem: "Recebível Escritura", vencimento: v.previsao_escritura, venda: v, vendaTipo: "falta_receber" });
+        vencidas.items.push({ tipo: "entrada", desc: `${v.fracao} - ${v.cliente}`, valor: v.falta_receber, cat: "Vendas", origem: "Recebível Escritura", natureza: "real", vencimento: v.previsao_escritura, venda: v, vendaTipo: "falta_receber" });
       } else {
         const m = meses.find(m => m.key === key);
         if (m) {
           m.entradas += v.falta_receber;
-          m.items.push({ tipo: "entrada", desc: `${v.fracao} - ${v.cliente}`, valor: v.falta_receber, cat: "Vendas", origem: "Recebível Escritura", venda: v, vendaTipo: "falta_receber" });
+          m.items.push({ tipo: "entrada", desc: `${v.fracao} - ${v.cliente}`, valor: v.falta_receber, cat: "Vendas", origem: "Recebível Escritura", natureza: "real", venda: v, vendaTipo: "falta_receber" });
         }
       }
     }
@@ -326,12 +406,12 @@ export default function FluxoFuturo({ faturas: faturasTodas, faturasLoading, pag
       const key = getMesKey(v.data_pagamento_sinal);
       if (v.data_pagamento_sinal < hojeISO) {
         vencidas.saidas += v.comissao_pendente_sinal;
-        vencidas.items.push({ tipo: "saida", desc: `Comissão sinal - ${v.fracao}`, valor: v.comissao_pendente_sinal, cat: "Comissão", origem: "Comissão Pendente", vencimento: v.data_pagamento_sinal, venda: v, vendaTipo: "comissao_sinal" });
+        vencidas.items.push({ tipo: "saida", desc: `Comissão sinal - ${v.fracao}`, valor: v.comissao_pendente_sinal, cat: "Comissão", origem: "Comissão Pendente", natureza: "real", vencimento: v.data_pagamento_sinal, venda: v, vendaTipo: "comissao_sinal" });
       } else {
         const m = meses.find(m => m.key === key);
         if (m) {
           m.saidas += v.comissao_pendente_sinal;
-          m.items.push({ tipo: "saida", desc: `Comissão sinal - ${v.fracao}`, valor: v.comissao_pendente_sinal, cat: "Comissão", origem: "Comissão Pendente", venda: v, vendaTipo: "comissao_sinal" });
+          m.items.push({ tipo: "saida", desc: `Comissão sinal - ${v.fracao}`, valor: v.comissao_pendente_sinal, cat: "Comissão", origem: "Comissão Pendente", natureza: "real", venda: v, vendaTipo: "comissao_sinal" });
         }
       }
     }
@@ -340,12 +420,12 @@ export default function FluxoFuturo({ faturas: faturasTodas, faturasLoading, pag
       const key = getMesKey(v.data_pagamento_escritura);
       if (v.data_pagamento_escritura < hojeISO) {
         vencidas.saidas += v.comissao_pendente_escritura;
-        vencidas.items.push({ tipo: "saida", desc: `Comissão escritura - ${v.fracao}`, valor: v.comissao_pendente_escritura, cat: "Comissão", origem: "Comissão Pendente", vencimento: v.data_pagamento_escritura, venda: v, vendaTipo: "comissao_escritura" });
+        vencidas.items.push({ tipo: "saida", desc: `Comissão escritura - ${v.fracao}`, valor: v.comissao_pendente_escritura, cat: "Comissão", origem: "Comissão Pendente", natureza: "real", vencimento: v.data_pagamento_escritura, venda: v, vendaTipo: "comissao_escritura" });
       } else {
         const m = meses.find(m => m.key === key);
         if (m) {
           m.saidas += v.comissao_pendente_escritura;
-          m.items.push({ tipo: "saida", desc: `Comissão escritura - ${v.fracao}`, valor: v.comissao_pendente_escritura, cat: "Comissão", origem: "Comissão Pendente", venda: v, vendaTipo: "comissao_escritura" });
+          m.items.push({ tipo: "saida", desc: `Comissão escritura - ${v.fracao}`, valor: v.comissao_pendente_escritura, cat: "Comissão", origem: "Comissão Pendente", natureza: "real", venda: v, vendaTipo: "comissao_escritura" });
         }
       }
     }
@@ -356,6 +436,9 @@ export default function FluxoFuturo({ faturas: faturasTodas, faturasLoading, pag
     if (empresa !== "all" && p.empresa !== empresa) return;
     // Pagamentos já marcados como pagos não entram no fluxo (já saíram da conta real)
     if (p.status === "Paga" || p.status === "Pago") return;
+    // Convertido em custo real: a fatura já entrou pelo Contas a Pagar, por isso
+    // a previsão sai do fluxo para não duplicar o valor.
+    if (p.status === "Convertida") return;
     const nParcelas = parseInt(p.parcelas) || 1;
     const startDate = new Date(p.data_inicio);
     for (let i = 0; i < nParcelas; i++) {
@@ -371,6 +454,7 @@ export default function FluxoFuturo({ faturas: faturasTodas, faturasLoading, pag
         valor,
         cat: p.categoria,
         origem: "Manual",
+        natureza: "previsto",
         pagamentoId: p.id,
         pagamento: p,
       };
@@ -400,6 +484,20 @@ export default function FluxoFuturo({ faturas: faturasTodas, faturasLoading, pag
     }
   });
 
+  // ── Filtro Real / Previsto ────────────────────────────────────────────────
+  // Os totais são recalculados a partir dos itens que sobrevivem ao filtro,
+  // para que o gráfico e o saldo acumulado reflictam a mesma seleção.
+  if (natureza !== "todos") {
+    const passa = (it) => (it.natureza || "previsto") === natureza;
+    const recalcula = (b) => {
+      b.items = b.items.filter(passa);
+      b.entradas = b.items.filter(i => i.tipo === "entrada").reduce((t, i) => t + (parseFloat(i.valor) || 0), 0);
+      b.saidas = b.items.filter(i => i.tipo === "saida").reduce((t, i) => t + (parseFloat(i.valor) || 0), 0);
+    };
+    meses.forEach(recalcula);
+    recalcula(vencidas);
+  }
+
   // Calculate running balance — começa com o saldo atual, mas se houver vencidas
   // (pagamentos atrasados ainda por liquidar), o caixa "real" já está comprometido.
   // Mostramos isso descontando à entrada do mês 1.
@@ -421,13 +519,22 @@ export default function FluxoFuturo({ faturas: faturasTodas, faturasLoading, pag
 
   // Aplicar filtro de data aos meses para visualização (saldo acumulado mantém-se cumulativo desde o início)
   const mesesFiltrados = useMemo(() => {
-    if (!dataInicio && !dataFim) return mesesComSaldo;
-    return mesesComSaldo.filter(m => {
-      if (dataInicio && m.key < dataInicio) return false;
-      if (dataFim && m.key > dataFim) return false;
-      return true;
-    });
-  }, [mesesComSaldo, dataInicio, dataFim]);
+    let lista = mesesComSaldo;
+    if (dataInicio || dataFim) {
+      lista = lista.filter(m => {
+        if (dataInicio && m.key < dataInicio) return false;
+        if (dataFim && m.key > dataFim) return false;
+        return true;
+      });
+    }
+    // Por defeito mostram-se apenas os meses com lançamentos: projectar 36 meses
+    // vazios só afasta a informação útil. O mês corrente aparece sempre.
+    if (!mostrarVazios) {
+      const comMovimento = lista.filter(m => m.items.length > 0 || m.key === mesAtualKey);
+      if (comMovimento.length) lista = comMovimento;
+    }
+    return lista;
+  }, [mesesComSaldo, dataInicio, dataFim, mostrarVazios, mesAtualKey]);
 
   const anoGroups = useMemo(() => {
     const groups = {};
@@ -505,7 +612,7 @@ export default function FluxoFuturo({ faturas: faturasTodas, faturasLoading, pag
     await Promise.all(itens.map(it => onAddPagamento?.(it)));
 
     setShowForm(false);
-    setForm({ descricao: "", empresa: EMPRESA_DEFAULT, categoria: "Obra", obs: "", tipo: "saida" });
+    setForm({ descricao: "", empresa: "modernity", categoria: "Obra", obs: "", tipo: "saida" });
     setParcelasArr([]);
     setGenValor(""); setGenData(""); setGenN(1); setGenIntervalo("mensal"); setGenDias(30);
   };
@@ -517,15 +624,15 @@ export default function FluxoFuturo({ faturas: faturasTodas, faturasLoading, pag
 
       {/* Banner de loading global — mostra enquanto algum hook ainda não terminou. */}
       {stillLoading && (
-        <div style={{ background: "linear-gradient(90deg, #fef3c7 0%, #fde68a 50%, #fef3c7 100%)", backgroundSize: "200% 100%", animation: "lpx-shimmer 1.4s linear infinite", border: "1px solid #fcd34d", borderRadius: 10, padding: "10px 16px", display: "flex", alignItems: "center", gap: 10, fontSize: 12, color: "#92400e", fontWeight: 600 }}>
-          <div style={{ width: 14, height: 14, border: "2px solid #92400e", borderTopColor: "transparent", borderRadius: "50%", animation: "lpx-spin 0.8s linear infinite" }} />
+        <div style={{ background: "linear-gradient(90deg, #fef3c7 0%, #fde68a 50%, #fef3c7 100%)", backgroundSize: "200% 100%", animation: "rio-shimmer 1.4s linear infinite", border: "1px solid #fcd34d", borderRadius: 10, padding: "10px 16px", display: "flex", alignItems: "center", gap: 10, fontSize: 12, color: "#92400e", fontWeight: 600 }}>
+          <div style={{ width: 14, height: 14, border: "2px solid #92400e", borderTopColor: "transparent", borderRadius: "50%", animation: "rio-spin 0.8s linear infinite" }} />
           A carregar dados do Supabase…
           <span style={{ color: "#a16207", fontWeight: 400 }}>
             ({[pagamentosLoading && "pagamentos", faturasLoading && "faturas", vendasLoading && "vendas"].filter(Boolean).join(", ")})
           </span>
           <style>{`
-            @keyframes lpx-spin { to { transform: rotate(360deg); } }
-            @keyframes lpx-shimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
+            @keyframes rio-spin { to { transform: rotate(360deg); } }
+            @keyframes rio-shimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
           `}</style>
         </div>
       )}
@@ -547,8 +654,31 @@ export default function FluxoFuturo({ faturas: faturasTodas, faturasLoading, pag
               {v === "mensal" ? "Mensal" : "Anual"}
             </button>
           ))}
+          {isAdmin && (
+            <button onClick={() => setAproximar(true)}
+              title="Procurar faturas que correspondam às despesas previstas"
+              style={{ background: "#fef3c7", border: "1px solid #fde68a", color: "#b45309", padding: "7px 14px", borderRadius: 8, fontSize: 12, cursor: "pointer", fontWeight: 700 }}>
+              ⇄ Aproximar previsões a faturas
+            </button>
+          )}
+          {/* Real (com fatura) vs Previsto (estimativa lançada à mão) */}
+          <div style={{ display: "flex", gap: 2, background: "#f0f0f0", borderRadius: 8, padding: 2, marginLeft: 4 }}>
+            {[["todos", "Tudo"], ["real", "Custo real"], ["previsto", "Forecast"]].map(([v, lbl]) => (
+              <button key={v} onClick={() => setNatureza(v)}
+                title={v === "real" ? "Faturas emitidas e recebíveis contratados"
+                  : v === "previsto" ? "Previsões lançadas à mão, ainda sem fatura" : "Tudo"}
+                style={{ background: natureza === v ? "#fff" : "transparent", color: natureza === v ? "#1a1a2e" : "#888", border: "none", padding: "5px 12px", borderRadius: 6, fontSize: 11, cursor: "pointer", fontWeight: natureza === v ? 700 : 400, boxShadow: natureza === v ? "0 1px 3px rgba(0,0,0,0.12)" : "none" }}>
+                {lbl}
+              </button>
+            ))}
+          </div>
           {view === "mensal" && (
             <>
+              <label title="Por defeito só aparecem os meses com lançamentos"
+                style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 11, color: "#888", cursor: "pointer" }}>
+                <input type="checkbox" checked={mostrarVazios} onChange={e => setMostrarVazios(e.target.checked)} />
+                meses vazios
+              </label>
               <span style={{ fontSize: 11, color: "#888", marginLeft: 8 }}>De:</span>
               <input type="month" value={dataInicio} onChange={e => setDataInicio(e.target.value)}
                 style={{ background: "#f0f0f0", border: "none", padding: "6px 8px", borderRadius: 8, fontSize: 11, fontFamily: "monospace", color: "#1a1a2e" }} />
@@ -577,7 +707,7 @@ export default function FluxoFuturo({ faturas: faturasTodas, faturasLoading, pag
         const totalEntradasFiltrado = mesesFiltrados.reduce((s, m) => s + m.entradas, 0);
         const labelPeriodo = filtroAtivo
           ? (mesesFiltrados.length === 1 ? mesesFiltrados[0].label : `${mesesFiltrados[0]?.label || ""}—${ultimoMesFiltrado?.label || ""}`)
-          : "36m";
+          : `${mesesFiltrados.length}m`;
         const saldoProjetado = ultimoMesFiltrado?.saldo_fim || 0;
         return (
           <div style={{ display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: 12 }}>
@@ -757,7 +887,7 @@ export default function FluxoFuturo({ faturas: faturasTodas, faturasLoading, pag
             )}
 
             <button onClick={addParcela} type="button"
-              style={{ background: "none", border: "1px dashed #6B7C93", color: "#6B7C93", padding: "8px 16px", borderRadius: 8, fontSize: 12, fontWeight: 700, cursor: "pointer", marginBottom: 20 }}>
+              style={{ background: "none", border: "1px dashed #C8A96E", color: "#C8A96E", padding: "8px 16px", borderRadius: 8, fontSize: 12, fontWeight: 700, cursor: "pointer", marginBottom: 20 }}>
               + Adicionar parcela manualmente
             </button>
 
@@ -778,7 +908,9 @@ export default function FluxoFuturo({ faturas: faturasTodas, faturasLoading, pag
         <div style={{ padding: "14px 20px", borderBottom: "1px solid #f0f0f0", fontWeight: 700, color: "#1a1a2e", fontSize: 13, fontFamily: "Georgia,serif" }}>
           Fluxo de Caixa — {empObj.nome} · {(dataInicio || dataFim)
             ? `${mesesFiltrados.length} ${mesesFiltrados.length === 1 ? "mês" : "meses"} filtrados`
-            : `Próximos ${view === "mensal" ? "36 meses" : "3 anos"}`}
+            : view === "mensal"
+              ? `${mesesFiltrados.length} ${mesesFiltrados.length === 1 ? "mês" : "meses"} com lançamentos`
+              : "Próximos 3 anos"}
         </div>
         <div style={{ overflowX: "auto" }}>
           <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
@@ -820,7 +952,7 @@ export default function FluxoFuturo({ faturas: faturasTodas, faturasLoading, pag
                       {fmtDate(item.vencimento)} ⚠
                     </td>
                     <td colSpan={2} style={{ padding: "7px 16px", color: "#444", fontSize: 11 }}>
-                      <span style={{ color: "#888", marginRight: 6 }}>{item.origem}</span>{item.desc || "—"}
+                      <span style={{ background: (item.natureza || "previsto") === "real" ? "#e0f2fe" : "#fef3c7", color: (item.natureza || "previsto") === "real" ? "#0369a1" : "#b45309", fontSize: 9, padding: "1px 5px", borderRadius: 3, marginRight: 6, fontFamily: "monospace" }}>{(item.natureza || "previsto") === "real" ? "REAL" : "PREV"}</span><span style={{ background: (item.natureza || "previsto") === "real" ? "#e0f2fe" : "#fef3c7", color: (item.natureza || "previsto") === "real" ? "#0369a1" : "#b45309", fontSize: 9, padding: "1px 5px", borderRadius: 3, marginRight: 6, fontFamily: "monospace" }}>{(item.natureza || "previsto") === "real" ? "REAL" : "PREV"}</span><span style={{ color: "#888", marginRight: 6 }}>{item.origem}</span>{item.desc || "—"}
                     </td>
                     <td colSpan={2} style={{ padding: "7px 16px", fontFamily: "monospace", fontSize: 11, color: item.tipo === "entrada" ? "#16a34a" : "#dc2626", fontWeight: 600 }}>
                       {item.tipo === "entrada" ? "+" : "-"}{fmtFull(item.valor || 0)}
@@ -833,6 +965,9 @@ export default function FluxoFuturo({ faturas: faturasTodas, faturasLoading, pag
                             <button onClick={(e) => { e.stopPropagation(); handleMarkAsPaid(item.pagamento); }}
                               title="Marcar como Pago (sai do fluxo)"
                               style={{ background: "#dcfce7", border: "none", color: "#16a34a", padding: "3px 8px", borderRadius: 5, fontSize: 10, cursor: "pointer", marginLeft: 4, fontWeight: 700 }}>✓</button>
+                            <button onClick={(e) => { e.stopPropagation(); setConverter(item.pagamento); }}
+                              title="Já recebi a fatura: converter esta previsão em custo real"
+                              style={{ background: "#fef3c7", border: "none", color: "#b45309", padding: "3px 8px", borderRadius: 5, fontSize: 10, cursor: "pointer", fontWeight: 700 }}>→ fatura</button>
                             <button onClick={(e) => { e.stopPropagation(); openEdit(item.pagamento); }}
                               title="Editar pagamento"
                               style={{ background: "#f0f4ff", border: "none", color: "#4a6fa5", padding: "3px 7px", borderRadius: 5, fontSize: 10, cursor: "pointer" }}>✎</button>
@@ -846,9 +981,6 @@ export default function FluxoFuturo({ faturas: faturasTodas, faturasLoading, pag
                             <button onClick={(e) => { e.stopPropagation(); handleMarkFaturaPaid(item.fatura); }}
                               title="Marcar fatura como Paga"
                               style={{ background: "#dcfce7", border: "none", color: "#16a34a", padding: "3px 8px", borderRadius: 5, fontSize: 10, cursor: "pointer", marginLeft: 4, fontWeight: 700 }}>✓</button>
-                            <button onClick={(e) => { e.stopPropagation(); openEditFatura(item.fatura); }}
-                              title="Editar fatura"
-                              style={{ background: "#f0f4ff", border: "none", color: "#4a6fa5", padding: "3px 7px", borderRadius: 5, fontSize: 10, cursor: "pointer" }}>✎</button>
                             <button onClick={(e) => { e.stopPropagation(); handleDeleteFatura(item.fatura); }}
                               title="Eliminar fatura"
                               style={{ background: "#fff0f0", border: "none", color: "#dc2626", padding: "3px 7px", borderRadius: 5, fontSize: 10, cursor: "pointer" }}>✕</button>
@@ -912,6 +1044,9 @@ export default function FluxoFuturo({ faturas: faturasTodas, faturasLoading, pag
                                 <button onClick={(e) => { e.stopPropagation(); handleMarkAsPaid(item.pagamento); }}
                                   title="Marcar como Pago (sai do fluxo)"
                                   style={{ background: "#dcfce7", border: "none", color: "#16a34a", padding: "3px 8px", borderRadius: 5, fontSize: 10, cursor: "pointer", marginLeft: 4, fontWeight: 700 }}>✓</button>
+                                <button onClick={(e) => { e.stopPropagation(); setConverter(item.pagamento); }}
+                                  title="Já recebi a fatura: converter esta previsão em custo real"
+                                  style={{ background: "#fef3c7", border: "none", color: "#b45309", padding: "3px 8px", borderRadius: 5, fontSize: 10, cursor: "pointer", fontWeight: 700 }}>→ fatura</button>
                                 <button onClick={(e) => { e.stopPropagation(); openEdit(item.pagamento); }}
                                   title="Editar pagamento"
                                   style={{ background: "#f0f4ff", border: "none", color: "#4a6fa5", padding: "3px 7px", borderRadius: 5, fontSize: 10, cursor: "pointer" }}>✎</button>
@@ -942,61 +1077,147 @@ export default function FluxoFuturo({ faturas: faturasTodas, faturasLoading, pag
         </div>
       </div>
 
-      {/* Modal editar pagamento manual */}
-      {/* Modal — editar fatura a partir do fluxo */}
-      {editFatura && editFaturaForm && (
-        <div onClick={(e) => { if (e.target === e.currentTarget) closeEditFatura(); }}
-          style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", zIndex: 300, display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
-          <div style={{ background: "#fff", borderRadius: 14, padding: 22, width: "100%", maxWidth: 460, display: "flex", flexDirection: "column", gap: 12 }}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-              <div>
-                <div style={{ fontSize: 15, fontWeight: 700, color: "#1a1a2e", fontFamily: "Georgia,serif" }}>Editar fatura</div>
-                <div style={{ fontSize: 10, color: "#bbb", fontFamily: "monospace", marginTop: 2 }}>{editFatura.fatura || editFatura.id}</div>
-              </div>
-              <button onClick={closeEditFatura} style={{ background: "none", border: "none", fontSize: 20, cursor: "pointer", color: "#aaa" }}>✕</button>
+      {/* Painel de aproximação em lote */}
+      {aproximar && (
+        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.4)", zIndex: 215, display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}
+          onClick={e => { if (e.target === e.currentTarget) setAproximar(false); }}>
+          <div style={{ background: "#fff", borderRadius: 16, padding: 26, width: 940, maxWidth: "96vw", maxHeight: "88vh", display: "flex", flexDirection: "column", boxShadow: "0 20px 60px rgba(0,0,0,0.3)" }}>
+            <div style={{ fontSize: 18, fontWeight: 700, fontFamily: "Georgia,serif", color: "#1a1a2e" }}>
+              Aproximar previsões a faturas
+            </div>
+            <div style={{ fontSize: 12, color: "#888", margin: "5px 0 16px", lineHeight: 1.5 }}>
+              Para cada despesa prevista procurámos a fatura por pagar mais parecida, comparando valor,
+              data e descrição. Escolhe a fatura correta (ou deixa em branco) e confirma — as previsões
+              marcadas saem do fluxo e ficam só as faturas, sem duplicar valores.
             </div>
 
-            {[["Fornecedor", "fornecedor", "text"],
-              ["Categoria", "categoria", "text"],
-              ["Valor (€)", "valor", "number"],
-              ["Vencimento", "vencimento", "date"],
-              ["Observações", "obs", "text"]].map(([rot, campo, tipo]) => (
-              <div key={campo}>
-                <div style={{ fontSize: 9, color: "#aaa", textTransform: "uppercase", fontFamily: "monospace", marginBottom: 4 }}>{rot}</div>
-                <input type={tipo} value={editFaturaForm[campo]}
-                  onChange={e => setEditFaturaForm(f => ({ ...f, [campo]: e.target.value }))}
-                  style={{ width: "100%", background: "#f8f8f8", border: "1px solid #eee", borderRadius: 8, padding: "9px 11px", fontSize: 13, outline: "none" }} />
-              </div>
-            ))}
-
-            <div>
-              <div style={{ fontSize: 9, color: "#aaa", textTransform: "uppercase", fontFamily: "monospace", marginBottom: 4 }}>Estado</div>
-              <select value={editFaturaForm.status}
-                onChange={e => setEditFaturaForm(f => ({ ...f, status: e.target.value }))}
-                style={{ width: "100%", background: "#f8f8f8", border: "1px solid #eee", borderRadius: 8, padding: "9px 11px", fontSize: 13, outline: "none" }}>
-                {["Pendente", "Aprovada", "Paga", "Vencida", "Em disputa", "Rejeitada"].map(o => <option key={o}>{o}</option>)}
-              </select>
+            <div style={{ flex: 1, overflowY: "auto", border: "1px solid #eee", borderRadius: 10 }}>
+              {sugestoes.length === 0 ? (
+                <div style={{ padding: 40, textAlign: "center", fontSize: 13, color: "#aaa" }}>
+                  Não há despesas previstas em aberto.
+                </div>
+              ) : sugestoes.map(({ pagamento: p, ranking }) => {
+                const escolhido = escolhas[p.id] || "";
+                const conf = ranking[0]?.score || 0;
+                const nivel = conf >= 0.75 ? { txt: "provável", cor: "#16a34a", fundo: "#dcfce7" }
+                  : conf >= 0.45 ? { txt: "possível", cor: "#b45309", fundo: "#fef3c7" }
+                  : { txt: "sem par claro", cor: "#94a3b8", fundo: "#f1f5f9" };
+                return (
+                  <div key={p.id} style={{ display: "flex", gap: 14, alignItems: "center", padding: "12px 16px", borderBottom: "1px solid #f4f4f4", background: escolhido ? "#f0fdf4" : "#fff" }}>
+                    <div style={{ flex: "1 1 40%", minWidth: 0 }}>
+                      <div style={{ fontSize: 12, fontWeight: 600, color: "#1a1a2e", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                        {p.descricao}
+                      </div>
+                      <div style={{ fontSize: 10, color: "#aaa", fontFamily: "monospace", marginTop: 2 }}>
+                        {fmtFull(p.valor)} · {fmtDate(p.data_inicio)} · {labelEmpresa(p.empresa)}
+                      </div>
+                    </div>
+                    <span style={{ background: nivel.fundo, color: nivel.cor, fontSize: 10, padding: "3px 9px", borderRadius: 20, fontWeight: 700, whiteSpace: "nowrap" }}>
+                      {nivel.txt}
+                    </span>
+                    <div style={{ flex: "1 1 45%", minWidth: 0 }}>
+                      <select value={escolhido} onChange={e => setEscolhas(x => ({ ...x, [p.id]: e.target.value }))}
+                        style={{ width: "100%", background: "#f8f8f8", border: "1px solid #e4e4ea", borderRadius: 8, padding: "8px 10px", fontSize: 11, outline: "none" }}>
+                        <option value="">— não converter —</option>
+                        {ranking.map(({ fatura: f, score }) => (
+                          <option key={f.id} value={f.id}>
+                            {(f.fornecedor || f.fatura || "—").slice(0, 46)} · {fmtFull(f.valor)} · venc. {fmtDate(f.vencimento)} ({Math.round(score * 100)}%)
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+                );
+              })}
             </div>
 
-            <div style={{ display: "flex", gap: 8, marginTop: 6 }}>
-              <button onClick={() => { handleDeleteFatura(editFatura); closeEditFatura(); }}
-                style={{ background: "#fff0f0", border: "1px solid #fecaca", color: "#dc2626", padding: "10px 16px", borderRadius: 9, fontSize: 12, cursor: "pointer" }}>
-                Eliminar
-              </button>
-              <div style={{ flex: 1 }} />
-              <button onClick={closeEditFatura}
-                style={{ background: "#f4f5f7", border: "none", color: "#666", padding: "10px 18px", borderRadius: 9, fontSize: 13, cursor: "pointer" }}>
+            <div style={{ display: "flex", gap: 10, justifyContent: "space-between", alignItems: "center", marginTop: 16 }}>
+              <div style={{ fontSize: 12, color: "#888" }}>
+                {Object.values(escolhas).filter(Boolean).length} de {sugestoes.length} marcadas para converter
+              </div>
+              <div style={{ display: "flex", gap: 10 }}>
+                <button onClick={() => { setAproximar(false); setEscolhas({}); }}
+                  style={{ background: "#f0f0f0", border: "none", color: "#666", padding: "10px 18px", borderRadius: 8, fontSize: 12, cursor: "pointer" }}>
+                  Cancelar
+                </button>
+                <button onClick={aplicarAproximacoes} disabled={aAplicar || !Object.values(escolhas).filter(Boolean).length}
+                  style={{ background: Object.values(escolhas).filter(Boolean).length ? "#1a1a2e" : "#ddd", border: "none", color: "#fff", padding: "10px 20px", borderRadius: 8, fontSize: 12, cursor: "pointer", fontWeight: 700 }}>
+                  {aAplicar ? "A converter…" : "Converter marcadas"}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal converter previsão em custo real */}
+      {converter && (
+        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.4)", zIndex: 210, display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}
+          onClick={e => { if (e.target === e.currentTarget) setConverter(null); }}>
+          <div style={{ background: "#fff", borderRadius: 16, padding: 26, width: 620, maxHeight: "84vh", overflowY: "auto", boxShadow: "0 20px 60px rgba(0,0,0,0.3)" }}>
+            <div style={{ fontSize: 17, fontWeight: 700, fontFamily: "Georgia,serif", color: "#1a1a2e", marginBottom: 4 }}>
+              Converter previsão em custo real
+            </div>
+            <div style={{ fontSize: 12, color: "#888", marginBottom: 16, lineHeight: 1.5 }}>
+              <strong style={{ color: "#444" }}>{converter.descricao}</strong> · {fmtFull(converter.valor)} · {fmtDate(converter.data_inicio)}
+              <br />A previsão sai do fluxo para não somar em duplicado com a fatura.
+            </div>
+
+            {candidatasFatura(converter).length > 0 ? (
+              <>
+                <div style={{ fontSize: 11, color: "#888", textTransform: "uppercase", letterSpacing: "0.06em", fontFamily: "monospace", marginBottom: 8 }}>
+                  Faturas por pagar que podem corresponder
+                </div>
+                <div style={{ border: "1px solid #eee", borderRadius: 10, overflow: "hidden", marginBottom: 16 }}>
+                  {candidatasFatura(converter).map(f => {
+                    const dif = (parseFloat(f.valor) || 0) - (parseFloat(converter.valor) || 0);
+                    return (
+                      <div key={f.id} onClick={() => handleConverter(converter, f)}
+                        style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, padding: "10px 14px", borderBottom: "1px solid #f4f4f4", cursor: "pointer" }}
+                        onMouseEnter={e => e.currentTarget.style.background = "#f0f4ff"}
+                        onMouseLeave={e => e.currentTarget.style.background = "#fff"}>
+                        <div style={{ minWidth: 0 }}>
+                          <div style={{ fontSize: 12, color: "#1a1a2e", fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                            {f.fornecedor || f.fatura || "—"}
+                          </div>
+                          <div style={{ fontSize: 10, color: "#aaa", fontFamily: "monospace" }}>
+                            {f.fatura ? f.fatura + " · " : ""}venc. {fmtDate(f.vencimento)} · {f.categoria || "—"}
+                          </div>
+                        </div>
+                        <div style={{ textAlign: "right", whiteSpace: "nowrap" }}>
+                          <div style={{ fontSize: 12, fontFamily: "monospace", fontWeight: 700, color: "#1a1a2e" }}>{fmtFull(f.valor)}</div>
+                          <div style={{ fontSize: 10, fontFamily: "monospace", color: Math.abs(dif) < 0.005 ? "#16a34a" : "#b45309" }}>
+                            {Math.abs(dif) < 0.005 ? "valor igual" : (dif > 0 ? "+" : "") + fmtFull(dif)}
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </>
+            ) : (
+              <div style={{ background: "#fffbeb", border: "1px solid #fde68a", borderRadius: 10, padding: "12px 14px", fontSize: 12, color: "#a16207", marginBottom: 16, lineHeight: 1.5 }}>
+                Não há faturas por pagar desta empresa com vencimento próximo. Importa a fatura
+                primeiro (Importar → Fatura) e volta aqui, ou converte sem associar.
+              </div>
+            )}
+
+            <div style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}>
+              <button onClick={() => setConverter(null)}
+                style={{ background: "#f0f0f0", border: "none", color: "#666", padding: "9px 18px", borderRadius: 8, fontSize: 12, cursor: "pointer" }}>
                 Cancelar
               </button>
-              <button onClick={handleSaveEditFatura}
-                style={{ background: "#1a1a2e", border: "none", color: "#fff", padding: "10px 22px", borderRadius: 9, fontSize: 13, fontWeight: 600, cursor: "pointer" }}>
-                Guardar
+              <button onClick={() => handleConverter(converter, null)}
+                title="Retira a previsão do fluxo sem indicar qual a fatura"
+                style={{ background: "#1a1a2e", border: "none", color: "#fff", padding: "9px 18px", borderRadius: 8, fontSize: 12, cursor: "pointer", fontWeight: 600 }}>
+                Converter sem associar
               </button>
             </div>
           </div>
         </div>
       )}
 
+      {/* Modal editar pagamento manual */}
       {editPagamento && editForm && (
         <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.4)", zIndex: 200, display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}
           onClick={e => { if (e.target === e.currentTarget) closeEdit(); }}>

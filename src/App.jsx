@@ -13,6 +13,7 @@ import { EMPRESAS as EMPRESAS_ALL, BANCO_COLORS as BANCO_COLORS_CFG, GRUPOS, GRU
 const EMPRESAS = EMPRESAS_ALL;
 import FotosView from "./FotosView.jsx";
 import IRView from "./IRView.jsx";
+import { STATUS_FATURA, STATUS_STYLES, statusFatura, faturaPaga, faturaAtrasada } from "./status.js";
 import { BRAND } from "./brand.js";
 import { fmtEUR, fmtCompacto, fmtPct, fmtInt, fmtData } from "./formato.js";
 
@@ -33,7 +34,7 @@ const REAL_ORCADO_PROJECTS = [];
 
 // ─── CONTAS A PAGAR ───────────────────────────────────────────────────────────
 const TIPO_PROJETO = ["Residencial","Comercial","Misto","Terreno","Remodelação","CSC"];
-const STATUS_FATURA = ["Pendente","Aprovada","Paga","Vencida","Em disputa","Rejeitada"];
+// Estados da fatura: fonte única em status.js (igual ao ERP da Rio Capital)
 const INITIAL_FATURAS = [];
 
 // ─── HELPERS ──────────────────────────────────────────────────────────────────
@@ -48,7 +49,7 @@ const fmtDate = (s) => {
 const pct = (r,o) => (!o||o===0) ? null : ((r/o)*100);
 
 const BANCO_COLORS = { ...BANCO_COLORS_CFG, "Millennium":"#e84393","BNI":"#0057b7","NovoBanco":"#ff6200","Banco Invest":"#1e3a6e","Eurobic":"#e74c3c" };
-const STATUS_STYLES = { "Pendente":{bg:"#fffbeb",text:"#d97706",border:"#fde68a"},"Aprovada":{bg:"#eff6ff",text:"#2563eb",border:"#bfdbfe"},"Paga":{bg:"#f0fdf4",text:"#16a34a",border:"#bbf7d0"},"Vencida":{bg:"#fef2f2",text:"#dc2626",border:"#fecaca"},"Em disputa":{bg:"#fdf4ff",text:"#9333ea",border:"#e9d5ff"},"Rejeitada":{bg:"#f5f5f5",text:"#999",border:"#e0e0e0"} };
+
 const GRUPO_COLORS = { receita:"#16a34a", capex:"#dc2626", obra:"#b45309", opex:"#7c3aed", resultado:"#0891b2" };
 
 // ─── UI ATOMS ────────────────────────────────────────────────────────────────
@@ -503,20 +504,20 @@ function ContasPagar({canEdit, faturas: faturasTodas, setFaturas, addFatura, upd
     const blob=new Blob(["﻿"+csv],{type:"text/csv;charset=utf-8"});
     const a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download="mapa_pagamentos.csv";a.click();
   };
-  const [form,setForm]=useState({empresa:"",projeto:"",fatura:"",fornecedor:"",categoria:"",tipo_projeto:"",valor:"",vencimento:"",status:"Pendente",obs:"",anexo_nome:"",anexo_b64:""});
+  const [form,setForm]=useState({empresa:"",projeto:"",fatura:"",fornecedor:"",categoria:"",tipo_projeto:"",valor:"",vencimento:"",previsao_pagamento:"",status:"Pendente em dia",obs:"",anexo_nome:"",anexo_b64:""});
 
   const hoje=new Date().toISOString().split("T")[0];
   const filtered=faturas.filter(f=>
-    (fStatus==="Todos"||f.status===fStatus) &&
+    (fStatus==="Todos"||statusFatura(f)===fStatus) &&
     (fEmp==="Todas"||f.empresa===fEmp) &&
     (fFornec===""||(f.fornecedor||"").toLowerCase().includes(fFornec.toLowerCase()))
   );
   // Sugestões únicas de fornecedores para o datalist
   const fornecedoresUnicos=[...new Set(faturas.map(f=>f.fornecedor).filter(Boolean))].sort();
   const kpis={
-    pendente:faturas.filter(f=>f.status==="Pendente").reduce((s,f)=>s+f.valor,0),
-    vencida:faturas.filter(f=>f.status==="Vencida"||(f.status==="Pendente"&&f.vencimento<hoje)).reduce((s,f)=>s+f.valor,0),
-    paga:faturas.filter(f=>f.status==="Paga").reduce((s,f)=>s+f.valor,0),
+    pendente:faturas.filter(f=>!faturaPaga(f)).reduce((s,f)=>s+f.valor,0),
+    vencida:faturas.filter(f=>faturaAtrasada(f)).reduce((s,f)=>s+f.valor,0),
+    paga:faturas.filter(f=>faturaPaga(f)).reduce((s,f)=>s+f.valor,0),
   };
 
   // Subtotal do que está filtrado no ecrã (só aparece quando há filtro ativo)
@@ -524,12 +525,12 @@ function ContasPagar({canEdit, faturas: faturasTodas, setFaturas, addFatura, upd
   const sub = {
     n: filtered.length,
     total: filtered.reduce((s,f)=>s+(f.valor||0),0),
-    porPagar: filtered.filter(f=>f.status!=="Paga"&&f.status!=="Rejeitada").reduce((s,f)=>s+(f.valor||0),0),
-    vencido: filtered.filter(f=>f.status==="Vencida"||(f.status==="Pendente"&&f.vencimento&&f.vencimento<hoje)).reduce((s,f)=>s+(f.valor||0),0),
-    paga: filtered.filter(f=>f.status==="Paga").reduce((s,f)=>s+(f.valor||0),0),
+    porPagar: filtered.filter(f=>!faturaPaga(f)).reduce((s,f)=>s+(f.valor||0),0),
+    vencido: filtered.filter(f=>faturaAtrasada(f)).reduce((s,f)=>s+(f.valor||0),0),
+    paga: filtered.filter(f=>faturaPaga(f)).reduce((s,f)=>s+(f.valor||0),0),
   };
 
-  const reset=()=>{setForm({empresa:"",projeto:"",fatura:"",fornecedor:"",categoria:"",tipo_projeto:"",valor:"",vencimento:"",status:"Pendente",obs:"",anexo_nome:"",anexo_b64:""});setEditId(null);};
+  const reset=()=>{setForm({empresa:"",projeto:"",fatura:"",fornecedor:"",categoria:"",tipo_projeto:"",valor:"",vencimento:"",previsao_pagamento:"",status:"Pendente em dia",obs:"",anexo_nome:"",anexo_b64:""});setEditId(null);};
   const save = async () => {
     const fat = { ...form, id: editId || "f" + Date.now(), valor: parseFloat(form.valor) || 0 };
     if (editId) {
@@ -555,7 +556,7 @@ function ContasPagar({canEdit, faturas: faturasTodas, setFaturas, addFatura, upd
   // Marcar como paga — duas confirmações, porque mexe com dinheiro e não tem
   // desfazer imediato.
   const marcarPaga = async (f) => {
-    if (f.status === "Paga") return;
+    if (faturaPaga(f)) return;
     const empNome = EMPRESAS.find(e=>e.id===f.empresa)?.nome || f.empresa || "\u2014";
     if (!window.confirm(
       "Marcar esta fatura como PAGA?\n\n" +
@@ -568,19 +569,19 @@ function ContasPagar({canEdit, faturas: faturasTodas, setFaturas, addFatura, upd
       "Confirmas em definitivo?\n\n" +
       fmt(f.valor) + " a " + (f.fornecedor || "\u2014") + " passa a PAGA."
     )) return;
-    const res = await updateFatura?.(f.id, { ...f, status: "Paga" });
+    const res = await updateFatura?.(f.id, { ...f, status: "Pago" });
     if (res?.error) { alert("Erro ao marcar como paga:\n\n" + (res.error.message || res.error)); return; }
     if (!res?.data || res.data.length === 0) alert("Nada foi alterado (provavelmente RLS).");
   };
 
   const marcarPagasSelecionadas = async () => {
-    const alvo = filtered.filter(f=>mapaSelected.includes(f.id) && f.status!=="Paga");
+    const alvo = filtered.filter(f=>mapaSelected.includes(f.id) && !faturaPaga(f));
     if (!alvo.length) { alert("Nao ha faturas por pagar entre as selecionadas."); return; }
     const total = alvo.reduce((s,f)=>s+(f.valor||0),0);
     if (!window.confirm("Marcar " + alvo.length + " fatura(s) como PAGAS?\n\nTotal: " + fmt(total))) return;
     if (!window.confirm("Confirmas em definitivo?\n\n" + alvo.length + " fatura(s) passam a PAGA \u2014 " + fmt(total) + ".")) return;
     for (const f of alvo) {
-      const res = await updateFatura?.(f.id, { ...f, status: "Paga" });
+      const res = await updateFatura?.(f.id, { ...f, status: "Pago" });
       if (res?.error) { alert("Erro na fatura de " + (f.fornecedor||"\u2014") + ":\n\n" + (res.error.message||res.error)); return; }
     }
     setMapaSelected([]);
@@ -656,7 +657,8 @@ function ContasPagar({canEdit, faturas: faturasTodas, setFaturas, addFatura, upd
               <div style={{display:"flex",flexDirection:"column",gap:4}}><label style={{fontSize:10,color:"#aaa",fontFamily:"monospace",textTransform:"uppercase"}}>Tipo de Projeto</label><select value={form.tipo_projeto||""} onChange={e=>setForm(f=>({...f,tipo_projeto:e.target.value}))} style={{background:"#f8f8f8",border:"1px solid #e8e8e8",borderRadius:8,padding:"9px 12px",fontSize:13,outline:"none"}}><option value="">Selecionar...</option>{TIPO_PROJETO.map(o=><option key={o}>{o}</option>)}</select></div>
               <div style={{display:"flex",flexDirection:"column",gap:4}}><label style={{fontSize:10,color:"#aaa",fontFamily:"monospace",textTransform:"uppercase"}}>Valor (€)</label><input type="number" value={form.valor||""} onChange={e=>setForm(f=>({...f,valor:e.target.value}))} style={{background:"#f8f8f8",border:"1px solid #e8e8e8",borderRadius:8,padding:"9px 12px",fontSize:13,outline:"none"}}/></div>
               <div style={{display:"flex",flexDirection:"column",gap:4}}><label style={{fontSize:10,color:"#aaa",fontFamily:"monospace",textTransform:"uppercase"}}>Vencimento</label><input type="date" value={form.vencimento||""} onChange={e=>setForm(f=>({...f,vencimento:e.target.value}))} style={{background:"#f8f8f8",border:"1px solid #e8e8e8",borderRadius:8,padding:"9px 12px",fontSize:13,outline:"none"}}/></div>
-              <div style={{display:"flex",flexDirection:"column",gap:4}}><label style={{fontSize:10,color:"#aaa",fontFamily:"monospace",textTransform:"uppercase"}}>Status</label><select value={form.status||"Pendente"} onChange={e=>setForm(f=>({...f,status:e.target.value}))} style={{background:"#f8f8f8",border:"1px solid #e8e8e8",borderRadius:8,padding:"9px 12px",fontSize:13,outline:"none"}}><option value="">Selecionar...</option>{STATUS_FATURA.map(o=><option key={o}>{o}</option>)}</select></div>
+              <div style={{display:"flex",flexDirection:"column",gap:4}}><label style={{fontSize:10,color:"#aaa",fontFamily:"monospace",textTransform:"uppercase"}}>Previsão de pagamento</label><input type="date" value={form.previsao_pagamento||""} onChange={e=>setForm(f=>({...f,previsao_pagamento:e.target.value}))} title="Quando tencionamos pagar — é esta data que conta no Fluxo Futuro" style={{background:"#f8f8f8",border:"1px solid #e8e8e8",borderRadius:8,padding:"9px 12px",fontSize:13,outline:"none"}}/></div>
+              <div style={{display:"flex",flexDirection:"column",gap:4}}><label style={{fontSize:10,color:"#aaa",fontFamily:"monospace",textTransform:"uppercase"}}>Status</label><select value={form.status||"Pendente em dia"} onChange={e=>setForm(f=>({...f,status:e.target.value}))} style={{background:"#f8f8f8",border:"1px solid #e8e8e8",borderRadius:8,padding:"9px 12px",fontSize:13,outline:"none"}}><option value="">Selecionar...</option>{STATUS_FATURA.map(o=><option key={o}>{o}</option>)}</select></div>
               <div style={{gridColumn:"1/-1",display:"flex",flexDirection:"column",gap:4}}>
                 <label style={{fontSize:10,color:"#aaa",fontFamily:"monospace",textTransform:"uppercase"}}>Observações</label>
                 <textarea value={form.obs} onChange={e=>setForm(f=>({...f,obs:e.target.value}))} rows={3} style={{background:"#f8f8f8",border:"1px solid #e8e8e8",borderRadius:8,padding:"9px 12px",fontSize:13,outline:"none",resize:"vertical",fontFamily:"inherit",width:"100%",boxSizing:"border-box"}}/>
@@ -747,7 +749,7 @@ function ContasPagar({canEdit, faturas: faturasTodas, setFaturas, addFatura, upd
           <table style={{width:"100%",borderCollapse:"collapse",fontSize:12}}>
             <thead>
               <tr style={{background:"#f8f9fc"}}>
-                {["","Empresa","Projeto","Fatura","Fornecedor","Categoria","Valor","Vencimento","Status","Obs.",""].map(h=>(
+                {["","Empresa","Projeto","Fatura","Fornecedor","Categoria","Valor","Vencimento","Prev. pagto","Status","Obs.",""].map(h=>(
                   <th key={h} style={{padding:"10px 14px",textAlign:"left",color:"#aaa",fontSize:10,letterSpacing:"0.08em",textTransform:"uppercase",fontFamily:"monospace",borderBottom:"1px solid #f0f0f0",whiteSpace:"nowrap"}}>{h}</th>
                 ))}
               </tr>
@@ -756,8 +758,8 @@ function ContasPagar({canEdit, faturas: faturasTodas, setFaturas, addFatura, upd
               {filtered.length===0&&<tr><td colSpan={10} style={{textAlign:"center",padding:32,color:"#ccc"}}>Nenhuma fatura encontrada</td></tr>}
               {filtered.map(f=>{
                 const emp=EMPRESAS.find(e=>e.id===f.empresa);
-                const vencida=f.vencimento<hoje&&f.status==="Pendente";
-                const rejeitada=f.status==="Rejeitada";
+                const vencida=faturaAtrasada(f);
+                const rejeitada=statusFatura(f)==="Pagamento bloqueado";
                 const inMapa=mapaSelected.includes(f.id);
                 return (
                   <tr key={f.id} style={{borderBottom:"1px solid #fafafa",background:rejeitada?"#f9f9f9":vencida?"#fff8f8":inMapa?"#f0f9ff":"",opacity:rejeitada?0.6:1}}
@@ -773,12 +775,16 @@ function ContasPagar({canEdit, faturas: faturasTodas, setFaturas, addFatura, upd
                     <td style={{padding:"11px 14px"}}><span style={{background:"#f0f4ff",color:"#4a6fa5",fontSize:10,padding:"2px 8px",borderRadius:4,fontFamily:"monospace"}}>{f.categoria}</span></td>
                     <td style={{padding:"11px 14px",fontFamily:"monospace",fontWeight:700,whiteSpace:"nowrap",textDecoration:rejeitada?"line-through":"none"}}>{fmt(f.valor)}</td>
                     <td style={{padding:"11px 14px",fontFamily:"monospace",fontSize:11,color:vencida?"#dc2626":"#888",fontWeight:vencida?700:400}}>{fmtDate(f.vencimento)}{vencida?" ⚠":""}</td>
-                    <td style={{padding:"11px 14px"}}><StatusPill status={f.status}/></td>
+                    <td style={{padding:"11px 14px",fontFamily:"monospace",fontSize:11,color:f.previsao_pagamento?"#4a6fa5":"#ddd"}}
+                      title={f.previsao_pagamento?"Data em que tencionamos pagar — é esta que conta no Fluxo Futuro":"Sem previsão: o fluxo usa o vencimento"}>
+                      {f.previsao_pagamento?fmtDate(f.previsao_pagamento):"—"}
+                    </td>
+                    <td style={{padding:"11px 14px"}}><StatusPill status={statusFatura(f)}/></td>
                     <td style={{padding:"11px 14px",color:"#bbb",fontSize:11,maxWidth:100,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{f.obs}</td>
                     <td style={{padding:"11px 14px"}}>
                       <div style={{display:"flex",gap:4}}>
                         {f.anexo_b64&&<button onClick={()=>setViewAnexo(f)} title="Ver fatura" style={{background:"#f0f4ff",border:"none",color:"#4a6fa5",padding:"4px 9px",borderRadius:6,fontSize:11,cursor:"pointer"}}>📎</button>}
-                        {canEdit&&!rejeitada&&f.status!=="Paga"&&<button onClick={()=>marcarPaga(f)} title="Marcar como paga" style={{background:"#f0fdf4",border:"1px solid #bbf7d0",color:"#16a34a",padding:"4px 9px",borderRadius:6,fontSize:11,cursor:"pointer",fontWeight:700}}>✓€</button>}
+                        {canEdit&&!rejeitada&&!faturaPaga(f)&&<button onClick={()=>marcarPaga(f)} title="Marcar como paga" style={{background:"#f0fdf4",border:"1px solid #bbf7d0",color:"#16a34a",padding:"4px 9px",borderRadius:6,fontSize:11,cursor:"pointer",fontWeight:700}}>✓€</button>}
                         {canEdit&&<button onClick={()=>{setForm({...f,valor:String(f.valor),anexo_nome:f.anexo_nome||"",anexo_b64:f.anexo_b64||""});setEditId(f.id);setShowForm(true);}} style={{background:"#f0f4ff",border:"none",color:"#4a6fa5",padding:"4px 9px",borderRadius:6,fontSize:11,cursor:"pointer"}}>✎</button>}
                         {canEdit&&<button onClick={async ()=>{
                           if (!window.confirm(`Eliminar fatura "${f.fatura || f.id}" (${f.fornecedor || ''})?\nEsta acção não pode ser desfeita.`)) return;

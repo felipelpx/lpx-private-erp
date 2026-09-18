@@ -1672,6 +1672,56 @@ export default function ExtratosView({ EMPRESAS, extrato, caixaUnico, setCaixaUn
   // Editar/eliminar movimentos: admin e gestor (antes era só admin, o que
   // deixava os gestores sem forma de corrigir lançamentos).
   const podeEditarMov = currentUser?.role === "admin" || currentUser?.role === "gestor";
+
+  // ─── Coluna FATURA ────────────────────────────────────────────────────────
+  // Para cada saída, diz se já existe documento: procura no Contas a Pagar uma
+  // fatura da mesma empresa com o mesmo valor e data próxima. A marcação à mão
+  // tem precedência sobre a automática.
+  const empresaDaConta = activeEmp?.id || null;
+  const faturasDaEmpresa = useMemo(
+    () => (faturas || []).filter(f => !empresaDaConta || f.empresa === empresaDaConta),
+    [faturas, empresaDaConta]
+  );
+
+  const estadoFatura = (m) => {
+    const v = Number(m.valor) || 0;
+    if (v >= 0) return { tipo: "na", txt: "—", cor: "#ddd", fundo: "transparent" };
+    if (/internal transfer|transferência interna/i.test(m.categoria || "")) {
+      return { tipo: "na", txt: "interna", cor: "#bbb", fundo: "transparent" };
+    }
+    const manual = m.fatura_estado || (m.fatura_ok === true ? "ok" : m.fatura_ok === false ? "pendente" : null);
+    if (manual === "ok")       return { tipo: "ok",   txt: "✓ OK",     cor: "#15803d", fundo: "#dcfce7" };
+    if (manual === "pendente") return { tipo: "pend", txt: "pendente", cor: "#b45309", fundo: "#fef3c7" };
+    if (manual === "sem")      return { tipo: "sem",  txt: "não terá", cor: "#64748b", fundo: "#f1f5f9" };
+
+    const alvo = Math.abs(v);
+    const dm = new Date(String(m.data || "").slice(0, 10) + "T00:00:00").getTime();
+    const achou = faturasDaEmpresa.some(f => {
+      if (Math.abs(Math.abs(Number(f.valor) || 0) - alvo) > 0.02) return false;
+      const df = f.previsao_pagamento || f.vencimento;
+      if (!df || !Number.isFinite(dm)) return true;
+      return Math.abs(new Date(String(df).slice(0, 10) + "T00:00:00").getTime() - dm) <= 45 * 86400000;
+    });
+    return achou
+      ? { tipo: "auto", txt: "✓ auto",   cor: "#0369a1", fundo: "#e0f2fe" }
+      : { tipo: "pend", txt: "pendente", cor: "#b45309", fundo: "#fef3c7" };
+  };
+
+  // Ciclo ao clicar: automático → OK → pendente → não terá → automático
+  const PROXIMO_ESTADO = { auto: "ok", ok: "pendente", pend: "sem", sem: null };
+
+  const marcarFatura = async (m, estadoAtual) => {
+    const novo = PROXIMO_ESTADO[estadoAtual] ?? "ok";
+    const res = await sbUpdate(m.id, { fatura_estado: novo, fatura_ok: null });
+    if (res?.error) {
+      const msg = res.error.message || String(res.error);
+      alert(/fatura_estado|fatura_ok/.test(msg)
+        ? "Faltam colunas na tabela movimentos. No SQL Editor do Supabase:\n\n"
+          + "alter table movimentos add column if not exists fatura_estado text;\n"
+          + "alter table movimentos add column if not exists fatura_ok boolean;"
+        : "Erro ao guardar: " + msg);
+    }
+  };
   const [descFilter, setDescFilter] = useState("");
   const [catFilter, setCatFilter] = useState("");
   const [perPage, setPerPage] = useState(15);
@@ -2216,7 +2266,7 @@ export default function ExtratosView({ EMPRESAS, extrato, caixaUnico, setCaixaUn
                 <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
                   <thead>
                     <tr style={{ background: "#fafafa" }}>
-                      {["Data", "Descrição", "Valor", "Saldo", "Categoria", "Detalhes", ...(podeEditarMov?["Ações"]:[])].map(h => (
+                      {["Data", "Descrição", "Valor", "Saldo", "Fatura", "Categoria", "Detalhes", ...(podeEditarMov?["Ações"]:[])].map(h => (
                         <th key={h} style={{ padding: "9px 16px", textAlign: "left", color: "#aaa", fontSize: 10, letterSpacing: "0.07em", textTransform: "uppercase", fontFamily: "monospace", borderBottom: "1px solid #f0f0f0", whiteSpace: "nowrap" }}>{h}</th>
                       ))}
                     </tr>
@@ -2235,6 +2285,23 @@ export default function ExtratosView({ EMPRESAS, extrato, caixaUnico, setCaixaUn
                         </td>
                         <td style={{ padding: "10px 16px", color: "#666", fontFamily: "monospace", whiteSpace: "nowrap" }}>
                           {m.saldo != null ? fmtN(m.saldo) : "—"}
+                        </td>
+                        <td style={{ padding: "6px 10px" }}>
+                          {(() => {
+                            const e = estadoFatura(m);
+                            if (e.tipo === "na") return <span style={{ color: e.cor, fontSize: 10, fontFamily: "monospace" }}>{e.txt}</span>;
+                            return (
+                              <button onClick={() => marcarFatura(m, e.tipo)}
+                                title={e.tipo === "auto"
+                                  ? "Encontrada fatura com o mesmo valor no Contas a Pagar. Clica para marcar à mão."
+                                  : e.tipo === "sem"
+                                  ? "Marcado como pagamento sem documento. Clica para voltar ao automático."
+                                  : "Clica para alternar: OK → pendente → não terá → automático."}
+                                style={{ background: e.fundo, color: e.cor, border: "none", borderRadius: 20, padding: "3px 10px", fontSize: 10, fontFamily: "monospace", fontWeight: 700, cursor: "pointer", whiteSpace: "nowrap" }}>
+                                {e.txt}
+                              </button>
+                            );
+                          })()}
                         </td>
                         <td style={{ padding: "6px 10px" }}>
                           <EditableCategoria
