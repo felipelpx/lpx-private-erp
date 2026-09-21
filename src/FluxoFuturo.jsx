@@ -549,29 +549,63 @@ export default function FluxoFuturo({ faturas: faturasTodas, faturasLoading, pag
   }, [mesesComSaldo]);
 
   // Helpers parcelas
-  const dateToISO = (d) => d.toISOString().slice(0,10);
-  const addStep = (d, intervalo, dias) => {
-    if (intervalo === "mensal") return new Date(d.getFullYear(), d.getMonth()+1, d.getDate());
-    if (intervalo === "trimestral") return new Date(d.getFullYear(), d.getMonth()+3, d.getDate());
-    if (intervalo === "anual") return new Date(d.getFullYear()+1, d.getMonth(), d.getDate());
-    const days = intervalo === "semanal" ? 7
-              : intervalo === "quinzenal" ? 15
-              : (parseInt(dias) || 30);
-    return new Date(d.getTime() + days * 86400000);
+  //
+  // Três cuidados que o gerador antigo não tinha:
+  //  1. Data em hora LOCAL. toISOString() converte para UTC e, em Lisboa no
+  //     verão, "30/09 00:00" passava a "29/09 23:00" — a 1.ª parcela recuava um dia.
+  //  2. Fim de mês. 30/01 + 1 mês = "30/02", que não existe; o JavaScript saltava
+  //     para 02/03 e todas as parcelas seguintes escorregavam para dia 1 ou 2.
+  //     Agora o dia fica preso ao último dia do mês (30/02 → 28/02).
+  //  3. Cada parcela calcula-se a partir da data INICIAL e do seu índice, não da
+  //     parcela anterior — assim um fevereiro curto não arrasta as seguintes.
+  const dateToISO = (d) =>
+    `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+
+  const ultimoDiaDoMes = (ano, mes) => new Date(ano, mes + 1, 0).getDate();
+
+  // Soma `meses` a uma data, prendendo o dia ao fim do mês quando necessário
+  const somaMeses = (base, meses, diaOriginal) => {
+    const alvo = new Date(base.getFullYear(), base.getMonth() + meses, 1);
+    const dia = Math.min(diaOriginal, ultimoDiaDoMes(alvo.getFullYear(), alvo.getMonth()));
+    return new Date(alvo.getFullYear(), alvo.getMonth(), dia);
   };
+
+  // Data da parcela i (0 = a primeira), sempre a partir da data inicial
+  const dataParcela = (inicio, i, intervalo, dias) => {
+    const dia = inicio.getDate();
+    if (intervalo === "mensal")     return somaMeses(inicio, i, dia);
+    if (intervalo === "trimestral") return somaMeses(inicio, i * 3, dia);
+    if (intervalo === "anual")      return somaMeses(inicio, i * 12, dia);
+    const passo = intervalo === "semanal" ? 7
+                : intervalo === "quinzenal" ? 15
+                : (parseInt(dias) || 30);
+    return new Date(inicio.getFullYear(), inicio.getMonth(), inicio.getDate() + i * passo);
+  };
+
+  // Compatibilidade: próxima data depois de `d` (usado ao acrescentar à mão)
+  const addStep = (d, intervalo, dias) => dataParcela(d, 1, intervalo, dias);
+
+  // Aceita "77953,17", "77.953,17" e "77953.17"
+  const lerValor = (t) => {
+    let x = String(t ?? "").trim().replace(/[^\d.,-]/g, "");
+    if (x.includes(",") && x.includes(".")) x = x.replace(/\./g, "").replace(",", ".");
+    else if (x.includes(",")) x = x.replace(",", ".");
+    const n = parseFloat(x);
+    return isFinite(n) ? n : 0;
+  };
+
   const gerarParcelas = () => {
     const n = Math.max(1, Math.min(120, parseInt(genN) || 1));
-    const total = parseFloat(genValor) || 0;
+    const total = lerValor(genValor);
     const cents = Math.round(total * 100);
     const baseCents = Math.floor(cents / n);
     const remainder = cents - baseCents * n;
-    const venc0 = genData || new Date().toISOString().slice(0,10);
-    let d = new Date(venc0 + "T00:00:00");
+    const venc0 = genData || dateToISO(new Date());
+    const inicio = new Date(venc0 + "T00:00:00");
     const novo = [];
     for (let i = 0; i < n; i++) {
       const v = i === 0 ? (baseCents + remainder) / 100 : baseCents / 100;
-      novo.push({ data: dateToISO(d), valor: v, obs: "" });
-      d = addStep(d, genIntervalo, genDias);
+      novo.push({ data: dateToISO(dataParcela(inicio, i, genIntervalo, genDias)), valor: v, obs: "" });
     }
     setParcelasArr(novo);
   };
@@ -589,7 +623,18 @@ export default function FluxoFuturo({ faturas: faturasTodas, faturasLoading, pag
   const handleAddPagamento = async () => {
     if (!form.descricao) { alert("Indica uma descrição."); return; }
     if (parcelasArr.length === 0) { alert("Adiciona pelo menos uma parcela."); return; }
-    if (parcelasArr.some(p => !p.data)) { alert("Todas as parcelas precisam de data."); return; }
+    const semData = parcelasArr
+      .map((p, i) => ({ p, i }))
+      .filter(({ p }) => !p.data || isNaN(new Date(p.data + "T00:00:00")));
+    if (semData.length) {
+      const lista = semData.map(({ i }) => `${i + 1}/${parcelasArr.length}`).join(", ");
+      alert(
+        `${semData.length === 1 ? "A parcela" : "As parcelas"} ${lista} ${semData.length === 1 ? "tem" : "têm"} uma data inválida ou vazia.\n\n` +
+        "Atenção: o calendário deixa escrever datas que não existem (ex.: 30/02 ou 31/04) " +
+        "e trata-as como vazias. Usa o último dia do mês."
+      );
+      return;
+    }
 
     const baseId = "pe_" + Date.now();
     const n = parcelasArr.length;
@@ -850,7 +895,8 @@ export default function FluxoFuturo({ faturas: faturasTodas, faturasLoading, pag
                         <td style={{ padding: "6px 8px" }}>
                           <input type="date" value={p.data}
                             onChange={e => updateParcela(i, { data: e.target.value })}
-                            style={{ background: "#f8f8f8", border: "1px solid #eee", borderRadius: 6, padding: "6px 8px", fontSize: 12, outline: "none", width: "100%" }} />
+                            title={p.data ? "" : "Data inválida ou vazia — verifica se o dia existe nesse mês"}
+                            style={{ background: p.data ? "#f8f8f8" : "#fef2f2", border: p.data ? "1px solid #eee" : "1px solid #f87171", borderRadius: 6, padding: "6px 8px", fontSize: 12, outline: "none", width: "100%" }} />
                         </td>
                         <td style={{ padding: "6px 8px" }}>
                           <input type="number" step="0.01" value={p.valor}

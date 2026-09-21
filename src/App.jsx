@@ -14,6 +14,17 @@ const EMPRESAS = EMPRESAS_ALL;
 import FotosView from "./FotosView.jsx";
 import IRView from "./IRView.jsx";
 import { STATUS_FATURA, STATUS_STYLES, statusFatura, faturaPaga, faturaAtrasada } from "./status.js";
+
+// Filtros do Contas a Pagar: "Pendente atrasado" e "Pendente em dia" juntam-se
+// num só botão "Pendente". Cada linha continua a mostrar se está em atraso.
+const STATUS_FILTRO = (() => {
+  const l = [];
+  STATUS_FATURA.forEach(s => {
+    const x = s.startsWith("Pendente") ? "Pendente" : s;
+    if (!l.includes(x)) l.push(x);
+  });
+  return l;
+})();
 import { BRAND } from "./brand.js";
 import { fmtEUR, fmtCompacto, fmtPct, fmtInt, fmtData } from "./formato.js";
 
@@ -508,7 +519,7 @@ function ContasPagar({canEdit, faturas: faturasTodas, setFaturas, addFatura, upd
 
   const hoje=new Date().toISOString().split("T")[0];
   const filtered=faturas.filter(f=>
-    (fStatus==="Todos"||statusFatura(f)===fStatus) &&
+    (fStatus==="Todos"||(fStatus==="Pendente"?statusFatura(f).startsWith("Pendente"):statusFatura(f)===fStatus)) &&
     (fEmp==="Todas"||f.empresa===fEmp) &&
     (fFornec===""||(f.fornecedor||"").toLowerCase().includes(fFornec.toLowerCase()))
   );
@@ -602,7 +613,7 @@ function ContasPagar({canEdit, faturas: faturasTodas, setFaturas, addFatura, upd
 
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",flexWrap:"wrap",gap:10}}>
         <div style={{display:"flex",gap:8,flexWrap:"wrap",alignItems:"center"}}>
-          {["Todos",...STATUS_FATURA].map(s=>(
+          {["Todos",...STATUS_FILTRO].map(s=>(
             <button key={s} onClick={()=>setFStatus(s)} style={{background:fStatus===s?"#1a1a2e":"#f0f0f0",color:fStatus===s?"#fff":"#666",border:"none",padding:"6px 14px",borderRadius:20,fontSize:12,cursor:"pointer"}}>
               {s}
             </button>
@@ -658,7 +669,7 @@ function ContasPagar({canEdit, faturas: faturasTodas, setFaturas, addFatura, upd
               <div style={{display:"flex",flexDirection:"column",gap:4}}><label style={{fontSize:10,color:"#aaa",fontFamily:"monospace",textTransform:"uppercase"}}>Valor (€)</label><input type="number" value={form.valor||""} onChange={e=>setForm(f=>({...f,valor:e.target.value}))} style={{background:"#f8f8f8",border:"1px solid #e8e8e8",borderRadius:8,padding:"9px 12px",fontSize:13,outline:"none"}}/></div>
               <div style={{display:"flex",flexDirection:"column",gap:4}}><label style={{fontSize:10,color:"#aaa",fontFamily:"monospace",textTransform:"uppercase"}}>Vencimento</label><input type="date" value={form.vencimento||""} onChange={e=>setForm(f=>({...f,vencimento:e.target.value}))} style={{background:"#f8f8f8",border:"1px solid #e8e8e8",borderRadius:8,padding:"9px 12px",fontSize:13,outline:"none"}}/></div>
               <div style={{display:"flex",flexDirection:"column",gap:4}}><label style={{fontSize:10,color:"#aaa",fontFamily:"monospace",textTransform:"uppercase"}}>Previsão de pagamento</label><input type="date" value={form.previsao_pagamento||""} onChange={e=>setForm(f=>({...f,previsao_pagamento:e.target.value}))} title="Quando tencionamos pagar — é esta data que conta no Fluxo Futuro" style={{background:"#f8f8f8",border:"1px solid #e8e8e8",borderRadius:8,padding:"9px 12px",fontSize:13,outline:"none"}}/></div>
-              <div style={{display:"flex",flexDirection:"column",gap:4}}><label style={{fontSize:10,color:"#aaa",fontFamily:"monospace",textTransform:"uppercase"}}>Status</label><select value={form.status||"Pendente em dia"} onChange={e=>setForm(f=>({...f,status:e.target.value}))} style={{background:"#f8f8f8",border:"1px solid #e8e8e8",borderRadius:8,padding:"9px 12px",fontSize:13,outline:"none"}}><option value="">Selecionar...</option>{STATUS_FATURA.map(o=><option key={o}>{o}</option>)}</select></div>
+              <div style={{display:"flex",flexDirection:"column",gap:4}}><label style={{fontSize:10,color:"#aaa",fontFamily:"monospace",textTransform:"uppercase"}}>Status</label><select value={(form.status||"").startsWith("Pendente")||!form.status?"Pendente em dia":form.status} onChange={e=>setForm(f=>({...f,status:e.target.value}))} title="O atraso é calculado sozinho a partir da data" style={{background:"#f8f8f8",border:"1px solid #e8e8e8",borderRadius:8,padding:"9px 12px",fontSize:13,outline:"none"}}>{STATUS_FILTRO.map(o=><option key={o} value={o==="Pendente"?"Pendente em dia":o}>{o}</option>)}</select></div>
               <div style={{gridColumn:"1/-1",display:"flex",flexDirection:"column",gap:4}}>
                 <label style={{fontSize:10,color:"#aaa",fontFamily:"monospace",textTransform:"uppercase"}}>Observações</label>
                 <textarea value={form.obs} onChange={e=>setForm(f=>({...f,obs:e.target.value}))} rows={3} style={{background:"#f8f8f8",border:"1px solid #e8e8e8",borderRadius:8,padding:"9px 12px",fontSize:13,outline:"none",resize:"vertical",fontFamily:"inherit",width:"100%",boxSizing:"border-box"}}/>
