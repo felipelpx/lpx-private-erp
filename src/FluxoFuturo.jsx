@@ -17,12 +17,16 @@ const fmtDate = (s) => {
   return m ? `${m[3]}-${m[2]}-${m[1]}` : s;
 };
 
-// Fallback caso o App não passe EMPRESAS — apenas para compatibilidade
-const EMPRESAS_FALLBACK = [
-  { id: "modernity", nome: "Vistas do Sul" },
-  { id: "arroios",   nome: "Arroios" },
-  { id: "riocap",    nome: "Rio Capital CSC" },
-];
+// Fallback caso o App não passe EMPRESAS — vem da configuração da LPX.
+// (A versão portada da Rio Capital trazia aqui as empresas da Rio.)
+const EMPRESAS_FALLBACK = EMPRESAS_TODAS;
+
+// Nome do projeto (usado nas frações/vendas) → id da empresa.
+// Deriva de src/empresas.js; aceita o nome completo ou só o projeto.
+const PROJETO_EMPRESA_MAP = Object.fromEntries(
+  EMPRESAS_TODAS.flatMap(e => [[e.nome, e.id], [e.projeto, e.id], [e.razaoSocial, e.id]])
+    .filter(([k]) => k)
+);
 
 export default function FluxoFuturo({ faturas: faturasTodas, faturasLoading, pagamentosExtras: pagamentosTodos, pagamentosLoading, onAddPagamento, onUpdatePagamento, onDeletePagamento, onUpdateFatura, onDeleteFatura, currentUser, EMPRESAS, caixaUnico }) {
   // Só as empresas visíveis (filtro de grupo LPX/HDG e perfil investidor).
@@ -86,12 +90,28 @@ export default function FluxoFuturo({ faturas: faturasTodas, faturasLoading, pag
   const [form, setForm] = useState({
     descricao: "", empresa: "", categoria: "Obra", obs: "", tipo: "saida"
   });
-  // Define empresa default no form quando a lista ficar disponível
+  // Empresa por defeito do formulário: a que está filtrada no topo; se o
+  // filtro estiver em "Todos os Projetos", a primeira empresa da lista.
+  // Também corrige um valor que não exista na lista — um <select> com um valor
+  // inválido MOSTRA a 1.ª opção mas GRAVA o valor inválido, o que fazia as
+  // previsões irem parar a uma empresa que não se via no ecrã.
+  const empresaPorDefeito = () => {
+    const reais = EMPRESAS_CAIXA.filter(e => e.id !== "all");
+    if (empresa !== "all" && reais.some(e => e.id === empresa)) return empresa;
+    return reais[0]?.id || "";
+  };
   useEffect(() => {
-    if (!form.empresa && EMPRESAS_CAIXA.length > 1) {
-      setForm(f => ({ ...f, empresa: EMPRESAS_CAIXA[1].id }));
+    const reais = EMPRESAS_CAIXA.filter(e => e.id !== "all");
+    const valida = reais.some(e => e.id === form.empresa);
+    if (!valida && reais.length) {
+      setForm(f => ({ ...f, empresa: empresaPorDefeito() }));
     }
-  }, [EMPRESAS_CAIXA, form.empresa]);
+  }, [EMPRESAS_CAIXA, form.empresa]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Ao mudar de projeto no topo, o formulário acompanha (se estiver fechado)
+  useEffect(() => {
+    if (!showForm && empresa !== "all") setForm(f => ({ ...f, empresa }));
+  }, [empresa]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Parcelas editáveis [{data, valor, obs}]
   const [parcelasArr, setParcelasArr] = useState([]);
@@ -384,8 +404,7 @@ export default function FluxoFuturo({ faturas: faturasTodas, faturasLoading, pag
 
   // Add vendas receivables (entradas)
   vendas.forEach(v => {
-    const projEmpMap = { "Vistas do Sul": "modernity", "Arroios": "arroios" };
-    const empId = projEmpMap[v.projeto];
+    const empId = PROJETO_EMPRESA_MAP[v.projeto];
     if (empresa !== "all" && empId !== empresa) return;
     // A receber na escritura
     if (v.falta_receber > 0 && v.previsao_escritura) {
@@ -657,7 +676,7 @@ export default function FluxoFuturo({ faturas: faturasTodas, faturasLoading, pag
     await Promise.all(itens.map(it => onAddPagamento?.(it)));
 
     setShowForm(false);
-    setForm({ descricao: "", empresa: "modernity", categoria: "Obra", obs: "", tipo: "saida" });
+    setForm({ descricao: "", empresa: empresaPorDefeito(), categoria: "Obra", obs: "", tipo: "saida" });
     setParcelasArr([]);
     setGenValor(""); setGenData(""); setGenN(1); setGenIntervalo("mensal"); setGenDias(30);
   };
