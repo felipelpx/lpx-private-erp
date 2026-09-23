@@ -1,7 +1,7 @@
 import React, { useState, useMemo } from "react";
 import { EMPRESAS, agruparPorGrupo, GRUPOS_INFO } from "./empresas.js";
-import { useMovimentosPeriodo, useFracoes, useVendas, useSaldosNaData, usePagamentosExtras, useFaturas, useOrcamento } from "./hooks.js";
-import { CRONOGRAMAS, ESTADO_MARCO } from "./cronogramas.js";
+import { useMovimentosPeriodo, useFracoes, useVendas, useSaldosNaData, usePagamentosExtras, useFaturas, useOrcamento, useRecebiveis } from "./hooks.js";
+import { CRONOGRAMAS, ESTADO_MARCO, TIR_PROJETO } from "./cronogramas.js";
 import { RealOrcado, useRealOrcado } from "./RealOrcadoView.jsx";
 import { statusFatura, faturaPaga } from "./status.js";
 import { fmtEUR, fmtEUR0, fmtNum, fmtInt, fmtCompacto, fmtData, fmtPctSinal } from "./formato.js";
@@ -47,7 +47,7 @@ const Vazio = ({ texto }) => (
 
 // ─── GRÁFICO EM CASCATA (saldo inicial → receitas → custos → saldo final) ────
 function Cascata({ inicial, entradas, saidas, final, largura = 900 }) {
-  const altura = 320, margemY = 44, margemX = 8;
+  const altura = 300, margemY = 40, margemX = 10;
 
   // Barras: inicial (total), cada entrada (sobe), cada saída (desce), final (total)
   const passos = [
@@ -75,7 +75,7 @@ function Cascata({ inicial, entradas, saidas, final, largura = 900 }) {
   const amplitude = (max - min) || 1;
   const y = (v) => margemY + (max - v) / amplitude * (altura - margemY * 2);
 
-  const larguraBarra = Math.min(74, (largura - margemX * 2) / barras.length - 10);
+  const larguraBarra = Math.min(34, (largura - margemX * 2) / barras.length - 16);
   const passo = (largura - margemX * 2) / barras.length;
 
   return (
@@ -102,17 +102,18 @@ function Cascata({ inicial, entradas, saidas, final, largura = 900 }) {
                       stroke="#ccc" strokeWidth="1" strokeDasharray="3 3" />
               )}
               <rect x={x} y={yTopo} width={larguraBarra} height={alt} fill={cor}
-                    rx="3" opacity={b.tipo === "total" ? 1 : 0.88}>
+                    rx="2" opacity={b.tipo === "total" ? 1 : 0.9}>
                 <title>{`${b.rotulo}: ${fmtEUR(b.valor)}`}</title>
               </rect>
               {/* valor */}
-              <text x={cx} y={yTopo - 7} textAnchor="middle" fontSize="10.5" fontFamily="monospace"
+              <text x={cx} y={yTopo - 6} textAnchor="middle" fontSize="8.5" fontFamily="monospace"
                     fontWeight="700" fill={cor}>
                 {fmtCompacto(b.valor)}
               </text>
               {/* rótulo */}
-              <text x={cx} y={altura - 20} textAnchor="middle" fontSize="9.5" fill={COR.texto}>
-                {b.rotulo.length > 15 ? b.rotulo.slice(0, 14) + "…" : b.rotulo}
+              <text x={cx} y={altura - 18} textAnchor="middle" fontSize="8" fill={COR.texto}
+                    transform={`rotate(-30 ${cx} ${altura - 18})`}>
+                {b.rotulo.length > 18 ? b.rotulo.slice(0, 17) + "…" : b.rotulo}
                 <title>{b.rotulo}</title>
               </text>
             </g>
@@ -533,9 +534,18 @@ export default function IRView({ currentUser, empresasVisiveis }) {
   const empresas = Array.isArray(empresasVisiveis) ? empresasVisiveis : EMPRESAS;
 
   const hoje = new Date();
-  const inicioAno = `${hoje.getFullYear()}-01-01`;
-  const [de, setDe] = useState(inicioAno);
-  const [ate, setAte] = useState(hoje.toISOString().slice(0, 10));
+  const hojeISO = hoje.toISOString().slice(0, 10);
+  const PERIODOS = {
+    tudo: { rotulo: "Tudo", de: "2000-01-01", ate: hojeISO },
+    a2026: { rotulo: "2026", de: "2026-01-01", ate: "2026-12-31" },
+  };
+  // Por defeito mostra TUDO — a vida do projeto, não o ano civil
+  const [periodo, setPeriodo] = useState("tudo");
+  const [deLivre, setDeLivre] = useState("");
+  const [ateLivre, setAteLivre] = useState("");
+  const personalizado = periodo === "livre";
+  const de = personalizado ? (deLivre || "2000-01-01") : PERIODOS[periodo].de;
+  const ate = personalizado ? (ateLivre || hojeISO) : PERIODOS[periodo].ate;
   // O Investor Relations analisa UM projeto de cada vez — juntar empresas
   // diferentes num só quadro não diz nada a um investidor.
   const [empSel, setEmpSel] = useState(empresas[0]?.id || "");
@@ -548,9 +558,10 @@ export default function IRView({ currentUser, empresasVisiveis }) {
   const { saldos: saldosIniciais } = useSaldosNaData(contaIds, de);
   const { fracoes } = useFracoes();
   const { vendas } = useVendas();
-  const { pagamentosExtras } = usePagamentosExtras();
+  const { pagamentos: pagamentosExtras } = usePagamentosExtras();
   const { faturas } = useFaturas();
   const { orcamento } = useOrcamento();
+  const { recebiveis } = useRecebiveis();
 
   // Secção ativa — o utilizador escolhe o que quer ver
   const [seccao, setSeccao] = useState("fluxo");
@@ -635,10 +646,18 @@ export default function IRView({ currentUser, empresasVisiveis }) {
   const projetoAtivo = projSel && projetosComFracoes.includes(projSel) ? projSel : projetosComFracoes[0];
 
   // Carteira de recebíveis
-  const recebiveis = useMemo(() => {
-    const relevantes = vendas.filter(v => projetosVisiveis.includes(v.projeto));
+  const recebiveisPorMes = useMemo(() => {
     const porMes = {};
-    relevantes.forEach(v => {
+    // Carteira de Contas a Receber
+    (recebiveis || []).filter(r => idsAtivos.includes(r.empresa)).forEach(r => {
+      const k = (r.data_prevista || "").slice(0, 7);
+      if (!k) return;
+      if (!porMes[k]) porMes[k] = { real: 0, projetado: 0 };
+      if (r.status === "Recebido") porMes[k].real += Number(r.valor) || 0;
+      else if ((r.status || "Previsto") === "Previsto") porMes[k].projetado += Number(r.valor) || 0;
+    });
+    // Mais o que vem das vendas registadas
+    vendas.filter(v => projetosVisiveis.includes(v.projeto)).forEach(v => {
       const k = (v.previsao_escritura || v.data || "").slice(0, 7);
       if (!k) return;
       if (!porMes[k]) porMes[k] = { real: 0, projetado: 0 };
@@ -649,10 +668,10 @@ export default function IRView({ currentUser, empresasVisiveis }) {
       const [a, mm] = k.split("-");
       return { rotulo: `${mm}/${a.slice(2)}`, ...porMes[k] };
     });
-  }, [vendas, projetosVisiveis]);
+  }, [vendas, projetosVisiveis, recebiveis, idsAtivos]);
 
-  const totalRecebido = recebiveis.reduce((s, m) => s + m.real, 0);
-  const totalPorReceber = recebiveis.reduce((s, m) => s + m.projetado, 0);
+  const totalRecebido = recebiveisPorMes.reduce((s, m) => s + m.real, 0);
+  const totalPorReceber = recebiveisPorMes.reduce((s, m) => s + m.projetado, 0);
 
   const vgv = fracoesVisiveis.reduce((s, f) => s + (Number(f.preco_tabela) || 0), 0);
   const vendido = fracoesVisiveis.filter(f => f.status === "CPCV" || f.status === "Escriturada")
@@ -685,7 +704,13 @@ export default function IRView({ currentUser, empresasVisiveis }) {
       .filter(f => !faturaPaga(f))
       .forEach(f => junta(f.previsao_pagamento || f.vencimento, Number(f.valor) || 0, "saida"));
 
-    // Recebíveis das vendas
+    // Entradas: carteira de Contas a Receber (só o que ainda está previsto)
+    (recebiveis || [])
+      .filter(r => idsAtivos.includes(r.empresa))
+      .filter(r => (r.status || "Previsto") === "Previsto")
+      .forEach(r => junta(r.data_prevista, Number(r.valor) || 0, "entrada"));
+
+    // Mais os recebíveis das vendas que ainda não estejam na carteira
     (vendas || [])
       .filter(v => empresasAtivas.some(e => e.nome === v.projeto || e.projeto === v.projeto))
       .forEach(v => {
@@ -697,7 +722,7 @@ export default function IRView({ currentUser, empresasVisiveis }) {
       const [a, mm] = k.split("-");
       return { key: k, rotulo: `${mm}/${a.slice(2)}`, ...porMes[k], passado: k < hojeISO.slice(0, 7) };
     });
-  }, [pagamentosExtras, faturas, vendas, idsAtivos, empresasAtivas]);
+  }, [pagamentosExtras, faturas, vendas, recebiveis, idsAtivos, empresasAtivas]);
 
   const saldoHoje = useMemo(
     () => empresasAtivas.reduce((s, e) => s + e.contas.reduce((t, c) => t + (Number(c.saldo) || 0), 0), 0),
@@ -742,17 +767,23 @@ export default function IRView({ currentUser, empresasVisiveis }) {
           ))}
         </select>
         <span style={{ fontSize: 10, color: "#aaa", fontFamily: "monospace", textTransform: "uppercase" }}>Período</span>
-        <input type="date" value={de} max={ate} onChange={e => setDe(e.target.value)} style={inputEstilo} />
-        <span style={{ color: "#ccc", fontSize: 12 }}>até</span>
-        <input type="date" value={ate} min={de} onChange={e => setAte(e.target.value)} style={inputEstilo} />
-        {[["Este ano", inicioAno, hoje.toISOString().slice(0, 10)],
-          ["12 meses", new Date(hoje.getFullYear() - 1, hoje.getMonth(), hoje.getDate()).toISOString().slice(0, 10), hoje.toISOString().slice(0, 10)],
-          ["Tudo", "2020-01-01", hoje.toISOString().slice(0, 10)]].map(([r, d, a]) => (
-          <button key={r} onClick={() => { setDe(d); setAte(a); }}
-            style={{ background: "#fff", border: "1px solid #e8e8e8", borderRadius: 7, padding: "6px 12px", fontSize: 11, color: "#666", cursor: "pointer" }}>
-            {r}
-          </button>
-        ))}
+        <div style={{ display: "flex", background: "#f0f0f0", borderRadius: 8, padding: 2, gap: 2 }}>
+          {[["tudo", "Tudo"], ["a2026", "2026"], ["livre", "Escolher datas"]].map(([id, rot]) => (
+            <button key={id} onClick={() => setPeriodo(id)}
+              style={{ background: periodo === id ? "#1a1a2e" : "transparent", color: periodo === id ? "#fff" : "#777",
+                       border: "none", padding: "6px 14px", borderRadius: 6, fontSize: 11.5,
+                       fontWeight: periodo === id ? 700 : 500, cursor: "pointer" }}>
+              {rot}
+            </button>
+          ))}
+        </div>
+        {personalizado && (
+          <>
+            <input type="date" value={deLivre} max={ateLivre || undefined} onChange={e => setDeLivre(e.target.value)} style={inputEstilo} />
+            <span style={{ color: "#ccc", fontSize: 12 }}>até</span>
+            <input type="date" value={ateLivre} min={deLivre || undefined} onChange={e => setAteLivre(e.target.value)} style={inputEstilo} />
+          </>
+        )}
         <button onClick={() => window.print()}
           style={{ marginLeft: "auto", background: COR.tinta, color: "#fff", border: "none", borderRadius: 8, padding: "7px 16px", fontSize: 12, fontWeight: 600, cursor: "pointer" }}>
           Imprimir / PDF
@@ -816,7 +847,7 @@ export default function IRView({ currentUser, empresasVisiveis }) {
       {seccao === "orcado" && (
         <Card titulo="Real × Orçado"
               subtitulo={`${empresaAtiva?.nome || ""} · realizado e a realizar calculados em tempo real a partir do ERP`}>
-          <RealOrcado linhas={linhasOrcamento} />
+          <RealOrcado linhas={linhasOrcamento} tir={TIR_PROJETO[empSel]} />
         </Card>
       )}
 
@@ -829,7 +860,7 @@ export default function IRView({ currentUser, empresasVisiveis }) {
       {seccao === "recebiveis" && (
         <Card titulo="Carteira de recebíveis"
               subtitulo={`Recebido ${fmtEUR0(totalRecebido)} · por receber ${fmtEUR0(totalPorReceber)}`}>
-          <BarrasRecebiveis meses={recebiveis} />
+          <BarrasRecebiveis meses={recebiveisPorMes} />
         </Card>
       )}
 

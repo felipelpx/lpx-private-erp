@@ -104,6 +104,13 @@ export const CRONOGRAMAS = {
 };
 
 // Estados e respetivas cores
+// TIR líquida de imposto por projeto, tal como consta do business plan.
+// Fonte: folha "Real x Orçado" dos ficheiros de controlo financeiro.
+export const TIR_PROJETO = {
+  adseq:    0.1995,   // Cinq Etoiles — TIR net of tax (a.a.)
+  infinite: 0.3332,   // Paço D'arcos — TIR do projeto net of tax (a.a.)
+};
+
 export const ESTADO_MARCO = {
   concluido: { rotulo: "Concluído", cor: "#16a34a", fundo: "#dcfce7" },
   curso:     { rotulo: "Em curso",  cor: "#2563eb", fundo: "#dbeafe" },

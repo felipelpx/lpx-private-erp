@@ -12,6 +12,7 @@ import { EMPRESAS as EMPRESAS_ALL, BANCO_COLORS as BANCO_COLORS_CFG, GRUPOS, GRU
 const EMPRESAS = EMPRESAS_ALL;
 import FotosView from "./FotosView.jsx";
 import IRView from "./IRView.jsx";
+import ContasReceber from "./ContasReceber.jsx";
 import { STATUS_FATURA, STATUS_STYLES, statusFatura, faturaPaga, faturaAtrasada } from "./status.js";
 
 // Filtros do Contas a Pagar: "Pendente atrasado" e "Pendente em dia" juntam-se
@@ -1143,6 +1144,7 @@ const TABS_CONFIG = [
   {id:"comercial", label:"Comercial",          roles:["admin","gestor","viewer","investidor"]},
   {id:"fotos",     label:"Fotos",              roles:["admin","gestor","viewer","investidor"]},
   {id:"fluxo",     label:"Fluxo Futuro",       roles:["admin","gestor","viewer"]},
+  {id:"receber",   label:"Contas a Receber",  roles:["admin","gestor","viewer","investidor"]},
   {id:"pagar",     label:"Contas a Pagar",     roles:["admin","gestor","viewer","investidor"]},
   {id:"pagamentos",label:"Pagamentos",         roles:["admin","gestor","viewer"]},
   {id:"importar",  label:"Importar",           roles:["admin","gestor"]},
@@ -1350,6 +1352,7 @@ export default function App() {
           {tab==="ir"        && <IRView currentUser={currentUser} empresasVisiveis={empresasVisiveis}/>}
           {tab==="fotos"     && <FotosView currentUser={currentUser} empresasVisiveis={empresasVisiveis}/>}
           {tab==="fluxo"     && <FluxoFuturo faturas={faturas} faturasLoading={faturasLoading} pagamentosExtras={pagamentosExtras} pagamentosLoading={pagamentosLoading} onAddPagamento={addPagamento} onUpdatePagamento={updatePagamento} onDeletePagamento={deletePagamento} onUpdateFatura={updateFatura} onDeleteFatura={deleteFatura} currentUser={currentUser} EMPRESAS={empresasVisiveis} caixaUnico={caixaUnico}/>}
+          {tab==="receber"   && <ContasReceber currentUser={currentUser} empresasVisiveis={empresasVisiveis}/>}
           {tab==="pagar"     && <ContasPagar canEdit={canEdit && !isInvestidor} EMPRESAS={empresasVisiveis} faturas={faturas} setFaturas={handleSetFaturas} addFatura={addFatura} updateFatura={updateFatura} deleteFatura={deleteFatura}/>}
           {tab==="pagamentos"&& <PagamentosView faturas={faturas.filter(f=>empresasVisiveis.some(e=>e.id===f.empresa)||!f.empresa)} pagamentosExtras={pagamentosExtras.filter(p=>empresasVisiveis.some(e=>e.id===p.empresa)||!p.empresa)} currentUser={currentUser} profiles={profiles}/>}
           {tab==="users"     && <Utilizadores currentUser={currentUser}/>}

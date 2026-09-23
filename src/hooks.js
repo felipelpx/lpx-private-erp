@@ -528,3 +528,26 @@ export function useMovimentosPeriodo(contaIds = [], de = null, ate = null) {
   useEffect(() => { load() }, [load])
   return { movimentos, loading, reload: load }
 }
+
+// ─── RECEBÍVEIS (Contas a Receber) ───────────────────────────────────────────
+export function useRecebiveis() {
+  const { data, loading } = useRealtimeTable('recebiveis',
+    () => supabase.from('recebiveis').select('*').order('data_prevista'))
+  const addRecebivel = async (r) => {
+    const { data, error } = await supabase.from('recebiveis').insert([r]).select()
+    if (error) console.error('addRecebivel:', error)
+    return { data, error }
+  }
+  const updateRecebivel = async (id, u) => {
+    const { data, error } = await supabase.from('recebiveis')
+      .update({ ...u, updated_at: new Date().toISOString() }).eq('id', id).select()
+    if (error) console.error('updateRecebivel:', error)
+    return { data, error }
+  }
+  const deleteRecebivel = async (id) => {
+    const { error } = await supabase.from('recebiveis').delete().eq('id', id)
+    if (error) console.error('deleteRecebivel:', error)
+    return { error }
+  }
+  return { recebiveis: data, loading, addRecebivel, updateRecebivel, deleteRecebivel }
+}

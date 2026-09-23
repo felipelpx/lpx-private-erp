@@ -340,12 +340,21 @@ function CelulaNumero({ valor, onGuardar, editavel, formatar, alinhar = "right",
 }
 
 function TabelaVendas({ fracoes, vendas, canEdit, onAddFatura, onUpdateFracao, onUpdateVenda, onUpsertVenda, onUpsertFracao, onDeleteFracao, projetosDisponiveis }) {
-  const [filterProj, setFilterProj] = useState("Todos");
+  // Obrigatório escolher um projeto — ver o inventário todo junto não ajuda
+  const [filterProj, setFilterProj] = useState("");
   const [filterStatus, setFilterStatus] = useState("Todos");
   const [search, setSearch] = useState("");
   const [editVenda, setEditVenda] = useState(null);
   const [editComissao, setEditComissao] = useState(null);
   const [rascunhos, setRascunhos] = useState({});   // edições por confirmar, por célula
+
+  // Se ainda não há projeto escolhido, assume o primeiro com frações
+  useEffect(() => {
+    if (!filterProj && fracoes.length) {
+      const primeiro = [...new Set(fracoes.map(f => f.projeto).filter(Boolean))][0];
+      if (primeiro) setFilterProj(primeiro);
+    }
+  }, [fracoes, filterProj]);
 
   const projetos = useMemo(
     () => ["Todos", ...new Set([...(projetosDisponiveis||[]), ...fracoes.map(f => f.projeto)].filter(Boolean))],
@@ -360,7 +369,7 @@ function TabelaVendas({ fracoes, vendas, canEdit, onAddFatura, onUpdateFracao, o
   }, [vendas]);
 
   const rows = useMemo(() => fracoes.filter(f =>
-    (filterProj === "Todos" || f.projeto === filterProj) &&
+    (f.projeto === filterProj) &&
     (filterStatus === "Todos" || f.status === filterStatus) &&
     (!search || (f.fracao || "").toLowerCase().includes(search.toLowerCase())
              || (f.tipologia || "").toLowerCase().includes(search.toLowerCase())
@@ -464,7 +473,7 @@ function TabelaVendas({ fracoes, vendas, canEdit, onAddFatura, onUpdateFracao, o
           style={{ flex: "2 1 260px", background: "#fff", border: "1px solid #eee", borderRadius: 10, padding: "10px 14px", fontSize: 13, outline: "none" }} />
         <select value={filterProj} onChange={e => setFilterProj(e.target.value)}
           style={{ flex: "1 1 200px", background: "#fff", border: "1px solid #eee", borderRadius: 10, padding: "10px 14px", fontSize: 13, outline: "none" }}>
-          <option>Todos</option>
+          {!filterProj && <option value="">— escolhe um projeto —</option>}
           {GRUPOS.map(g => {
             const nomes = EMPRESAS.filter(e => e.grupo === g && projetos.includes(e.nome)).map(e => e.nome);
             return nomes.length ? (
@@ -526,7 +535,9 @@ function TabelaVendas({ fracoes, vendas, canEdit, onAddFatura, onUpdateFracao, o
             </thead>
             <tbody>
               {rows.length === 0
-                ? <tr><td colSpan={10} style={{ padding: 40, textAlign: "center", color: "#ccc" }}>Nenhuma fração encontrada.</td></tr>
+                ? <tr><td colSpan={10} style={{ padding: 40, textAlign: "center", color: "#ccc" }}>
+                    {filterProj ? "Nenhuma fração encontrada neste projeto." : "Escolhe um projeto no seletor acima."}
+                  </td></tr>
                 : rows.map(f => {
                   const venda = vendaDe.get(f.id);
                   const area = Number(f.area) || 0;

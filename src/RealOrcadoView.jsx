@@ -27,7 +27,7 @@ export function useRealOrcado(empresasAtivas) {
   const contaIds = useMemo(() => empresasAtivas.flatMap(e => e.contas?.map(c => c.id) || []), [empresasAtivas]);
 
   const { orcamento } = useOrcamento();
-  const { pagamentosExtras } = usePagamentosExtras();
+  const { pagamentos: pagamentosExtras } = usePagamentosExtras();
   const { faturas } = useFaturas();
   // Acumulado do projeto — não segue filtros de período
   const { movimentos, loading } = useMovimentosPeriodo(contaIds, "2000-01-01", new Date().toISOString().slice(0, 10));
@@ -83,57 +83,88 @@ const GRUPO_ROTULO = {
   opex:    "Soft costs e licenças",
 };
 
-export function RealOrcado({ linhas }) {
-  if (!linhas.length) return <Vazio texto="Sem orçamento definido para estas empresas." />;
+// Sintetiza as categorias em quatro blocos de leitura rápida.
+// Uma categoria entra em "Aportes" ou "Banco" pelo nome; o resto divide-se
+// entre receitas (grupo receita) e despesas.
+// Classificação por nome. Cobre as duas convenções em uso:
+//   LPX  — Obra, Projetos, Fee Gestão, Fiscalização, Encargos financeiros, Juros…
+//   HDG  — Gastos com Obras, Taxa de Gestão, Outflow - Juros, Aporte/Resgate…
+const ehAporte = (c) => /aporte|resgate|suprimento|sócio|socio|capital social/i.test(c);
+const ehBanco  = (c) => /financiamento|financeir|juros|banc|empréstimo|emprestimo|inflow|outflow|funding|amortiza/i.test(c);
 
-  // desvio > 0 é sempre favorável: gastar menos, ou vender mais
+const BLOCOS = [
+  { id: "aportes",  rotulo: "Aportes de sócios", teste: (l) => ehAporte(l.categoria) },
+  { id: "banco",    rotulo: "Banco / financiamento", teste: (l) => !ehAporte(l.categoria) && ehBanco(l.categoria) },
+  { id: "receitas", rotulo: "Receitas", teste: (l) => !ehAporte(l.categoria) && !ehBanco(l.categoria) && l.grupo === "receita" },
+  { id: "despesas", rotulo: "Despesas", teste: (l) => !ehAporte(l.categoria) && !ehBanco(l.categoria) && l.grupo !== "receita" },
+];
+
+export function RealOrcado({ linhas, tir }) {
+  const [aberto, setAberto] = useState({});
+
+  if (!linhas.length) return <Vazio texto="Sem orçamento carregado para estas empresas." />;
+
+  // Variação: quanto o previsto se afasta do orçado. Positivo = favorável
+  // (gastar menos, receber mais). Os custos estão guardados em negativo.
   const calc = (l) => {
     const previsto = l.realizado + l.a_realizar;
-    const receita = l.grupo === "receita";
-    const desvio = receita
-      ? previsto - l.orcado
-      : Math.abs(l.orcado) - Math.abs(previsto);
-    const pct = l.orcado ? (Math.abs(previsto) / Math.abs(l.orcado)) * 100 : (previsto ? 100 : 0);
-    return { previsto, desvio, pct, favoravel: desvio >= -0.005 };
+    const receita = l.grupo === "receita" || previsto > 0;
+    const variacao = receita ? previsto - l.orcado : Math.abs(l.orcado) - Math.abs(previsto);
+    const varPct = l.orcado ? (variacao / Math.abs(l.orcado)) * 100 : null;
+    return { previsto, variacao, varPct, favoravel: variacao >= -0.005 };
   };
 
-  const grupos = [];
-  ["receita", "capex", "obra", "opex"].forEach(g => {
-    const doGrupo = linhas.filter(l => l.grupo === g);
-    if (doGrupo.length) grupos.push({ g, linhas: doGrupo });
-  });
-
   const soma = (arr) => arr.reduce((a, l) => ({
-    grupo: arr[0]?.grupo, orcado: a.orcado + l.orcado,
-    realizado: a.realizado + l.realizado, a_realizar: a.a_realizar + l.a_realizar,
-  }), { orcado: 0, realizado: 0, a_realizar: 0 });
+    orcado: a.orcado + l.orcado, realizado: a.realizado + l.realizado,
+    a_realizar: a.a_realizar + l.a_realizar, grupo: a.grupo,
+  }), { orcado: 0, realizado: 0, a_realizar: 0, grupo: arr[0]?.grupo || "opex" });
 
-  const custos = linhas.filter(l => l.grupo !== "receita");
-  const totCustos = { ...soma(custos), grupo: "custos", categoria: "TOTAL CUSTOS" };
+  const blocos = BLOCOS.map(b => {
+    const suas = linhas.filter(b.teste);
+    return { ...b, linhas: suas, total: { ...soma(suas), categoria: b.rotulo, grupo: b.id === "receitas" ? "receita" : "opex" } };
+  }).filter(b => b.linhas.length);
 
-  const Linha = ({ l, nivel }) => {
-    const { previsto, desvio, pct, favoravel } = calc(l);
-    const cabecalho = nivel === "grupo" || nivel === "total";
+  // Lucro = tudo somado (receitas positivas menos despesas negativas)
+  const lucro = {
+    orcado: linhas.reduce((s, l) => s + l.orcado, 0),
+    realizado: linhas.reduce((s, l) => s + l.realizado, 0),
+    a_realizar: linhas.reduce((s, l) => s + l.a_realizar, 0),
+  };
+  const lucroPrev = lucro.realizado + lucro.a_realizar;
+  const lucroVar = lucroPrev - lucro.orcado;
+
+  const Cel = ({ children, cor, negrito, alinhar = "right" }) => (
+    <td style={{ padding: "9px 12px", textAlign: alinhar, fontFamily: "monospace",
+                 color: cor || "#666", fontWeight: negrito ? 700 : 400, whiteSpace: "nowrap" }}>
+      {children}
+    </td>
+  );
+
+  const Linha = ({ l, nivel, expansivel, id }) => {
+    const { previsto, variacao, varPct, favoravel } = calc(l);
+    const bloco = nivel === "bloco", total = nivel === "total";
     return (
       <tr style={{
-        borderBottom: "1px solid " + (cabecalho ? "#e8eaef" : "#fafafa"),
-        fontWeight: cabecalho ? 700 : 400,
-        background: nivel === "total" ? "#f0f4ff" : nivel === "grupo" ? "#f8f9fc" : "transparent",
-      }}>
-        <td style={{ padding: "8px 10px", color: COR.tinta, paddingLeft: nivel === "linha" ? 24 : 10 }}>{l.categoria}</td>
-        <td style={{ padding: "8px 10px", textAlign: "right", fontFamily: "monospace", color: "#666" }}>{fmtEUR0(l.orcado)}</td>
-        <td style={{ padding: "8px 10px", textAlign: "right", fontFamily: "monospace", color: COR.tinta }}>{fmtEUR0(l.realizado)}</td>
-        <td style={{ padding: "8px 10px", textAlign: "right", fontFamily: "monospace", color: "#888" }}>{fmtEUR0(l.a_realizar)}</td>
-        <td style={{ padding: "8px 10px", textAlign: "right", fontFamily: "monospace", color: "#666" }}>{fmtEUR0(previsto)}</td>
-        <td style={{ padding: "8px 10px", textAlign: "right", fontFamily: "monospace", fontWeight: 700, color: favoravel ? COR.entrada : COR.saida }}>
-          {(desvio >= 0 ? "+" : "") + fmtEUR0(desvio)}
+        borderBottom: "1px solid " + (bloco || total ? "#e8eaef" : "#fafafa"),
+        background: total ? "#f0f4ff" : bloco ? "#f8f9fc" : "transparent",
+        cursor: expansivel ? "pointer" : "default",
+      }}
+        onClick={expansivel ? () => setAberto(a => ({ ...a, [id]: !a[id] })) : undefined}>
+        <td style={{ padding: "9px 12px", color: COR.tinta, fontWeight: bloco || total ? 700 : 400,
+                     paddingLeft: nivel === "linha" ? 30 : 12 }}>
+          {expansivel && <span style={{ color: "#aaa", marginRight: 6, fontSize: 10 }}>{aberto[id] ? "▾" : "▸"}</span>}
+          {l.categoria}
         </td>
-        <td style={{ padding: "8px 10px", width: 120 }}>
-          <div style={{ background: "#f1f2f5", borderRadius: 4, height: 13, overflow: "hidden" }}>
-            <div style={{ width: `${Math.min(100, pct)}%`, height: "100%", background: favoravel ? COR.saldo : COR.saida, borderRadius: 4 }} />
-          </div>
-          <div style={{ fontSize: 9, color: favoravel ? "#aaa" : COR.saida, fontFamily: "monospace", marginTop: 2 }}>{fmtNum(pct, 0)}%</div>
-        </td>
+        <Cel negrito={bloco || total}>{fmtEUR0(l.orcado)}</Cel>
+        <Cel negrito={bloco || total} cor={COR.tinta}>{fmtEUR0(l.realizado)}</Cel>
+        <Cel negrito={bloco || total} cor="#888">{fmtEUR0(l.a_realizar)}</Cel>
+        <Cel negrito={bloco || total}>{fmtEUR0(previsto)}</Cel>
+        <Cel negrito cor={favoravel ? COR.entrada : COR.saida}>
+          {(variacao >= 0 ? "+" : "") + fmtEUR0(variacao)}
+        </Cel>
+        <Cel cor={favoravel ? COR.entrada : COR.saida}>
+          {varPct === null ? "—" : (varPct >= 0 ? "+" : "") + fmtNum(varPct, 0) + "%"}
+        </Cel>
       </tr>
     );
   };
@@ -143,35 +174,56 @@ export function RealOrcado({ linhas }) {
       <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 11.5 }}>
         <thead>
           <tr style={{ background: "#f8f9fc" }}>
-            {[["Categoria", "left"], ["Orçado", "right"], ["Realizado", "right"], ["A realizar", "right"],
-              ["Previsto total", "right"], ["Desvio", "right"], ["Consumo", "left"]].map(([h, al]) => (
-              <th key={h} style={{ padding: "9px 10px", textAlign: al, color: "#aaa", fontSize: 9, textTransform: "uppercase", fontFamily: "monospace", letterSpacing: "0.06em", borderBottom: "1px solid #f0f0f0" }}>{h}</th>
+            {[["", "left"], ["Orçado", "right"], ["Realizado", "right"], ["A realizar", "right"],
+              ["Previsto", "right"], ["Variação", "right"], ["%", "right"]].map(([h, al], i) => (
+              <th key={i} style={{ padding: "9px 12px", textAlign: al, color: "#aaa", fontSize: 9,
+                                   textTransform: "uppercase", fontFamily: "monospace",
+                                   letterSpacing: "0.06em", borderBottom: "1px solid #f0f0f0" }}>{h}</th>
             ))}
           </tr>
         </thead>
         <tbody>
-          {grupos.map(({ g, linhas: ls }) => (
-            <React.Fragment key={g}>
-              <Linha nivel="grupo" l={{ ...soma(ls), grupo: g, categoria: GRUPO_ROTULO[g] || g }} />
-              {ls.filter(l => Math.abs(l.orcado) + Math.abs(l.realizado) + Math.abs(l.a_realizar) > 0.005)
-                 .map(l => <Linha key={l.id || l.categoria} nivel="linha" l={l} />)}
+          {blocos.map(b => (
+            <React.Fragment key={b.id}>
+              <Linha l={b.total} nivel="bloco" expansivel id={b.id} />
+              {aberto[b.id] && b.linhas
+                .slice()
+                .sort((x, y) => Math.abs(y.realizado + y.a_realizar) - Math.abs(x.realizado + x.a_realizar))
+                .map(l => <Linha key={l.categoria} l={l} nivel="linha" />)}
             </React.Fragment>
           ))}
-          <Linha nivel="total" l={totCustos} />
+          <Linha l={{ ...lucro, categoria: "LUCRO", grupo: "receita" }} nivel="total" />
         </tbody>
       </table>
-      <div style={{ fontSize: 10.5, color: "#aaa", marginTop: 10, lineHeight: 1.6 }}>
-        <strong>Orçado</strong> vem do business plan. <strong>Realizado</strong> é a soma dos
-        movimentos bancários da categoria, desde o início do projeto.
-        <strong>A realizar</strong> são as previsões do Fluxo Futuro por liquidar mais as faturas
-        por pagar — lançar uma despesa no Fluxo Futuro atualiza esta tabela de imediato.<br/>
-        Previsto total = realizado + a realizar. Desvio positivo é favorável: gastar abaixo do
-        orçamento ou vender acima. Consumo acima de 100% marca a vermelho.
+
+      {/* Lucro e TIR em destaque */}
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 12, marginTop: 16 }}>
+        <div style={{ background: "#fff", border: "1px solid #f0f0f0", borderRadius: 10, padding: "14px 16px", borderTop: `3px solid ${lucroPrev >= 0 ? COR.entrada : COR.saida}` }}>
+          <div style={{ fontSize: 9, color: "#aaa", textTransform: "uppercase", fontFamily: "monospace", letterSpacing: "0.07em", marginBottom: 5 }}>Lucro previsto</div>
+          <div style={{ fontSize: 18, fontWeight: 700, fontFamily: "monospace", color: lucroPrev >= 0 ? COR.entrada : COR.saida }}>{fmtEUR0(lucroPrev)}</div>
+          <div style={{ fontSize: 10, color: "#bbb", marginTop: 3 }}>
+            orçado {fmtEUR0(lucro.orcado)} · {(lucroVar >= 0 ? "+" : "") + fmtEUR0(lucroVar)}
+          </div>
+        </div>
+        <div style={{ background: "#fff", border: "1px solid #f0f0f0", borderRadius: 10, padding: "14px 16px", borderTop: `3px solid ${COR.saldo}` }}>
+          <div style={{ fontSize: 9, color: "#aaa", textTransform: "uppercase", fontFamily: "monospace", letterSpacing: "0.07em", marginBottom: 5 }}>TIR do projeto (a.a.)</div>
+          <div style={{ fontSize: 18, fontWeight: 700, fontFamily: "monospace", color: tir != null ? COR.saldo : "#ddd" }}>
+            {tir != null ? fmtNum(tir * 100, 1) + "%" : "—"}
+          </div>
+          <div style={{ fontSize: 10, color: "#bbb", marginTop: 3 }}>
+            {tir != null ? "líquida de imposto" : "sem cálculo para este projeto"}
+          </div>
+        </div>
+      </div>
+
+      <div style={{ fontSize: 10.5, color: "#aaa", marginTop: 12, lineHeight: 1.6 }}>
+        Clica num bloco para ver as categorias. <strong>Orçado</strong> vem do business plan;
+        <strong> realizado</strong> são os movimentos bancários; <strong>a realizar</strong> são as
+        previsões do Fluxo Futuro e as faturas por pagar. Variação positiva é favorável.
       </div>
     </div>
   );
 }
-
 
 // ─── ECRÃ COMPLETO (separador próprio) ───────────────────────────────────────
 export default function RealOrcadoView({ empresasVisiveis }) {
