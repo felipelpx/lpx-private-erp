@@ -23,16 +23,17 @@ export default function ContasReceber({ currentUser, empresasVisiveis }) {
   const podeEditar = currentUser?.role === "admin" || currentUser?.role === "gestor";
   const { recebiveis, loading, addRecebivel, updateRecebivel, deleteRecebivel } = useRecebiveis();
 
-  const [empSel, setEmpSel] = useState("todas");
+  // Obrigatório escolher um projeto — olhar tudo junto não ajuda a decidir
+  const [empSel, setEmpSel] = useState(empresas[0]?.id || "");
   const [fStatus, setFStatus] = useState("Todos");
   const [form, setForm] = useState(null);       // objeto em edição, ou null
 
   const ids = empresas.map(e => e.id);
   const lista = useMemo(() => (recebiveis || [])
     .filter(r => ids.includes(r.empresa))
-    .filter(r => empSel === "todas" || r.empresa === empSel)
+    .filter(r => r.empresa === empSel)
     .filter(r => fStatus === "Todos" || (r.status || "Previsto") === fStatus)
-    .sort((a, b) => (a.data_prevista || "").localeCompare(b.data_prevista || "")),
+    .sort((a, b) => (a.data_prevista || "9999").localeCompare(b.data_prevista || "9999")),
     [recebiveis, ids, empSel, fStatus]);
 
   const tot = {
@@ -105,8 +106,7 @@ export default function ContasReceber({ currentUser, empresasVisiveis }) {
           </button>
         ))}
         <select value={empSel} onChange={e => setEmpSel(e.target.value)}
-          style={{ background: "#f8f8f8", border: "1px solid #eee", borderRadius: 20, padding: "6px 14px", fontSize: 12, outline: "none" }}>
-          <option value="todas">Todos os projetos</option>
+          style={{ background: "#fff", border: "1px solid #ddd", borderRadius: 20, padding: "6px 14px", fontSize: 12, outline: "none", fontWeight: 600 }}>
           {agruparPorGrupo(empresas).map(b => (
             <optgroup key={b.grupo} label={b.info.nome}>
               {b.empresas.map(e => <option key={e.id} value={e.id}>{e.nome}</option>)}

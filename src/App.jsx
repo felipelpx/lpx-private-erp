@@ -361,7 +361,9 @@ function ContasPagar({canEdit, faturas: faturasTodas, setFaturas, addFatura, upd
   const [showForm,setShowForm]=useState(false);
   const [editId,setEditId]=useState(null);
   const [fStatus,setFStatus]=useState("Todos");
-  const [fEmp,setFEmp]=useState("Todas");
+  // Por defeito mostra um projeto de cada vez; há uma caixa para ver todos
+  const [fEmp,setFEmp]=useState(()=> (EMPRESAS_PROP && EMPRESAS_PROP[0]?.id) || EMPRESAS_ALL[0]?.id || "Todas");
+  const [verTodas,setVerTodas]=useState(false);
   const [fFornec,setFFornec]=useState("");
   const [mapaSelected,setMapaSelected]=useState([]);
   const [viewAnexo,setViewAnexo]=useState(null);
@@ -396,7 +398,7 @@ function ContasPagar({canEdit, faturas: faturasTodas, setFaturas, addFatura, upd
   const hoje=new Date().toISOString().split("T")[0];
   const filtered=faturas.filter(f=>
     (fStatus==="Todos"||(fStatus==="Pendente"?statusFatura(f).startsWith("Pendente"):statusFatura(f)===fStatus)) &&
-    (fEmp==="Todas"||f.empresa===fEmp) &&
+    (verTodas||fEmp==="Todas"||f.empresa===fEmp) &&
     (fFornec===""||(f.fornecedor||"").toLowerCase().includes(fFornec.toLowerCase()))
   );
   // Sugestões únicas de fornecedores para o datalist
@@ -494,14 +496,18 @@ function ContasPagar({canEdit, faturas: faturasTodas, setFaturas, addFatura, upd
               {s}
             </button>
           ))}
-          <select value={fEmp} onChange={e=>setFEmp(e.target.value)} style={{background:"#f8f8f8",border:"1px solid #eee",borderRadius:20,padding:"6px 14px",fontSize:12,outline:"none"}}>
-            <option value="Todas">Todas</option>
+          <select value={fEmp} onChange={e=>setFEmp(e.target.value)} disabled={verTodas} style={{background:verTodas?"#f4f4f4":"#fff",border:"1px solid #ddd",borderRadius:20,padding:"6px 14px",fontSize:12,outline:"none",fontWeight:600,opacity:verTodas?0.5:1}}>
             {GRUPOS.filter(g=>EMPRESAS.some(e=>e.grupo===g)).map(g=>(
               <optgroup key={g} label={GRUPOS_INFO[g]?.nome||g}>
                 {EMPRESAS.filter(e=>e.grupo===g).map(e=><option key={e.id} value={e.id}>{e.nome}</option>)}
               </optgroup>
             ))}
           </select>
+          <label style={{display:"flex",alignItems:"center",gap:6,fontSize:11.5,color:verTodas?"#1a1a2e":"#888",cursor:"pointer",whiteSpace:"nowrap",fontWeight:verTodas?600:400}}
+            title="Mostrar as faturas de todos os projetos">
+            <input type="checkbox" checked={verTodas} onChange={e=>setVerTodas(e.target.checked)} style={{cursor:"pointer"}}/>
+            ver todas
+          </label>
           <div style={{position:"relative",display:"flex",alignItems:"center"}}>
             <span style={{position:"absolute",left:12,fontSize:12,color:"#aaa",pointerEvents:"none"}}>🔎</span>
             <input type="text" list="fornecedores-datalist" placeholder="Pesquisar fornecedor..." value={fFornec} onChange={e=>setFFornec(e.target.value)}
