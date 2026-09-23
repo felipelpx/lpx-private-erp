@@ -2,7 +2,7 @@ import React, { useState, useMemo } from "react";
 import { EMPRESAS, agruparPorGrupo, GRUPOS_INFO } from "./empresas.js";
 import { useMovimentosPeriodo, useFracoes, useVendas, useSaldosNaData, usePagamentosExtras, useFaturas, useOrcamento, useRecebiveis } from "./hooks.js";
 import { CRONOGRAMAS, ESTADO_MARCO, TIR_PROJETO } from "./cronogramas.js";
-import { RealOrcado, useRealOrcado } from "./RealOrcadoView.jsx";
+import { RealOrcado } from "./RealOrcadoView.jsx";
 import { MODELO_REAL_ORCADO } from "./modeloRealOrcado.js";
 import { statusFatura, faturaPaga } from "./status.js";
 import { fmtEUR, fmtEUR0, fmtNum, fmtInt, fmtCompacto, fmtData, fmtPctSinal } from "./formato.js";
@@ -737,7 +737,6 @@ export default function IRView({ currentUser, empresasVisiveis }) {
 
   // ─── Real × Orçado ────────────────────────────────────────────────────────
   // Real × Orçado — mesmo cálculo do separador próprio (RealOrcadoView)
-  const { realizadoPorCategoria, comprometidoPorCategoria } = useRealOrcado(empresasAtivas);
 
   // ─── Timeline ─────────────────────────────────────────────────────────────
   const empresaTimeline = empSel;
@@ -851,7 +850,7 @@ export default function IRView({ currentUser, empresasVisiveis }) {
       {seccao === "orcado" && (
         <Card titulo="Real × Orçado"
               subtitulo={`${empresaAtiva?.nome || ""} · realizado e a realizar calculados em tempo real a partir do ERP`}>
-          <RealOrcado modelo={MODELO_REAL_ORCADO[empSel]} realizadoPorCategoria={realizadoPorCategoria} comprometidoPorCategoria={comprometidoPorCategoria} />
+          <RealOrcado modelo={MODELO_REAL_ORCADO[empSel]} />
         </Card>
       )}
 

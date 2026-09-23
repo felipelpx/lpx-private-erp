@@ -62,61 +62,45 @@ export function useRealOrcado(empresasAtivas) {
 
 
 // ─────────────────────────────────────────────────────────────────────────────
-// A tabela segue EXATAMENTE a folha "Real x Orçado" do projeto: mesmas linhas,
-// mesma ordem, mesmos subtotais, mesmas colunas (Orçado · Realizado · %).
-// Só o REALIZADO flutua — vem do ERP.
+// Quadro ORÇADO × FORECAST, estático, igual à folha do business plan.
+// Todas as linhas aparecem, pela ordem da folha. Nada vem do ERP.
 // ─────────────────────────────────────────────────────────────────────────────
-export function RealOrcado({ modelo, realizadoPorCategoria, comprometidoPorCategoria }) {
-  if (!modelo) return <Vazio texto="Sem modelo de Real × Orçado para este projeto. Os modelos vivem em src/modeloRealOrcado.js." />;
+export function RealOrcado({ modelo }) {
+  if (!modelo) return <Vazio texto="Sem quadro de Real × Orçado para este projeto. Os quadros vivem em src/modeloRealOrcado.js." />;
 
-  const real = (rotulo) => realizadoPorCategoria[rotulo] || 0;
-  const comp = (rotulo) => comprometidoPorCategoria?.[rotulo] || 0;
-
-  // Realizado de um subtotal = soma dos filhos, como na folha
-  const realSubtotal = (filhos) => filhos.reduce((s, c) => s + real(c), 0);
-  const compSubtotal = (filhos) => filhos.reduce((s, c) => s + comp(c), 0);
-
-  // Valores de cada linha já resolvidos, para os resultados poderem referi-los
-  const valores = {};
-  modelo.linhas.forEach(l => {
-    if (l.tipo === "item") valores[l.rotulo] = { orcado: l.orcado ?? 0, realizado: real(l.rotulo), comprometido: comp(l.rotulo) };
-    if (l.tipo === "subtotal") valores[l.rotulo] = { orcado: l.orcado ?? 0, realizado: realSubtotal(l.filhos), comprometido: compSubtotal(l.filhos) };
-  });
-
-  // Lucro bruto / tributável = receitas + despesas (os custos já são negativos)
-  const somaTudo = (campo) => Object.entries(valores)
-    .filter(([k]) => modelo.linhas.some(l => l.tipo === "subtotal" && l.rotulo === k))
-    .reduce((s, [, v]) => s + v[campo], 0);
-
-  const linhaResultado = (l) => {
-    const ehLucroBase = /^Lucro (tributável|bruto)$/i.test(l.rotulo);
-    if (ehLucroBase) return { orcado: l.orcado ?? 0, realizado: somaTudo("realizado") };
-    // Restantes resultados (Success Fee, IRC, Lucro líquido) mantêm o valor do
-    // business plan: dependem de fórmulas fiscais que não vivem no ERP.
-    return { orcado: l.orcado ?? 0, realizado: l.real_bp ?? null, doBP: true };
+  // Quando a folha não traz o subtotal, soma-se pelos filhos
+  const porRotulo = {};
+  modelo.linhas.forEach(l => { if (l.rotulo) porRotulo[l.rotulo] = l; });
+  const valor = (l, campo) => {
+    if (l[campo] != null) return l[campo];
+    if (l.tipo === "subtotal" && l.filhos)
+      return l.filhos.reduce((s, c) => s + (porRotulo[c]?.[campo] ?? 0), 0);
+    return null;
   };
 
-  const pct = (orc, rea) => {
-    if (!orc) return null;
-    return (rea / orc) * 100;
-  };
+  const temForecast = modelo.linhas.some(l => l.forecast != null);
 
-  const Celula = ({ v, cor, negrito, titulo }) => (
-    <td title={titulo} style={{ padding: "7px 12px", textAlign: "right", fontFamily: "monospace",
-      fontSize: 11.5, color: cor || "#555", fontWeight: negrito ? 700 : 400, whiteSpace: "nowrap" }}>
-      {v == null ? "" : fmtEUR0(v)}
+  const Cel = ({ v, negrito, cor }) => (
+    <td style={{ padding: "7px 12px", textAlign: "right", fontFamily: "monospace", fontSize: 11.5,
+                 color: cor || "#555", fontWeight: negrito ? 700 : 400, whiteSpace: "nowrap" }}>
+      {v == null ? "—" : fmtEUR0(v)}
     </td>
   );
 
   return (
     <div style={{ overflowX: "auto" }}>
-      <table style={{ width: "100%", maxWidth: 780, borderCollapse: "collapse", fontSize: 11.5 }}>
+      {!temForecast && (
+        <div style={{ background: "#fffbeb", border: "1px solid #fde68a", borderRadius: 8,
+                      padding: "10px 14px", fontSize: 11.5, color: "#92400e", marginBottom: 12, maxWidth: 820 }}>
+          Este projeto ainda não tem forecast no business plan — só aparece a coluna Orçado.
+        </div>
+      )}
+
+      <table style={{ width: "100%", maxWidth: 820, borderCollapse: "collapse", fontSize: 11.5 }}>
         <thead>
           <tr style={{ background: "#f8f9fc" }}>
-            <th style={{ padding: "9px 12px", textAlign: "left", color: "#aaa", fontSize: 9,
-                         textTransform: "uppercase", fontFamily: "monospace", letterSpacing: "0.06em",
-                         borderBottom: "1px solid #e8eaef" }} />
-            {["Orçado", "Realizado", "% Realizado"].map(h => (
+            <th style={{ padding: "9px 12px", borderBottom: "1px solid #e8eaef" }} />
+            {["Orçado", "Forecast", "Δ", "Δ %"].map(h => (
               <th key={h} style={{ padding: "9px 12px", textAlign: "right", color: "#aaa", fontSize: 9,
                                    textTransform: "uppercase", fontFamily: "monospace",
                                    letterSpacing: "0.06em", borderBottom: "1px solid #e8eaef" }}>{h}</th>
@@ -125,34 +109,32 @@ export function RealOrcado({ modelo, realizadoPorCategoria, comprometidoPorCateg
         </thead>
         <tbody>
           {modelo.linhas.map((l, i) => {
-            if (l.tipo === "espaco") return <tr key={i} style={{ height: 10 }}><td colSpan={4} /></tr>;
+            if (l.tipo === "espaco") return <tr key={i} style={{ height: 10 }}><td colSpan={5} /></tr>;
 
             const sub = l.tipo === "subtotal", res = l.tipo === "resultado";
-            const v = res ? linhaResultado(l) : valores[l.rotulo] || { orcado: l.orcado ?? 0, realizado: 0 };
-            const p = pct(v.orcado, v.realizado);
-
-            // Excedeu o orçamento? (custos: realizado mais negativo que o orçado)
-            const excedeu = l.tipo === "item" && v.orcado < 0 && v.realizado < v.orcado - 0.005;
+            const orc = valor(l, "orcado");
+            const fc = valor(l, "forecast");
+            const delta = (orc != null && fc != null) ? fc - orc : null;
+            // Favorável: receitas acima do orçado, ou custos menos negativos
+            const receita = (orc ?? 0) >= 0;
+            const bom = delta == null ? null : (receita ? delta >= 0 : delta >= 0);
+            const pctD = (delta != null && orc) ? (delta / Math.abs(orc)) * 100 : null;
 
             return (
               <tr key={i} style={{
                 borderBottom: sub || res ? "1px solid #e8eaef" : "1px solid #fafafa",
                 background: sub ? "#f8f9fc" : res ? "#f0f4ff" : "transparent",
               }}>
-                <td style={{ padding: "7px 12px", color: COR.tinta,
+                <td style={{ padding: "7px 12px", color: COR.tinta, fontWeight: sub || res ? 700 : 400,
+                             paddingLeft: l.tipo === "item" ? 26 : 12 }}>{l.rotulo}</td>
+                <Cel v={orc} negrito={sub || res} />
+                <Cel v={fc} negrito={sub || res} cor={sub || res ? COR.tinta : "#555"} />
+                <Cel v={delta} negrito
+                     cor={delta == null ? "#ddd" : bom ? COR.entrada : COR.saida} />
+                <td style={{ padding: "7px 12px", textAlign: "right", fontFamily: "monospace", fontSize: 11,
                              fontWeight: sub || res ? 700 : 400,
-                             paddingLeft: l.tipo === "item" ? 26 : 12,
-                             textTransform: sub && l.rotulo === l.rotulo.toUpperCase() ? "none" : "none" }}>
-                  {l.rotulo}
-                </td>
-                <Celula v={v.orcado} negrito={sub || res} />
-                <Celula v={v.realizado} negrito={sub || res}
-                        cor={excedeu ? COR.saida : (sub || res ? COR.tinta : "#555")}
-                        titulo={v.doBP ? "Valor do business plan — depende de fórmulas fiscais fora do ERP" : undefined} />
-                <td style={{ padding: "7px 12px", textAlign: "right", fontFamily: "monospace",
-                             fontSize: 11, color: p == null ? "#ddd" : excedeu ? COR.saida : "#888",
-                             fontWeight: sub || res ? 700 : 400 }}>
-                  {p == null ? "n.a." : fmtNum(p, 0) + "%"}
+                             color: pctD == null ? "#ddd" : bom ? COR.entrada : COR.saida }}>
+                  {pctD == null ? "—" : (pctD >= 0 ? "+" : "") + fmtNum(pctD, 1) + "%"}
                 </td>
               </tr>
             );
@@ -160,10 +142,10 @@ export function RealOrcado({ modelo, realizadoPorCategoria, comprometidoPorCateg
         </tbody>
       </table>
 
-      <div style={{ fontSize: 10.5, color: "#aaa", marginTop: 12, lineHeight: 1.6, maxWidth: 780 }}>
-        A estrutura e a coluna <strong>Orçado</strong> vêm do business plan e são fixas.
-        O <strong>Realizado</strong> é calculado ao vivo a partir dos movimentos bancários do ERP.
-        As linhas de resultado que dependem de fórmulas fiscais mantêm o valor do business plan.
+      <div style={{ fontSize: 10.5, color: "#aaa", marginTop: 12, lineHeight: 1.6, maxWidth: 820 }}>
+        Quadro estático do business plan: <strong>Orçado</strong> contra <strong>Forecast</strong>
+        {modelo.fonteForecast ? ` (${modelo.fonteForecast})` : ""}. Δ é a diferença entre os dois —
+        verde quando o forecast é melhor que o orçamento, vermelho quando é pior.
       </div>
     </div>
   );
@@ -203,8 +185,7 @@ export default function RealOrcadoView({ empresasVisiveis }) {
         <div style={{ fontSize: 11, color: "#aaa", marginBottom: 16 }}>
           {empSel === "todas" ? "Todas as empresas" : empresasAtivas[0]?.nome} · realizado e a realizar calculados em tempo real a partir do ERP
         </div>
-        <RealOrcado modelo={modelo} realizadoPorCategoria={realizadoPorCategoria}
-                    comprometidoPorCategoria={comprometidoPorCategoria} />
+        <RealOrcado modelo={modelo} />
       </div>
     </div>
   );
