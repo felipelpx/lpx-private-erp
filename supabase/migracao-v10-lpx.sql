@@ -11,8 +11,57 @@
 -- Só o ORÇADO é guardado: o realizado e o a realizar são calculados em tempo
 -- real pela app, a partir dos movimentos bancários e do Fluxo Futuro.
 --
+-- Autossuficiente: cria a tabela `recebiveis` se ainda não existir, por isso
+-- não depende de a migração v9 ter sido corrida antes.
 -- Correr no SQL Editor do Supabase. Pode ser repetido sem duplicar.
 -- ═══════════════════════════════════════════════════════════════════════════
+
+-- ───────────────────────────────────────────────────────────────────────────
+-- 0. TABELA `recebiveis` — criada aqui caso a migração v9 ainda não tenha
+--    sido corrida. Se já existir, nada disto tem efeito.
+-- ───────────────────────────────────────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS recebiveis (
+  id            text PRIMARY KEY,
+  empresa       text NOT NULL,
+  projeto       text,
+  descricao     text,
+  cliente       text,
+  fracao        text,
+  valor         numeric NOT NULL DEFAULT 0,
+  data_prevista date,
+  status        text NOT NULL DEFAULT 'Previsto',   -- Previsto | Recebido | Cancelado
+  obs           text DEFAULT '',
+  created_at    timestamptz NOT NULL DEFAULT now(),
+  updated_at    timestamptz NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_receb_empresa ON recebiveis(empresa);
+CREATE INDEX IF NOT EXISTS idx_receb_data    ON recebiveis(data_prevista);
+
+ALTER TABLE recebiveis ENABLE ROW LEVEL SECURITY;
+ALTER TABLE recebiveis REPLICA IDENTITY FULL;
+DO $$ BEGIN
+  ALTER PUBLICATION supabase_realtime ADD TABLE recebiveis;
+EXCEPTION WHEN OTHERS THEN NULL;   -- já incluída, ou publicação inexistente
+END $$;
+
+-- Investidores veem os recebíveis das suas empresas; só admin e gestor editam.
+-- (A função pode_ver_empresa vem da migração v2.)
+DO $$ BEGIN
+  DROP POLICY IF EXISTS "ver_recebiveis"    ON recebiveis;
+  DROP POLICY IF EXISTS "editar_recebiveis" ON recebiveis;
+  CREATE POLICY "ver_recebiveis" ON recebiveis FOR SELECT TO authenticated
+    USING (public.pode_ver_empresa(empresa));
+  CREATE POLICY "editar_recebiveis" ON recebiveis FOR ALL TO authenticated
+    USING (public.meu_role() IN ('admin','gestor'))
+    WITH CHECK (public.meu_role() IN ('admin','gestor'));
+EXCEPTION WHEN undefined_function THEN
+  -- Migração v2 ainda não corrida: deixa a tabela acessível a autenticados
+  DROP POLICY IF EXISTS "auth_recebiveis" ON recebiveis;
+  CREATE POLICY "auth_recebiveis" ON recebiveis FOR ALL TO authenticated
+    USING (true) WITH CHECK (true);
+  RAISE NOTICE 'Funcoes de RLS da migracao v2 nao encontradas — politica simples aplicada.';
+END $$;
+
 
 BEGIN;
 

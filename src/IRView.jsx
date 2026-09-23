@@ -552,6 +552,10 @@ export default function IRView({ currentUser, empresasVisiveis }) {
   const empresaAtiva = empresas.find(e => e.id === empSel) || empresas[0];
 
   const empresasAtivas = empresaAtiva ? [empresaAtiva] : [];
+  // Declarado aqui de propósito: vários useMemo abaixo dependem dele, e se
+  // ficasse mais abaixo o JavaScript rebentava com "cannot access before
+  // initialization" assim que um deles corresse.
+  const idsAtivos = empresasAtivas.map(e => e.id);
   const contaIds = useMemo(() => empresasAtivas.flatMap(e => e.contas.map(c => c.id)), [empresasAtivas]);
 
   const { movimentos, loading } = useMovimentosPeriodo(contaIds, de, ate);
@@ -681,7 +685,6 @@ export default function IRView({ currentUser, empresasVisiveis }) {
   // Junta as previsões lançadas à mão (pagamentos_extras, excluindo as já
   // convertidas ou pagas) com as faturas ainda por liquidar. A data que conta
   // é a previsão de pagamento; sem ela, o vencimento.
-  const idsAtivos = empresasAtivas.map(e => e.id);
   const futuro = useMemo(() => {
     const hojeISO = new Date().toISOString().slice(0, 10);
     const porMes = {};
