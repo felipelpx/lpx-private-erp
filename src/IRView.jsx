@@ -1,6 +1,8 @@
-import { useState, useMemo } from "react";
+import React, { useState, useMemo } from "react";
 import { EMPRESAS, agruparPorGrupo, GRUPOS_INFO } from "./empresas.js";
-import { useMovimentosPeriodo, useFracoes, useVendas, useSaldosNaData } from "./hooks.js";
+import { useMovimentosPeriodo, useFracoes, useVendas, useSaldosNaData, usePagamentosExtras, useFaturas, useOrcamento } from "./hooks.js";
+import { CRONOGRAMAS, ESTADO_MARCO } from "./cronogramas.js";
+import { statusFatura, faturaPaga } from "./status.js";
 import { fmtEUR, fmtEUR0, fmtNum, fmtInt, fmtCompacto, fmtData, fmtPctSinal } from "./formato.js";
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -313,6 +315,256 @@ function Predinho({ fracoes }) {
   );
 }
 
+// ─── FLUXO FUTURO PREVISTO (entradas e saídas por mês) ───────────────────────
+function BarrasFluxoFuturo({ meses, saldoArranque }) {
+  if (!meses.length) return <Vazio texto="Sem entradas nem saídas previstas. Lança previsões no Fluxo Futuro ou faturas com previsão de pagamento." />;
+  const L = 940, A = 300, mX = 52, mY = 26;
+  const base = A - mY * 2;
+  const max = Math.max(...meses.flatMap(m => [m.entradas, Math.abs(m.saidas)]), 1);
+  const passo = (L - mX - 16) / meses.length;
+  const lb = Math.min(18, passo / 3);
+  const zero = mY + base / 2;
+  const h = (v) => (Math.abs(v) / max) * (base / 2);
+
+  // Saldo acumulado projetado
+  let acc = saldoArranque;
+  const saldos = meses.map(m => { acc += m.entradas + m.saidas; return acc; });
+  const maxSaldo = Math.max(...saldos.map(Math.abs), 1);
+  const ySaldo = (v) => zero - (v / maxSaldo) * (base / 2) * 0.9;
+
+  return (
+    <div style={{ overflowX: "auto" }}>
+      <svg viewBox={`0 0 ${L} ${A}`} style={{ width: "100%", minWidth: 620, height: "auto", display: "block" }}>
+        <line x1={mX} y1={zero} x2={L - 16} y2={zero} stroke="#ccc" strokeWidth="1" />
+        <text x={mX - 6} y={zero - h(max) + 4} textAnchor="end" fontSize="9" fontFamily="monospace" fill="#bbb">{fmtCompacto(max)}</text>
+        <text x={mX - 6} y={zero + h(max) + 4} textAnchor="end" fontSize="9" fontFamily="monospace" fill="#bbb">{fmtCompacto(-max)}</text>
+
+        {meses.map((m, i) => {
+          const cx = mX + passo * i + passo / 2;
+          return (
+            <g key={i}>
+              <rect x={cx - lb - 1} y={zero - h(m.entradas)} width={lb} height={Math.max(1, h(m.entradas))} fill={COR.entrada} rx="2">
+                <title>{`${m.rotulo} — entradas: ${fmtEUR(m.entradas)}`}</title>
+              </rect>
+              <rect x={cx + 1} y={zero} width={lb} height={Math.max(1, h(m.saidas))} fill={COR.saida} rx="2">
+                <title>{`${m.rotulo} — saídas: ${fmtEUR(m.saidas)}`}</title>
+              </rect>
+              <text x={cx} y={A - 4} textAnchor="middle" fontSize="8.5" fill="#bbb">{m.rotulo}</text>
+            </g>
+          );
+        })}
+
+        {/* Linha do saldo projetado */}
+        <path d={saldos.map((v, i) => `${i === 0 ? "M" : "L"} ${mX + passo * i + passo / 2} ${ySaldo(v)}`).join(" ")}
+              fill="none" stroke={COR.tinta} strokeWidth="1.8" strokeDasharray="4 3" />
+        {saldos.map((v, i) => (
+          <circle key={i} cx={mX + passo * i + passo / 2} cy={ySaldo(v)} r="2.6"
+                  fill={v < 0 ? COR.saida : "#fff"} stroke={COR.tinta} strokeWidth="1.4">
+            <title>{`${meses[i].rotulo} — saldo projetado: ${fmtEUR(v)}`}</title>
+          </circle>
+        ))}
+      </svg>
+      <div style={{ display: "flex", gap: 18, justifyContent: "center", marginTop: 8, flexWrap: "wrap" }}>
+        {[["Entradas previstas", COR.entrada], ["Saídas previstas", COR.saida]].map(([t, c]) => (
+          <span key={t} style={{ fontSize: 10.5, color: COR.texto }}>
+            <span style={{ display: "inline-block", width: 10, height: 10, background: c, borderRadius: 2, marginRight: 5 }} />{t}
+          </span>
+        ))}
+        <span style={{ fontSize: 10.5, color: COR.texto }}>
+          <span style={{ display: "inline-block", width: 14, height: 0, borderTop: `2px dashed ${COR.tinta}`, marginRight: 5, verticalAlign: "middle" }} />Saldo projetado
+        </span>
+      </div>
+    </div>
+  );
+}
+
+// ─── REAL × ORÇADO ───────────────────────────────────────────────────────────
+// Atenção aos sinais: os custos são guardados NEGATIVOS e as receitas positivas.
+// Um desvio calculado como (orçado − previsto) sobre números com sinal inverte
+// a leitura — um estouro aparecia como folga. Por isso o cálculo é feito sobre
+// magnitudes e o sentido de "bom" depende do grupo.
+const GRUPO_ROTULO = {
+  receita: "Receitas",
+  capex:   "Aquisição de terreno",
+  obra:    "Obras",
+  opex:    "Soft costs e licenças",
+};
+
+function RealOrcado({ linhas }) {
+  if (!linhas.length) return <Vazio texto="Sem orçamento definido para estas empresas." />;
+
+  // desvio > 0 é sempre favorável: gastar menos, ou vender mais
+  const calc = (l) => {
+    const previsto = l.realizado + l.a_realizar;
+    const receita = l.grupo === "receita";
+    const desvio = receita
+      ? previsto - l.orcado
+      : Math.abs(l.orcado) - Math.abs(previsto);
+    const pct = l.orcado ? (Math.abs(previsto) / Math.abs(l.orcado)) * 100 : (previsto ? 100 : 0);
+    return { previsto, desvio, pct, favoravel: desvio >= -0.005 };
+  };
+
+  const grupos = [];
+  ["receita", "capex", "obra", "opex"].forEach(g => {
+    const doGrupo = linhas.filter(l => l.grupo === g);
+    if (doGrupo.length) grupos.push({ g, linhas: doGrupo });
+  });
+
+  const soma = (arr) => arr.reduce((a, l) => ({
+    grupo: arr[0]?.grupo, orcado: a.orcado + l.orcado,
+    realizado: a.realizado + l.realizado, a_realizar: a.a_realizar + l.a_realizar,
+  }), { orcado: 0, realizado: 0, a_realizar: 0 });
+
+  const custos = linhas.filter(l => l.grupo !== "receita");
+  const totCustos = { ...soma(custos), grupo: "custos", categoria: "TOTAL CUSTOS" };
+
+  const Linha = ({ l, nivel }) => {
+    const { previsto, desvio, pct, favoravel } = calc(l);
+    const cabecalho = nivel === "grupo" || nivel === "total";
+    return (
+      <tr style={{
+        borderBottom: "1px solid " + (cabecalho ? "#e8eaef" : "#fafafa"),
+        fontWeight: cabecalho ? 700 : 400,
+        background: nivel === "total" ? "#f0f4ff" : nivel === "grupo" ? "#f8f9fc" : "transparent",
+      }}>
+        <td style={{ padding: "8px 10px", color: COR.tinta, paddingLeft: nivel === "linha" ? 24 : 10 }}>{l.categoria}</td>
+        <td style={{ padding: "8px 10px", textAlign: "right", fontFamily: "monospace", color: "#666" }}>{fmtEUR0(l.orcado)}</td>
+        <td style={{ padding: "8px 10px", textAlign: "right", fontFamily: "monospace", color: COR.tinta }}>{fmtEUR0(l.realizado)}</td>
+        <td style={{ padding: "8px 10px", textAlign: "right", fontFamily: "monospace", color: "#888" }}>{fmtEUR0(l.a_realizar)}</td>
+        <td style={{ padding: "8px 10px", textAlign: "right", fontFamily: "monospace", color: "#666" }}>{fmtEUR0(previsto)}</td>
+        <td style={{ padding: "8px 10px", textAlign: "right", fontFamily: "monospace", fontWeight: 700, color: favoravel ? COR.entrada : COR.saida }}>
+          {(desvio >= 0 ? "+" : "") + fmtEUR0(desvio)}
+        </td>
+        <td style={{ padding: "8px 10px", width: 120 }}>
+          <div style={{ background: "#f1f2f5", borderRadius: 4, height: 13, overflow: "hidden" }}>
+            <div style={{ width: `${Math.min(100, pct)}%`, height: "100%", background: favoravel ? COR.saldo : COR.saida, borderRadius: 4 }} />
+          </div>
+          <div style={{ fontSize: 9, color: favoravel ? "#aaa" : COR.saida, fontFamily: "monospace", marginTop: 2 }}>{fmtNum(pct, 0)}%</div>
+        </td>
+      </tr>
+    );
+  };
+
+  return (
+    <div style={{ overflowX: "auto" }}>
+      <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 11.5 }}>
+        <thead>
+          <tr style={{ background: "#f8f9fc" }}>
+            {[["Categoria", "left"], ["Orçado", "right"], ["Realizado", "right"], ["A realizar", "right"],
+              ["Previsto total", "right"], ["Desvio", "right"], ["Consumo", "left"]].map(([h, al]) => (
+              <th key={h} style={{ padding: "9px 10px", textAlign: al, color: "#aaa", fontSize: 9, textTransform: "uppercase", fontFamily: "monospace", letterSpacing: "0.06em", borderBottom: "1px solid #f0f0f0" }}>{h}</th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {grupos.map(({ g, linhas: ls }) => (
+            <React.Fragment key={g}>
+              <Linha nivel="grupo" l={{ ...soma(ls), grupo: g, categoria: GRUPO_ROTULO[g] || g }} />
+              {ls.filter(l => Math.abs(l.orcado) + Math.abs(l.realizado) + Math.abs(l.a_realizar) > 0.005)
+                 .map(l => <Linha key={l.id || l.categoria} nivel="linha" l={l} />)}
+            </React.Fragment>
+          ))}
+          <Linha nivel="total" l={totCustos} />
+        </tbody>
+      </table>
+      <div style={{ fontSize: 10.5, color: "#aaa", marginTop: 10, lineHeight: 1.6 }}>
+        <strong>Orçado</strong> vem do business plan. <strong>Realizado</strong> é a soma dos
+        movimentos bancários da categoria, desde o início do projeto.
+        <strong>A realizar</strong> são as previsões do Fluxo Futuro por liquidar mais as faturas
+        por pagar — lançar uma despesa no Fluxo Futuro atualiza esta tabela de imediato.<br/>
+        Previsto total = realizado + a realizar. Desvio positivo é favorável: gastar abaixo do
+        orçamento ou vender acima. Consumo acima de 100% marca a vermelho.
+      </div>
+    </div>
+  );
+}
+
+// ─── TIMELINE DO BUSINESS PLAN ───────────────────────────────────────────────
+function Timeline({ cronograma, projeto }) {
+  if (!cronograma) return (
+    <Vazio texto={`Sem cronograma carregado para ${projeto || "este projeto"}. Os marcos vivem em src/cronogramas.js — envia o business plan e acrescento-os.`} />
+  );
+
+  const marcos = cronograma.marcos;
+  const mesN = (k) => { const [a, m] = k.split("-").map(Number); return a * 12 + (m - 1); };
+  const todos = marcos.flatMap(x => [mesN(x.inicio), mesN(x.fim || x.inicio)]);
+  const hojeN = (() => { const d = new Date(); return d.getFullYear() * 12 + d.getMonth(); })();
+  const min = Math.min(...todos, hojeN), max = Math.max(...todos, hojeN);
+  const span = Math.max(1, max - min);
+  const pos = (n) => ((n - min) / span) * 100;
+
+  // Marcas de ano no topo
+  const anoIni = Math.floor(min / 12), anoFim = Math.floor(max / 12);
+  const anos = [];
+  for (let a = anoIni; a <= anoFim; a++) anos.push(a);
+
+  const rotuloMes = (k) => { const [a, m] = k.split("-"); return `${m}/${a.slice(2)}`; };
+
+  return (
+    <div>
+      {/* Régua de anos */}
+      <div style={{ position: "relative", height: 20, marginBottom: 6, marginLeft: 176 }}>
+        {anos.map(a => (
+          <div key={a} style={{ position: "absolute", left: `${pos(a * 12)}%`, fontSize: 9.5, color: "#bbb", fontFamily: "monospace" }}>
+            {a}
+          </div>
+        ))}
+      </div>
+
+      <div style={{ display: "flex", flexDirection: "column", gap: 7 }}>
+        {marcos.map((m, i) => {
+          const est = ESTADO_MARCO[m.estado] || ESTADO_MARCO.previsto;
+          const ini = mesN(m.inicio), fim = mesN(m.fim || m.inicio);
+          const esquerda = pos(ini);
+          const largura = Math.max(1.6, pos(fim) - esquerda);
+          const pontual = !m.fim;
+          return (
+            <div key={i} style={{ display: "flex", alignItems: "center", gap: 10 }}>
+              <div style={{ width: 166, fontSize: 11, color: COR.tinta, textAlign: "right", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
+                   title={m.fase}>{m.fase}</div>
+              <div style={{ flex: 1, position: "relative", height: 26, background: "#fbfcfd", borderRadius: 5 }}>
+                {/* linha de hoje */}
+                <div style={{ position: "absolute", left: `${pos(hojeN)}%`, top: 0, bottom: 0, width: 1, background: "#f59e0b" }} />
+                <div title={`${m.fase}\n${rotuloMes(m.inicio)}${m.fim ? ` → ${rotuloMes(m.fim)}` : ""}\n${est.rotulo}${m.nota ? `\n${m.nota}` : ""}`}
+                  style={{
+                    position: "absolute", left: `${esquerda}%`, width: pontual ? undefined : `${largura}%`,
+                    top: 4, height: 18, background: est.fundo, border: `1px solid ${est.cor}`,
+                    borderRadius: pontual ? "50%" : 5, minWidth: pontual ? 18 : undefined,
+                    display: "flex", alignItems: "center", paddingLeft: pontual ? 0 : 7,
+                    fontSize: 9, color: est.cor, fontFamily: "monospace", whiteSpace: "nowrap", cursor: "default",
+                  }}>
+                  {!pontual && largura > 12 ? `${rotuloMes(m.inicio)} → ${rotuloMes(m.fim)}` : ""}
+                </div>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      <div style={{ display: "flex", gap: 14, flexWrap: "wrap", marginTop: 14, alignItems: "center" }}>
+        {Object.values(ESTADO_MARCO).map(e => (
+          <span key={e.rotulo} style={{ fontSize: 10.5, color: COR.texto, display: "flex", alignItems: "center", gap: 5 }}>
+            <span style={{ width: 11, height: 11, borderRadius: 3, background: e.fundo, border: `1px solid ${e.cor}` }} />{e.rotulo}
+          </span>
+        ))}
+        <span style={{ fontSize: 10.5, color: COR.texto, display: "flex", alignItems: "center", gap: 5 }}>
+          <span style={{ width: 2, height: 12, background: "#f59e0b" }} />hoje
+        </span>
+      </div>
+
+      {marcos.some(m => m.nota) && (
+        <div style={{ marginTop: 12, borderTop: "1px solid #f0f0f0", paddingTop: 10, display: "flex", flexDirection: "column", gap: 5 }}>
+          {marcos.filter(m => m.nota).map((m, i) => (
+            <div key={i} style={{ fontSize: 10.5, color: "#888" }}>
+              <strong style={{ color: ESTADO_MARCO[m.estado]?.cor || COR.tinta }}>{m.fase}</strong> — {m.nota}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── KPI ─────────────────────────────────────────────────────────────────────
 const Kpi = ({ rotulo, valor, cor = COR.tinta, nota }) => (
   <div style={{ background: "#fff", border: "1px solid #f0f0f0", borderRadius: 12, padding: "15px 18px", borderTop: `3px solid ${cor}` }}>
@@ -339,6 +591,12 @@ export default function IRView({ currentUser, empresasVisiveis }) {
   const { saldos: saldosIniciais } = useSaldosNaData(contaIds, de);
   const { fracoes } = useFracoes();
   const { vendas } = useVendas();
+  const { pagamentosExtras } = usePagamentosExtras();
+  const { faturas } = useFaturas();
+  const { orcamento } = useOrcamento();
+
+  // Secção ativa — o utilizador escolhe o que quer ver
+  const [seccao, setSeccao] = useState("fluxo");
 
   // Período anterior, do mesmo comprimento, para calcular variações
   const periodoAnterior = useMemo(() => {
@@ -349,6 +607,8 @@ export default function IRView({ currentUser, empresasVisiveis }) {
     return { de: ini.toISOString().slice(0, 10), ate: fim.toISOString().slice(0, 10) };
   }, [de, ate]);
   const { movimentos: movsAnterior } = useMovimentosPeriodo(contaIds, periodoAnterior.de, periodoAnterior.ate);
+  // Real × Orçado é acumulado do projeto — não segue o filtro de período
+  const { movimentos: movimentosTotais } = useMovimentosPeriodo(contaIds, "2000-01-01", ate);
 
   const saldoInicial = useMemo(
     () => Object.values(saldosIniciais || {}).reduce((s, v) => s + (v || 0), 0),
@@ -443,6 +703,119 @@ export default function IRView({ currentUser, empresasVisiveis }) {
   const vendido = fracoesVisiveis.filter(f => f.status === "CPCV" || f.status === "Escriturada")
     .reduce((s, f) => s + (Number(f.preco_tabela) || 0), 0);
 
+  // ─── Fluxo futuro previsto ────────────────────────────────────────────────
+  // Junta as previsões lançadas à mão (pagamentos_extras, excluindo as já
+  // convertidas ou pagas) com as faturas ainda por liquidar. A data que conta
+  // é a previsão de pagamento; sem ela, o vencimento.
+  const idsAtivos = empresasAtivas.map(e => e.id);
+  const futuro = useMemo(() => {
+    const hojeISO = new Date().toISOString().slice(0, 10);
+    const porMes = {};
+    const junta = (data, valor, tipo) => {
+      const k = String(data || "").slice(0, 7);
+      if (!k || k.length !== 7) return;
+      if (!porMes[k]) porMes[k] = { entradas: 0, saidas: 0, itens: 0 };
+      if (tipo === "entrada") porMes[k].entradas += Math.abs(valor);
+      else porMes[k].saidas -= Math.abs(valor);
+      porMes[k].itens++;
+    };
+
+    (pagamentosExtras || [])
+      .filter(p => idsAtivos.includes(p.empresa))
+      .filter(p => !["Convertida", "Paga", "Pago"].includes(p.status))
+      .forEach(p => junta(p.data_inicio, Number(p.valor) || 0, p.tipo === "entrada" ? "entrada" : "saida"));
+
+    (faturas || [])
+      .filter(f => idsAtivos.includes(f.empresa))
+      .filter(f => !faturaPaga(f))
+      .forEach(f => junta(f.previsao_pagamento || f.vencimento, Number(f.valor) || 0, "saida"));
+
+    // Recebíveis das vendas
+    (vendas || [])
+      .filter(v => empresasAtivas.some(e => e.nome === v.projeto || e.projeto === v.projeto))
+      .forEach(v => {
+        if ((Number(v.falta_receber) || 0) > 0 && v.previsao_escritura)
+          junta(v.previsao_escritura, Number(v.falta_receber), "entrada");
+      });
+
+    return Object.keys(porMes).sort().map(k => {
+      const [a, mm] = k.split("-");
+      return { key: k, rotulo: `${mm}/${a.slice(2)}`, ...porMes[k], passado: k < hojeISO.slice(0, 7) };
+    });
+  }, [pagamentosExtras, faturas, vendas, idsAtivos, empresasAtivas]);
+
+  const saldoHoje = useMemo(
+    () => empresasAtivas.reduce((s, e) => s + e.contas.reduce((t, c) => t + (Number(c.saldo) || 0), 0), 0),
+    [empresasAtivas]
+  );
+  const totalPrevEntradas = futuro.reduce((s, m) => s + m.entradas, 0);
+  const totalPrevSaidas = futuro.reduce((s, m) => s + m.saidas, 0);
+
+  // ─── Real × Orçado ────────────────────────────────────────────────────────
+  // O orçado é o único número fixo (vem do business plan, tabela `orcamento`).
+  // O realizado e o a realizar calculam-se em tempo real a partir do ERP:
+  //   realizado  = movimentos bancários da categoria, desde sempre
+  //   a realizar = previsões do Fluxo Futuro por liquidar + faturas por pagar
+  // Assim, lançar uma despesa no Fluxo Futuro atualiza logo o Real × Orçado.
+  const linhasOrcamento = useMemo(() => {
+    const porCat = new Map();
+    const toca = (cat, campo, valor) => {
+      const k = (cat || "").trim() || "(sem categoria)";
+      if (!porCat.has(k)) porCat.set(k, { categoria: k, grupo: "opex", orcado: 0, realizado: 0, a_realizar: 0 });
+      porCat.get(k)[campo] += valor;
+    };
+
+    // 1. Orçado — do business plan
+    (orcamento || [])
+      .filter(o => idsAtivos.includes(o.empresa_id))
+      .forEach(o => {
+        const k = (o.categoria || "").trim() || "(sem categoria)";
+        if (!porCat.has(k)) porCat.set(k, { categoria: k, grupo: o.grupo || "opex", orcado: 0, realizado: 0, a_realizar: 0 });
+        const linha = porCat.get(k);
+        linha.orcado += Number(o.orcado) || 0;
+        if (o.grupo) linha.grupo = o.grupo;
+      });
+
+    // 2. Realizado — movimentos bancários de todo o histórico
+    movimentosTotais.forEach(m => toca(m.categoria, "realizado", Number(m.valor) || 0));
+
+    // 3. A realizar — previsões por liquidar (mesma regra do Fluxo Futuro)
+    (pagamentosExtras || [])
+      .filter(p => idsAtivos.includes(p.empresa))
+      .filter(p => !["Convertida", "Paga", "Pago"].includes(p.status))
+      .forEach(p => {
+        const v = Math.abs(Number(p.valor) || 0);
+        toca(p.categoria, "a_realizar", p.tipo === "entrada" ? v : -v);
+      });
+
+    // 4. A realizar — faturas ainda por pagar
+    (faturas || [])
+      .filter(f => idsAtivos.includes(f.empresa))
+      .filter(f => !faturaPaga(f))
+      .forEach(f => toca(f.categoria, "a_realizar", -Math.abs(Number(f.valor) || 0)));
+
+    return [...porCat.values()]
+      .filter(l => Math.abs(l.orcado) + Math.abs(l.realizado) + Math.abs(l.a_realizar) > 0.005)
+      .sort((a, b) => Math.abs(b.orcado) - Math.abs(a.orcado));
+  }, [orcamento, idsAtivos, movimentosTotais, pagamentosExtras, faturas]);
+
+  // ─── Timeline ─────────────────────────────────────────────────────────────
+  const empresaTimeline = empSel !== "todas"
+    ? empSel
+    : (empresasAtivas.find(e => CRONOGRAMAS[e.id])?.id || empresasAtivas[0]?.id);
+  const cronograma = CRONOGRAMAS[empresaTimeline];
+
+  const SECCOES = [
+    { id: "fluxo",      rotulo: "Fluxo de caixa" },
+    { id: "futuro",     rotulo: "Fluxo futuro" },
+    { id: "custos",     rotulo: "Centros de custo" },
+    { id: "orcado",     rotulo: "Real × Orçado" },
+    { id: "evolucao",   rotulo: "Evolução do saldo" },
+    { id: "recebiveis", rotulo: "Recebíveis" },
+    { id: "vendas",     rotulo: "Espelho de vendas" },
+    { id: "timeline",   rotulo: "Cronograma" },
+  ];
+
   const inputEstilo = { background: "#fff", border: "1px solid #e8e8e8", borderRadius: 8, padding: "7px 11px", fontSize: 12, outline: "none", fontFamily: "monospace" };
 
   return (
@@ -489,43 +862,88 @@ export default function IRView({ currentUser, empresasVisiveis }) {
 
       {loading && <div style={{ fontSize: 11, color: "#aaa", fontFamily: "monospace" }}>a carregar movimentos…</div>}
 
-      {/* Cascata */}
-      <Card titulo="Fluxo de Caixa — do saldo inicial ao saldo final"
-            subtitulo={`${fmtData(de)} a ${fmtData(ate)} · ${fmtInt(movimentos.length)} movimentos`}>
-        {movimentos.length === 0
-          ? <Vazio texto="Sem movimentos no período selecionado." />
-          : <Cascata inicial={saldoInicial} entradas={entradasTop} saidas={saidasTop}
-                     final={saldoInicial + agregado.resultado} />}
-      </Card>
+      {/* Navegação por secções */}
+      <div style={{ display: "flex", gap: 7, flexWrap: "wrap" }}>
+        {SECCOES.map(sec => {
+          const ativo = seccao === sec.id;
+          return (
+            <button key={sec.id} onClick={() => setSeccao(sec.id)}
+              style={{
+                background: ativo ? COR.tinta : "#fff",
+                color: ativo ? "#fff" : "#666",
+                border: "1px solid " + (ativo ? COR.tinta : "#e8e8e8"),
+                borderRadius: 20, padding: "8px 16px", fontSize: 12.5,
+                fontWeight: ativo ? 700 : 500, cursor: "pointer",
+              }}>
+              {sec.rotulo}
+            </button>
+          );
+        })}
+      </div>
 
-      {/* Centros de custo */}
-      <Card titulo="Centros de custo"
-            subtitulo={`Saídas por categoria · variação face ao período anterior (${fmtData(periodoAnterior.de)} a ${fmtData(periodoAnterior.ate)})`}>
-        <BarrasCentroCusto dados={centrosCusto} />
-      </Card>
+      {seccao === "fluxo" && (
+        <Card titulo="Fluxo de Caixa — do saldo inicial ao saldo final"
+              subtitulo={`${fmtData(de)} a ${fmtData(ate)} · ${fmtInt(movimentos.length)} movimentos`}>
+          {movimentos.length === 0
+            ? <Vazio texto="Sem movimentos no período selecionado." />
+            : <Cascata inicial={saldoInicial} entradas={entradasTop} saidas={saidasTop}
+                       final={saldoInicial + agregado.resultado} />}
+        </Card>
+      )}
 
-      {/* Evolução */}
-      <Card titulo="Evolução do saldo" subtitulo="Saldo consolidado das contas selecionadas, mês a mês">
-        <EvolucaoSaldo serie={evolucao} />
-      </Card>
+      {seccao === "futuro" && (
+        <Card titulo="Fluxo futuro — entradas e saídas previstas"
+              subtitulo={`Previsões e faturas por liquidar · entradas ${fmtEUR0(totalPrevEntradas)} · saídas ${fmtEUR0(Math.abs(totalPrevSaidas))} · saldo de partida ${fmtEUR0(saldoHoje)}`}>
+          <BarrasFluxoFuturo meses={futuro} saldoArranque={saldoHoje} />
+        </Card>
+      )}
 
-      {/* Recebíveis */}
-      <Card titulo="Carteira de recebíveis"
-            subtitulo={`Recebido ${fmtEUR0(totalRecebido)} · por receber ${fmtEUR0(totalPorReceber)}`}>
-        <BarrasRecebiveis meses={recebiveis} />
-      </Card>
+      {seccao === "custos" && (
+        <Card titulo="Centros de custo"
+              subtitulo={`Saídas por categoria · variação face ao período anterior (${fmtData(periodoAnterior.de)} a ${fmtData(periodoAnterior.ate)})`}>
+          <BarrasCentroCusto dados={centrosCusto} />
+        </Card>
+      )}
 
-      {/* Espelho de vendas */}
-      <Card titulo="Espelho de vendas"
-            subtitulo={projetoAtivo ? `${projetoAtivo} · VGV ${fmtEUR0(vgv)} · colocado ${fmtEUR0(vendido)}${vgv ? ` (${fmtNum(vendido / vgv * 100, 0)}%)` : ""}` : undefined}
-            acao={projetosComFracoes.length > 1 && (
-              <select value={projetoAtivo || ""} onChange={e => setProjSel(e.target.value)}
-                style={{ ...inputEstilo, fontFamily: "inherit" }}>
-                {projetosComFracoes.map(p => <option key={p}>{p}</option>)}
-              </select>
-            )}>
-        <Predinho fracoes={fracoesVisiveis.filter(f => f.projeto === projetoAtivo)} />
-      </Card>
+      {seccao === "orcado" && (
+        <Card titulo="Real × Orçado"
+              subtitulo={`${empSel === "todas" ? "Todas as empresas selecionadas" : empresasAtivas[0]?.nome} · realizado e a realizar calculados em tempo real a partir do ERP`}>
+          <RealOrcado linhas={linhasOrcamento} />
+        </Card>
+      )}
+
+      {seccao === "evolucao" && (
+        <Card titulo="Evolução do saldo" subtitulo="Saldo consolidado das contas selecionadas, mês a mês">
+          <EvolucaoSaldo serie={evolucao} />
+        </Card>
+      )}
+
+      {seccao === "recebiveis" && (
+        <Card titulo="Carteira de recebíveis"
+              subtitulo={`Recebido ${fmtEUR0(totalRecebido)} · por receber ${fmtEUR0(totalPorReceber)}`}>
+          <BarrasRecebiveis meses={recebiveis} />
+        </Card>
+      )}
+
+      {seccao === "vendas" && (
+        <Card titulo="Espelho de vendas"
+              subtitulo={projetoAtivo ? `${projetoAtivo} · VGV ${fmtEUR0(vgv)} · colocado ${fmtEUR0(vendido)}${vgv ? ` (${fmtNum(vendido / vgv * 100, 0)}%)` : ""}` : undefined}
+              acao={projetosComFracoes.length > 1 && (
+                <select value={projetoAtivo || ""} onChange={e => setProjSel(e.target.value)}
+                  style={{ ...inputEstilo, fontFamily: "inherit" }}>
+                  {projetosComFracoes.map(p => <option key={p}>{p}</option>)}
+                </select>
+              )}>
+          <Predinho fracoes={fracoesVisiveis.filter(f => f.projeto === projetoAtivo)} />
+        </Card>
+      )}
+
+      {seccao === "timeline" && (
+        <Card titulo="Cronograma do projeto"
+              subtitulo={cronograma ? `${cronograma.projeto} · marcos do business plan` : "Escolhe um projeto com cronograma carregado"}>
+          <Timeline cronograma={cronograma} projeto={empresasAtivas.find(e => e.id === empresaTimeline)?.nome} />
+        </Card>
+      )}
     </div>
   );
 }
