@@ -2,6 +2,7 @@ import React, { useState, useMemo } from "react";
 import { EMPRESAS, agruparPorGrupo, GRUPOS_INFO } from "./empresas.js";
 import { useMovimentosPeriodo, useFracoes, useVendas, useSaldosNaData, usePagamentosExtras, useFaturas, useOrcamento } from "./hooks.js";
 import { CRONOGRAMAS, ESTADO_MARCO } from "./cronogramas.js";
+import { RealOrcado, useRealOrcado } from "./RealOrcadoView.jsx";
 import { statusFatura, faturaPaga } from "./status.js";
 import { fmtEUR, fmtEUR0, fmtNum, fmtInt, fmtCompacto, fmtData, fmtPctSinal } from "./formato.js";
 
@@ -251,65 +252,119 @@ const ESTADO_COR = {
 function Predinho({ fracoes }) {
   if (!fracoes.length) return <Vazio texto="Sem frações neste projeto." />;
 
-  // Agrupa por piso; ordena do último piso para a cave
+  // Agrupa por piso e ordena do último para a cave
   const porPiso = {};
   fracoes.forEach(f => {
     const p = (f.piso ?? "").toString().trim() || "—";
     (porPiso[p] = porPiso[p] || []).push(f);
   });
   const ordem = (p) => {
-    const s = String(p).toUpperCase();
-    if (s === "R/C" || s === "RC") return 0;
-    const n = parseFloat(s.replace(",", "."));
-    return isNaN(n) ? -99 : n;
+    const t = String(p).toUpperCase().replace(",", ".");
+    if (t === "R/C" || t === "RC") return 0;
+    if (t.startsWith("CAVE") || t === "-1") return -1;
+    if (t.includes("SÓTÃO") || t.includes("SOTAO")) return 99;
+    const n = parseFloat(t);
+    return isNaN(n) ? -50 : n;
   };
   const pisos = Object.keys(porPiso).sort((a, b) => ordem(b) - ordem(a));
 
+  // A largura de cada fração é proporcional à sua área, para o desenho
+  // representar a planta e não uma grelha de caixas iguais.
+  const areaDe = (f) => Math.max(Number(f.area) || 0, 0.001);
+  const areaMaxPiso = Math.max(...pisos.map(p => porPiso[p].reduce((s, f) => s + areaDe(f), 0)), 1);
+
+  const LARGURA = 760;
+  const ALTURA_PISO = 58;
+  const MARGEM_ESQ = 58;     // etiqueta do piso
+  const GAP = 3;
+
   const resumo = {};
-  fracoes.forEach(f => { const s = f.status || "Disponível"; resumo[s] = (resumo[s] || 0) + 1; });
+  fracoes.forEach(f => { const st = f.status || "Disponível"; resumo[st] = (resumo[st] || 0) + 1; });
+  const areaTotal = fracoes.reduce((s, f) => s + areaDe(f), 0);
+
+  const alturaSvg = pisos.length * ALTURA_PISO + 46;   // +telhado e base
 
   return (
     <div>
-      <div style={{ display: "flex", flexDirection: "column", gap: 6, maxWidth: 760 }}>
-        {pisos.map(piso => (
-          <div key={piso} style={{ display: "flex", alignItems: "stretch", gap: 8 }}>
-            <div style={{ width: 52, display: "flex", alignItems: "center", justifyContent: "flex-end",
-                          fontSize: 10, fontFamily: "monospace", color: "#aaa", fontWeight: 700 }}>
-              {piso}
-            </div>
-            <div style={{ flex: 1, display: "flex", gap: 6, flexWrap: "wrap", background: "#fbfcfd",
-                          border: "1px solid #f0f2f5", borderRadius: 8, padding: 7 }}>
-              {porPiso[piso]
-                .slice()
-                .sort((a, b) => String(a.fracao).localeCompare(String(b.fracao)))
-                .map(f => {
+      <div style={{ overflowX: "auto" }}>
+        <svg viewBox={`0 0 ${LARGURA} ${alturaSvg}`}
+             style={{ width: "100%", minWidth: 520, height: "auto", display: "block" }}>
+
+          {/* Telhado */}
+          <polygon points={`${MARGEM_ESQ - 10},26 ${LARGURA / 2 + MARGEM_ESQ / 2 - 5},4 ${LARGURA - 6},26`}
+                   fill="#e8eaef" stroke="#cdd2da" strokeWidth="1" />
+
+          {pisos.map((piso, iPiso) => {
+            const unidades = porPiso[piso].slice().sort((a, b) => String(a.fracao).localeCompare(String(b.fracao)));
+            const areaPiso = unidades.reduce((s, f) => s + areaDe(f), 0);
+            // O piso ocupa a largura proporcional à sua área face ao maior piso
+            const larguraPiso = (LARGURA - MARGEM_ESQ - 14) * (areaPiso / areaMaxPiso);
+            const y = 30 + iPiso * ALTURA_PISO;
+            let x = MARGEM_ESQ;
+
+            return (
+              <g key={piso}>
+                {/* Laje */}
+                <rect x={MARGEM_ESQ - 6} y={y - 4} width={LARGURA - MARGEM_ESQ - 2} height={ALTURA_PISO - 4}
+                      fill="#fbfcfd" stroke="#eef0f4" strokeWidth="1" rx="3" />
+                <text x={MARGEM_ESQ - 14} y={y + ALTURA_PISO / 2 - 2} textAnchor="end"
+                      fontSize="11" fontFamily="monospace" fontWeight="700" fill="#9aa2ae">{piso}</text>
+
+                {unidades.map(f => {
+                  const largura = Math.max(26, (areaDe(f) / areaPiso) * larguraPiso - GAP);
                   const c = ESTADO_COR[f.status] || ESTADO_COR["Disponível"];
+                  const xi = x; x += largura + GAP;
+                  const cabe = largura > 54;
                   return (
-                    <div key={f.id} title={`${f.fracao} · ${f.tipologia || "—"} · ${fmtNum(f.area)} m² · ${fmtEUR0(f.preco_tabela)} · ${f.status}`}
-                      style={{ minWidth: 74, background: c.fundo, border: `1px solid ${c.borda}`, borderRadius: 6,
-                               padding: "7px 9px", cursor: "default" }}>
-                      <div style={{ fontSize: 12, fontWeight: 800, color: c.texto }}>{f.fracao}</div>
-                      <div style={{ fontSize: 8.5, color: c.texto, opacity: 0.85, fontFamily: "monospace" }}>
-                        {f.tipologia || "—"}
-                      </div>
-                      <div style={{ fontSize: 8.5, color: c.texto, opacity: 0.7, fontFamily: "monospace" }}>
-                        {fmtCompacto(f.preco_tabela)}
-                      </div>
-                    </div>
+                    <g key={f.id}>
+                      <rect x={xi} y={y} width={largura} height={ALTURA_PISO - 14}
+                            fill={c.fundo} stroke={c.borda} strokeWidth="1.2" rx="3">
+                        <title>{`${f.fracao} · ${f.tipologia || "—"} · ${fmtNum(f.area)} m² · ${fmtEUR0(f.preco_tabela)} · ${f.status}`}</title>
+                      </rect>
+                      <text x={xi + largura / 2} y={y + 15} textAnchor="middle"
+                            fontSize="12" fontWeight="800" fill={c.texto} pointerEvents="none">{f.fracao}</text>
+                      {cabe && (
+                        <text x={xi + largura / 2} y={y + 28} textAnchor="middle"
+                              fontSize="8.5" fontFamily="monospace" fill={c.texto} opacity="0.85" pointerEvents="none">
+                          {f.tipologia || "—"} · {fmtNum(f.area, 0)}m²
+                        </text>
+                      )}
+                      {cabe && largura > 78 && (
+                        <text x={xi + largura / 2} y={y + 38} textAnchor="middle"
+                              fontSize="8.5" fontFamily="monospace" fill={c.texto} opacity="0.65" pointerEvents="none">
+                          {fmtCompacto(f.preco_tabela)}
+                        </text>
+                      )}
+                    </g>
                   );
                 })}
-            </div>
-          </div>
-        ))}
+
+                {/* Área do piso, à direita */}
+                <text x={LARGURA - 10} y={y + ALTURA_PISO / 2 - 2} textAnchor="end"
+                      fontSize="8.5" fontFamily="monospace" fill="#c8ccd4">
+                  {fmtNum(areaPiso, 0)} m²
+                </text>
+              </g>
+            );
+          })}
+
+          {/* Base / solo */}
+          <line x1={MARGEM_ESQ - 12} y1={30 + pisos.length * ALTURA_PISO + 2}
+                x2={LARGURA - 6} y2={30 + pisos.length * ALTURA_PISO + 2}
+                stroke="#cdd2da" strokeWidth="2" />
+        </svg>
       </div>
 
-      <div style={{ display: "flex", gap: 14, flexWrap: "wrap", marginTop: 14 }}>
-        {Object.keys(ESTADO_COR).map(s => (
-          <span key={s} style={{ fontSize: 10.5, color: COR.texto, display: "flex", alignItems: "center", gap: 5 }}>
-            <span style={{ width: 11, height: 11, borderRadius: 3, background: ESTADO_COR[s].fundo, border: `1px solid ${ESTADO_COR[s].borda}` }} />
-            {s} <strong style={{ color: COR.tinta }}>{resumo[s] || 0}</strong>
+      <div style={{ display: "flex", gap: 14, flexWrap: "wrap", marginTop: 12, alignItems: "center" }}>
+        {Object.keys(ESTADO_COR).map(st => (
+          <span key={st} style={{ fontSize: 10.5, color: COR.texto, display: "flex", alignItems: "center", gap: 5 }}>
+            <span style={{ width: 11, height: 11, borderRadius: 3, background: ESTADO_COR[st].fundo, border: `1px solid ${ESTADO_COR[st].borda}` }} />
+            {st} <strong style={{ color: COR.tinta }}>{resumo[st] || 0}</strong>
           </span>
         ))}
+        <span style={{ marginLeft: "auto", fontSize: 10.5, color: "#aaa", fontFamily: "monospace" }}>
+          {fmtInt(fracoes.length)} frações · {fmtNum(areaTotal, 0)} m² · largura proporcional à área
+        </span>
       </div>
     </div>
   );
@@ -373,107 +428,6 @@ function BarrasFluxoFuturo({ meses, saldoArranque }) {
         <span style={{ fontSize: 10.5, color: COR.texto }}>
           <span style={{ display: "inline-block", width: 14, height: 0, borderTop: `2px dashed ${COR.tinta}`, marginRight: 5, verticalAlign: "middle" }} />Saldo projetado
         </span>
-      </div>
-    </div>
-  );
-}
-
-// ─── REAL × ORÇADO ───────────────────────────────────────────────────────────
-// Atenção aos sinais: os custos são guardados NEGATIVOS e as receitas positivas.
-// Um desvio calculado como (orçado − previsto) sobre números com sinal inverte
-// a leitura — um estouro aparecia como folga. Por isso o cálculo é feito sobre
-// magnitudes e o sentido de "bom" depende do grupo.
-const GRUPO_ROTULO = {
-  receita: "Receitas",
-  capex:   "Aquisição de terreno",
-  obra:    "Obras",
-  opex:    "Soft costs e licenças",
-};
-
-function RealOrcado({ linhas }) {
-  if (!linhas.length) return <Vazio texto="Sem orçamento definido para estas empresas." />;
-
-  // desvio > 0 é sempre favorável: gastar menos, ou vender mais
-  const calc = (l) => {
-    const previsto = l.realizado + l.a_realizar;
-    const receita = l.grupo === "receita";
-    const desvio = receita
-      ? previsto - l.orcado
-      : Math.abs(l.orcado) - Math.abs(previsto);
-    const pct = l.orcado ? (Math.abs(previsto) / Math.abs(l.orcado)) * 100 : (previsto ? 100 : 0);
-    return { previsto, desvio, pct, favoravel: desvio >= -0.005 };
-  };
-
-  const grupos = [];
-  ["receita", "capex", "obra", "opex"].forEach(g => {
-    const doGrupo = linhas.filter(l => l.grupo === g);
-    if (doGrupo.length) grupos.push({ g, linhas: doGrupo });
-  });
-
-  const soma = (arr) => arr.reduce((a, l) => ({
-    grupo: arr[0]?.grupo, orcado: a.orcado + l.orcado,
-    realizado: a.realizado + l.realizado, a_realizar: a.a_realizar + l.a_realizar,
-  }), { orcado: 0, realizado: 0, a_realizar: 0 });
-
-  const custos = linhas.filter(l => l.grupo !== "receita");
-  const totCustos = { ...soma(custos), grupo: "custos", categoria: "TOTAL CUSTOS" };
-
-  const Linha = ({ l, nivel }) => {
-    const { previsto, desvio, pct, favoravel } = calc(l);
-    const cabecalho = nivel === "grupo" || nivel === "total";
-    return (
-      <tr style={{
-        borderBottom: "1px solid " + (cabecalho ? "#e8eaef" : "#fafafa"),
-        fontWeight: cabecalho ? 700 : 400,
-        background: nivel === "total" ? "#f0f4ff" : nivel === "grupo" ? "#f8f9fc" : "transparent",
-      }}>
-        <td style={{ padding: "8px 10px", color: COR.tinta, paddingLeft: nivel === "linha" ? 24 : 10 }}>{l.categoria}</td>
-        <td style={{ padding: "8px 10px", textAlign: "right", fontFamily: "monospace", color: "#666" }}>{fmtEUR0(l.orcado)}</td>
-        <td style={{ padding: "8px 10px", textAlign: "right", fontFamily: "monospace", color: COR.tinta }}>{fmtEUR0(l.realizado)}</td>
-        <td style={{ padding: "8px 10px", textAlign: "right", fontFamily: "monospace", color: "#888" }}>{fmtEUR0(l.a_realizar)}</td>
-        <td style={{ padding: "8px 10px", textAlign: "right", fontFamily: "monospace", color: "#666" }}>{fmtEUR0(previsto)}</td>
-        <td style={{ padding: "8px 10px", textAlign: "right", fontFamily: "monospace", fontWeight: 700, color: favoravel ? COR.entrada : COR.saida }}>
-          {(desvio >= 0 ? "+" : "") + fmtEUR0(desvio)}
-        </td>
-        <td style={{ padding: "8px 10px", width: 120 }}>
-          <div style={{ background: "#f1f2f5", borderRadius: 4, height: 13, overflow: "hidden" }}>
-            <div style={{ width: `${Math.min(100, pct)}%`, height: "100%", background: favoravel ? COR.saldo : COR.saida, borderRadius: 4 }} />
-          </div>
-          <div style={{ fontSize: 9, color: favoravel ? "#aaa" : COR.saida, fontFamily: "monospace", marginTop: 2 }}>{fmtNum(pct, 0)}%</div>
-        </td>
-      </tr>
-    );
-  };
-
-  return (
-    <div style={{ overflowX: "auto" }}>
-      <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 11.5 }}>
-        <thead>
-          <tr style={{ background: "#f8f9fc" }}>
-            {[["Categoria", "left"], ["Orçado", "right"], ["Realizado", "right"], ["A realizar", "right"],
-              ["Previsto total", "right"], ["Desvio", "right"], ["Consumo", "left"]].map(([h, al]) => (
-              <th key={h} style={{ padding: "9px 10px", textAlign: al, color: "#aaa", fontSize: 9, textTransform: "uppercase", fontFamily: "monospace", letterSpacing: "0.06em", borderBottom: "1px solid #f0f0f0" }}>{h}</th>
-            ))}
-          </tr>
-        </thead>
-        <tbody>
-          {grupos.map(({ g, linhas: ls }) => (
-            <React.Fragment key={g}>
-              <Linha nivel="grupo" l={{ ...soma(ls), grupo: g, categoria: GRUPO_ROTULO[g] || g }} />
-              {ls.filter(l => Math.abs(l.orcado) + Math.abs(l.realizado) + Math.abs(l.a_realizar) > 0.005)
-                 .map(l => <Linha key={l.id || l.categoria} nivel="linha" l={l} />)}
-            </React.Fragment>
-          ))}
-          <Linha nivel="total" l={totCustos} />
-        </tbody>
-      </table>
-      <div style={{ fontSize: 10.5, color: "#aaa", marginTop: 10, lineHeight: 1.6 }}>
-        <strong>Orçado</strong> vem do business plan. <strong>Realizado</strong> é a soma dos
-        movimentos bancários da categoria, desde o início do projeto.
-        <strong>A realizar</strong> são as previsões do Fluxo Futuro por liquidar mais as faturas
-        por pagar — lançar uma despesa no Fluxo Futuro atualiza esta tabela de imediato.<br/>
-        Previsto total = realizado + a realizar. Desvio positivo é favorável: gastar abaixo do
-        orçamento ou vender acima. Consumo acima de 100% marca a vermelho.
       </div>
     </div>
   );
@@ -582,9 +536,12 @@ export default function IRView({ currentUser, empresasVisiveis }) {
   const inicioAno = `${hoje.getFullYear()}-01-01`;
   const [de, setDe] = useState(inicioAno);
   const [ate, setAte] = useState(hoje.toISOString().slice(0, 10));
-  const [empSel, setEmpSel] = useState("todas");
+  // O Investor Relations analisa UM projeto de cada vez — juntar empresas
+  // diferentes num só quadro não diz nada a um investidor.
+  const [empSel, setEmpSel] = useState(empresas[0]?.id || "");
+  const empresaAtiva = empresas.find(e => e.id === empSel) || empresas[0];
 
-  const empresasAtivas = empSel === "todas" ? empresas : empresas.filter(e => e.id === empSel);
+  const empresasAtivas = empresaAtiva ? [empresaAtiva] : [];
   const contaIds = useMemo(() => empresasAtivas.flatMap(e => e.contas.map(c => c.id)), [empresasAtivas]);
 
   const { movimentos, loading } = useMovimentosPeriodo(contaIds, de, ate);
@@ -607,8 +564,6 @@ export default function IRView({ currentUser, empresasVisiveis }) {
     return { de: ini.toISOString().slice(0, 10), ate: fim.toISOString().slice(0, 10) };
   }, [de, ate]);
   const { movimentos: movsAnterior } = useMovimentosPeriodo(contaIds, periodoAnterior.de, periodoAnterior.ate);
-  // Real × Orçado é acumulado do projeto — não segue o filtro de período
-  const { movimentos: movimentosTotais } = useMovimentosPeriodo(contaIds, "2000-01-01", ate);
 
   const saldoInicial = useMemo(
     () => Object.values(saldosIniciais || {}).reduce((s, v) => s + (v || 0), 0),
@@ -752,57 +707,11 @@ export default function IRView({ currentUser, empresasVisiveis }) {
   const totalPrevSaidas = futuro.reduce((s, m) => s + m.saidas, 0);
 
   // ─── Real × Orçado ────────────────────────────────────────────────────────
-  // O orçado é o único número fixo (vem do business plan, tabela `orcamento`).
-  // O realizado e o a realizar calculam-se em tempo real a partir do ERP:
-  //   realizado  = movimentos bancários da categoria, desde sempre
-  //   a realizar = previsões do Fluxo Futuro por liquidar + faturas por pagar
-  // Assim, lançar uma despesa no Fluxo Futuro atualiza logo o Real × Orçado.
-  const linhasOrcamento = useMemo(() => {
-    const porCat = new Map();
-    const toca = (cat, campo, valor) => {
-      const k = (cat || "").trim() || "(sem categoria)";
-      if (!porCat.has(k)) porCat.set(k, { categoria: k, grupo: "opex", orcado: 0, realizado: 0, a_realizar: 0 });
-      porCat.get(k)[campo] += valor;
-    };
-
-    // 1. Orçado — do business plan
-    (orcamento || [])
-      .filter(o => idsAtivos.includes(o.empresa_id))
-      .forEach(o => {
-        const k = (o.categoria || "").trim() || "(sem categoria)";
-        if (!porCat.has(k)) porCat.set(k, { categoria: k, grupo: o.grupo || "opex", orcado: 0, realizado: 0, a_realizar: 0 });
-        const linha = porCat.get(k);
-        linha.orcado += Number(o.orcado) || 0;
-        if (o.grupo) linha.grupo = o.grupo;
-      });
-
-    // 2. Realizado — movimentos bancários de todo o histórico
-    movimentosTotais.forEach(m => toca(m.categoria, "realizado", Number(m.valor) || 0));
-
-    // 3. A realizar — previsões por liquidar (mesma regra do Fluxo Futuro)
-    (pagamentosExtras || [])
-      .filter(p => idsAtivos.includes(p.empresa))
-      .filter(p => !["Convertida", "Paga", "Pago"].includes(p.status))
-      .forEach(p => {
-        const v = Math.abs(Number(p.valor) || 0);
-        toca(p.categoria, "a_realizar", p.tipo === "entrada" ? v : -v);
-      });
-
-    // 4. A realizar — faturas ainda por pagar
-    (faturas || [])
-      .filter(f => idsAtivos.includes(f.empresa))
-      .filter(f => !faturaPaga(f))
-      .forEach(f => toca(f.categoria, "a_realizar", -Math.abs(Number(f.valor) || 0)));
-
-    return [...porCat.values()]
-      .filter(l => Math.abs(l.orcado) + Math.abs(l.realizado) + Math.abs(l.a_realizar) > 0.005)
-      .sort((a, b) => Math.abs(b.orcado) - Math.abs(a.orcado));
-  }, [orcamento, idsAtivos, movimentosTotais, pagamentosExtras, faturas]);
+  // Real × Orçado — mesmo cálculo do separador próprio (RealOrcadoView)
+  const { linhas: linhasOrcamento } = useRealOrcado(empresasAtivas);
 
   // ─── Timeline ─────────────────────────────────────────────────────────────
-  const empresaTimeline = empSel !== "todas"
-    ? empSel
-    : (empresasAtivas.find(e => CRONOGRAMAS[e.id])?.id || empresasAtivas[0]?.id);
+  const empresaTimeline = empSel;
   const cronograma = CRONOGRAMAS[empresaTimeline];
 
   const SECCOES = [
@@ -825,8 +734,7 @@ export default function IRView({ currentUser, empresasVisiveis }) {
       <div style={{ background: "#fff", border: "1px solid #f0f0f0", borderRadius: 12, padding: "13px 18px",
                     display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
         <select value={empSel} onChange={e => setEmpSel(e.target.value)}
-          style={{ ...inputEstilo, fontFamily: "inherit", minWidth: 220 }}>
-          <option value="todas">Todas as empresas</option>
+          style={{ ...inputEstilo, fontFamily: "inherit", minWidth: 240, fontWeight: 600 }}>
           {agruparPorGrupo(empresas).map(b => (
             <optgroup key={b.grupo} label={b.info.nome}>
               {b.empresas.map(e => <option key={e.id} value={e.id}>{e.nome}</option>)}
@@ -907,7 +815,7 @@ export default function IRView({ currentUser, empresasVisiveis }) {
 
       {seccao === "orcado" && (
         <Card titulo="Real × Orçado"
-              subtitulo={`${empSel === "todas" ? "Todas as empresas selecionadas" : empresasAtivas[0]?.nome} · realizado e a realizar calculados em tempo real a partir do ERP`}>
+              subtitulo={`${empresaAtiva?.nome || ""} · realizado e a realizar calculados em tempo real a partir do ERP`}>
           <RealOrcado linhas={linhasOrcamento} />
         </Card>
       )}

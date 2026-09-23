@@ -1,7 +1,6 @@
 import React, { useState, useEffect, useMemo } from "react";
 import ImportarExtrato from "./ImportarExtrato.jsx";
 import ImportarFatura from "./ImportarFatura.jsx";
-import ClientesView from "./ClientesView.jsx";
 import FluxoFuturo from "./FluxoFuturo.jsx";
 import ExtratosView from "./ExtratosView.jsx";
 import { useAuth, useContas, useFaturas, usePagamentosExtras, useOrcamento, useMovimentosCounts, useProfiles } from "./hooks.js";
@@ -34,14 +33,6 @@ const ROLE_COLORS = { admin: "#dc2626", gestor: "#2563eb", viewer: "#16a34a", in
 // ─── EMPRESAS ────────────────────────────────────────────────────────────────
 // A lista de empresas e contas vive em ./empresas.js (fonte única de verdade).
 
-// ─── REAL x ORÇADO ───────────────────────────────────────────────────────────
-// Vazio no arranque. Adicionar aqui um objeto por projeto quando existirem
-// orçamentos a acompanhar:
-//   { id:"proj", nome:"Nome do Projeto", dados:[
-//       { categoria:"Vendas", grupo:"receita", orcado:0, realizado:0, a_realizar:0 },
-//   ]}
-// grupos possíveis: receita | capex | obra | opex | resultado
-const REAL_ORCADO_PROJECTS = [];
 
 // ─── CONTAS A PAGAR ───────────────────────────────────────────────────────────
 const TIPO_PROJETO = ["Residencial","Comercial","Misto","Terreno","Remodelação","CSC"];
@@ -144,122 +135,6 @@ function Login({onLogin}) {
 }
 
 // ─── REAL x ORCADO ────────────────────────────────────────────────────────────
-function RealOrcado() {
-  const [projetoId,setProjetoId] = useState(REAL_ORCADO_PROJECTS[0]?.id || "");
-  const projeto = REAL_ORCADO_PROJECTS.find(p=>p.id===projetoId) || REAL_ORCADO_PROJECTS[0];
-
-  if (!projeto) return (
-    <Card>
-      <SectionTitle>Real × Orçado</SectionTitle>
-      <div style={{fontSize:13,color:"#888",lineHeight:1.7}}>
-        Ainda não há orçamentos configurados.<br/>
-        Adiciona os projetos e respetivas rubricas em <code style={{background:"#f4f5f7",padding:"2px 6px",borderRadius:4}}>src/App.jsx → REAL_ORCADO_PROJECTS</code>.
-      </div>
-    </Card>
-  );
-
-  const receitas = projeto.dados.filter(d=>d.grupo==="receita"&&d.categoria!=="VENDAS LÍQUIDAS");
-  const totalRec = receitas.reduce((s,d)=>s+d.realizado,0);
-  const totalOrcRec = receitas.reduce((s,d)=>s+d.orcado,0);
-
-  const despesas = projeto.dados.filter(d=>["capex","obra","opex"].includes(d.grupo));
-  const totalDesp = despesas.reduce((s,d)=>s+d.realizado,0);
-  const totalOrcDesp = despesas.reduce((s,d)=>s+d.orcado,0);
-
-  const resultado = projeto.dados.find(d=>d.categoria==="Lucro Líquido");
-
-  const GrupoTag = ({grupo}) => {
-    const labels = {receita:"Receita",capex:"CapEx",obra:"Obra",opex:"OpEx",resultado:"Resultado"};
-    return <Chip text={labels[grupo]||grupo} color={GRUPO_COLORS[grupo]||"#888"} />;
-  };
-
-  const ProgressBar = ({realizado,orcado,color}) => {
-    const p = orcado!==0 ? Math.min(Math.abs(realizado/orcado)*100,120) : 0;
-    const over = p>100;
-    return (
-      <div style={{width:"100%",height:6,background:"#f0f0f0",borderRadius:3,overflow:"hidden",marginTop:4}}>
-        <div style={{width:`${Math.min(p,100)}%`,height:"100%",background:over?"#dc2626":color||"#3b82f6",borderRadius:3,transition:"width 0.5s ease"}}/>
-      </div>
-    );
-  };
-
-  return (
-    <div style={{display:"flex",flexDirection:"column",gap:20}}>
-      {/* Project selector */}
-      <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
-        {REAL_ORCADO_PROJECTS.map(p=>(
-          <button key={p.id} onClick={()=>setProjetoId(p.id)}
-            style={{background:projetoId===p.id?"#1a1a2e":"#fff",color:projetoId===p.id?"#fff":"#666",border:`1px solid ${projetoId===p.id?"#1a1a2e":"#e0e0e0"}`,padding:"8px 20px",borderRadius:8,fontSize:13,cursor:"pointer",fontWeight:projetoId===p.id?700:400}}>
-            {p.nome}
-          </button>
-        ))}
-      </div>
-
-      {/* KPI row */}
-      <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:14}}>
-        {[
-          {label:"Vendas Realizadas",     value:totalRec,       color:"#16a34a"},
-          {label:"Vendas Orçadas",        value:totalOrcRec,    color:"#888"},
-          {label:"Custos Realizados",     value:totalDesp,      color:"#dc2626"},
-          {label:"Lucro Líquido (Orç.)",  value:resultado?.orcado||0, color:"#0891b2"},
-        ].map((k,i)=>(
-          <div key={i} style={{background:"#fff",border:"1px solid #f0f0f0",borderRadius:12,padding:"16px 18px",borderTop:`3px solid ${k.color}`}}>
-            <div style={{fontSize:10,color:"#aaa",textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:6,fontFamily:"monospace"}}>{k.label}</div>
-            <div style={{fontSize:18,fontWeight:700,color:k.color,fontFamily:"monospace"}}>{fmtK(k.value)}</div>
-          </div>
-        ))}
-      </div>
-
-      {/* Main table */}
-      <Card>
-        <SectionTitle>Real × Orçado — {projeto.nome}</SectionTitle>
-        <div style={{overflowX:"auto"}}>
-          <table style={{width:"100%",borderCollapse:"collapse",fontSize:12}}>
-            <thead>
-              <tr style={{background:"#f8f9fc"}}>
-                {["Categoria","Grupo","Orçado","Realizado","A Realizar","Forecast","% Real.","Desvio"].map(h=>(
-                  <th key={h} style={{padding:"10px 14px",textAlign:"left",color:"#aaa",fontSize:10,letterSpacing:"0.08em",textTransform:"uppercase",fontFamily:"monospace",borderBottom:"1px solid #f0f0f0",whiteSpace:"nowrap"}}>{h}</th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {projeto.dados.map((row,i)=>{
-                const forecast = row.realizado + (row.a_realizar||0);
-                const p = pct(row.realizado, row.orcado);
-                const desvio = row.realizado - row.orcado;
-                const isTotal = ["VENDAS LÍQUIDAS","DESPESAS TOTAIS","Lucro Tributável","Lucro Líquido"].includes(row.categoria);
-                return (
-                  <tr key={i} style={{borderBottom:"1px solid #fafafa",background:isTotal?"#f8f9fc":""}}
-                    onMouseEnter={e=>e.currentTarget.style.background=isTotal?"#f0f4ff":"#fafafa"}
-                    onMouseLeave={e=>e.currentTarget.style.background=isTotal?"#f8f9fc":""}>
-                    <td style={{padding:"11px 14px",fontWeight:isTotal?700:400,color:isTotal?"#1a1a2e":"#444",paddingLeft:["obra"].includes(row.grupo)?28:14}}>{row.categoria}</td>
-                    <td style={{padding:"11px 14px"}}><GrupoTag grupo={row.grupo}/></td>
-                    <td style={{padding:"11px 14px",fontFamily:"monospace",color:"#888"}}>{row.orcado?fmtK(row.orcado):"—"}</td>
-                    <td style={{padding:"11px 14px"}}>
-                      <div style={{fontFamily:"monospace",fontWeight:600,color:row.grupo==="receita"?"#16a34a":row.grupo==="resultado"?"#0891b2":"#dc2626"}}>{row.realizado?fmtK(row.realizado):"—"}</div>
-                      {row.orcado && row.realizado && <ProgressBar realizado={row.realizado} orcado={row.orcado} color={GRUPO_COLORS[row.grupo]} />}
-                    </td>
-                    <td style={{padding:"11px 14px",fontFamily:"monospace",color:row.a_realizar<0?"#d97706":"#aaa"}}>{row.a_realizar?fmtK(row.a_realizar):"—"}</td>
-                    <td style={{padding:"11px 14px",fontFamily:"monospace",fontWeight:600,color:row.grupo==="receita"?"#16a34a":row.grupo==="resultado"?"#0891b2":"#555"}}>{forecast?fmtK(forecast):"—"}</td>
-                    <td style={{padding:"11px 14px",fontFamily:"monospace",fontSize:11}}>
-                      {p!==null ? (
-                        <span style={{color:p>110?"#dc2626":p>80?"#16a34a":"#d97706",fontWeight:600}}>{fmtPct(p,1)}</span>
-                      ):"—"}
-                    </td>
-                    <td style={{padding:"11px 14px",fontFamily:"monospace",fontSize:11,color:desvio>0?"#16a34a":desvio<0?"#dc2626":"#aaa"}}>
-                      {row.orcado&&row.realizado?(desvio>0?"+":"")+fmtK(desvio):"—"}
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-      </Card>
-    </div>
-  );
-}
-
 // ─── EXTRATO TABLE ────────────────────────────────────────────────────────────
 function ExtratoTable({movimentos}) {
   const [desc,setDesc]=useState("");
@@ -1267,8 +1142,6 @@ const TABS_CONFIG = [
   {id:"extrato",   label:"Extratos",          roles:["admin","gestor","viewer","investidor"]},
   {id:"comercial", label:"Comercial",          roles:["admin","gestor","viewer","investidor"]},
   {id:"fotos",     label:"Fotos",              roles:["admin","gestor","viewer","investidor"]},
-  {id:"clientes",  label:"Clientes",           roles:["admin","gestor","viewer"]},
-  {id:"orcado",    label:"Real × Orçado",      roles:["admin","gestor","viewer"]},
   {id:"fluxo",     label:"Fluxo Futuro",       roles:["admin","gestor","viewer"]},
   {id:"pagar",     label:"Contas a Pagar",     roles:["admin","gestor","viewer","investidor"]},
   {id:"pagamentos",label:"Pagamentos",         roles:["admin","gestor","viewer"]},
@@ -1474,10 +1347,8 @@ export default function App() {
         <TabErrorBoundary key={tab}>
           {tab==="extrato"   && <ExtratosView EMPRESAS={empresasVisiveis} extrato={[]} caixaUnico={caixaUnico} setCaixaUnico={handleSetCaixaUnico} currentUser={currentUser} autoOpenConta={lastImportedConta} movCounts={movCounts} faturas={faturas} pagamentosExtras={pagamentosExtras} onUpdateFatura={updateFatura} onUpdatePagamento={updatePagamento}/>}
           {tab==="comercial" && <ComercialView currentUser={currentUser} onAddFatura={addFatura} empresasVisiveis={empresasVisiveis}/>}
-          {tab==="clientes"  && <ComercialView currentUser={currentUser} onAddFatura={addFatura} empresasVisiveis={empresasVisiveis}/>}
           {tab==="ir"        && <IRView currentUser={currentUser} empresasVisiveis={empresasVisiveis}/>}
           {tab==="fotos"     && <FotosView currentUser={currentUser} empresasVisiveis={empresasVisiveis}/>}
-          {tab==="orcado"    && <RealOrcado/>}
           {tab==="fluxo"     && <FluxoFuturo faturas={faturas} faturasLoading={faturasLoading} pagamentosExtras={pagamentosExtras} pagamentosLoading={pagamentosLoading} onAddPagamento={addPagamento} onUpdatePagamento={updatePagamento} onDeletePagamento={deletePagamento} onUpdateFatura={updateFatura} onDeleteFatura={deleteFatura} currentUser={currentUser} EMPRESAS={empresasVisiveis} caixaUnico={caixaUnico}/>}
           {tab==="pagar"     && <ContasPagar canEdit={canEdit && !isInvestidor} EMPRESAS={empresasVisiveis} faturas={faturas} setFaturas={handleSetFaturas} addFatura={addFatura} updateFatura={updateFatura} deleteFatura={deleteFatura}/>}
           {tab==="pagamentos"&& <PagamentosView faturas={faturas.filter(f=>empresasVisiveis.some(e=>e.id===f.empresa)||!f.empresa)} pagamentosExtras={pagamentosExtras.filter(p=>empresasVisiveis.some(e=>e.id===p.empresa)||!p.empresa)} currentUser={currentUser} profiles={profiles}/>}

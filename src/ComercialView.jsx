@@ -655,121 +655,6 @@ function TabelaVendas({ fracoes, vendas, canEdit, onAddFatura, onUpdateFracao, o
 }
 
 // ─── GESTÃO DE COMISSÕES ───────────────────────────────────────────────────────
-function GestaoComissoes({ vendas, fracoes, canEdit, onAddFatura, onUpdateVenda }) {
-  const [filterStatus, setFilterStatus] = useState("Todas");
-  const [editComissao, setEditComissao] = useState(null);
-
-  const comissoes = useMemo(()=>vendas.filter(v=>(v.comissao_valor||0)>0).map(v=>{
-    const frac=fracoes.find(f=>f.id===v.fracao_id);
-    const comPago=(v.comissao_paga_sinal||0)+(v.comissao_paga_escritura||0);
-    const comPend=(v.comissao_pendente_sinal||0)+(v.comissao_pendente_escritura||0);
-    const comPct=v.comissao_valor&&v.valor_venda?(v.comissao_valor/v.valor_venda*100):(v.comissao_pct||0);
-    const status=comPend===0&&comPago>0?"Paga":comPago>0?"Parcial":"Pendente";
-    return {...v,_frac:frac,_comPago:comPago,_comPend:comPend,_comPct:comPct,status};
-  }),[vendas,fracoes]);
-
-  const filtered=filterStatus==="Todas"?comissoes:comissoes.filter(c=>c.status===filterStatus);
-  const handleGerarFatura=(venda)=>{
-    const frac=fracoes.find(f=>f.id===venda.fracao_id);
-    onAddFatura?.({
-      id:"fat_com_"+venda.id,empresa:EMPRESA_COMISSOES,projeto:frac?.projeto||"",
-      fatura:`COM-${venda.id.slice(-6).toUpperCase()}`,fornecedor:venda.mediador||"Mediador",
-      categoria:"Comissão",tipo_projeto:frac?.projeto||"",valor:venda.comissao_valor||0,
-      vencimento:(venda.comissao_parcelas||[]).find(p=>!p.pago)?.data||"",status:"Pendente",
-      obs:`Comissão venda — ${frac?.fracao||""} — ${venda.cliente||""}`,anexo_nome:"",anexo_b64:"",
-    });
-    onUpdateVenda?.(venda.id, {fatura_criada:true});
-  };
-
-  return (
-    <div style={{display:"flex",flexDirection:"column",gap:16}}>
-      <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:12}}>
-        {[
-          {label:"Total Comissões",value:fmt(comissoes.reduce((s,c)=>s+(c.comissao_valor||0),0)),color:"#1a1a2e"},
-          {label:"Pagas",value:fmt(comissoes.reduce((s,c)=>s+c._comPago,0)),color:"#16a34a"},
-          {label:"Pendentes",value:fmt(comissoes.reduce((s,c)=>s+c._comPend,0)),color:"#dc2626"},
-        ].map((k,i)=>(
-          <div key={i} style={{background:"#fff",border:"1px solid #f0f0f0",borderRadius:12,padding:"14px 18px",borderTop:`3px solid ${k.color}`}}>
-            <div style={{fontSize:9,color:"#aaa",textTransform:"uppercase",fontFamily:"monospace",marginBottom:5}}>{k.label}</div>
-            <div style={{fontSize:20,fontWeight:800,color:k.color,fontFamily:"monospace"}}>{k.value}</div>
-          </div>
-        ))}
-      </div>
-      <div style={{display:"flex",gap:8}}>
-        {["Todas","Pendente","Parcial","Paga"].map(s=>(
-          <button key={s} onClick={()=>setFilterStatus(s)}
-            style={{background:filterStatus===s?"#1a1a2e":"#fff",color:filterStatus===s?"#fff":"#888",border:`1px solid ${filterStatus===s?"#1a1a2e":"#eee"}`,padding:"6px 14px",borderRadius:8,fontSize:12,cursor:"pointer"}}>
-            {s}
-          </button>
-        ))}
-      </div>
-      <div style={{background:"#fff",border:"1px solid #f0f0f0",borderRadius:14,overflow:"hidden"}}>
-        <div style={{overflowX:"auto"}}>
-          <table style={{width:"100%",borderCollapse:"collapse",fontSize:11}}>
-            <thead>
-              <tr style={{background:"#f8f9fc"}}>
-                {["Fração","Cliente","Mediador","Valor Venda","% Com.","Total Com.","Pago","Pendente","Parcelas","Estado","Fatura","Ações"].map(h=>(
-                  <th key={h} style={{padding:"9px 12px",textAlign:"left",color:"#aaa",fontSize:9,letterSpacing:"0.07em",textTransform:"uppercase",fontFamily:"monospace",borderBottom:"1px solid #f0f0f0",whiteSpace:"nowrap"}}>{h}</th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {filtered.length===0
-                ?<tr><td colSpan={12} style={{padding:"40px",textAlign:"center",color:"#ccc"}}>Nenhuma comissão.</td></tr>
-                :filtered.map(c=>(
-                  <tr key={c.id} style={{borderBottom:"1px solid #fafafa"}}
-                    onMouseEnter={e=>e.currentTarget.style.background="#f8f9fc"}
-                    onMouseLeave={e=>e.currentTarget.style.background=""}>
-                    <td style={{padding:"9px 12px",fontWeight:700,color:"#1a1a2e",whiteSpace:"nowrap",fontSize:10}}>{c._frac?.projeto} · {c._frac?.fracao}</td>
-                    <td style={{padding:"9px 12px",color:"#333"}}>{c.cliente}</td>
-                    <td style={{padding:"9px 12px",color:"#888",fontSize:10}}>{c.mediador||"—"}</td>
-                    <td style={{padding:"9px 12px",fontFamily:"monospace",color:"#1a1a2e"}}>{fmt(c.valor_venda)}</td>
-                    <td style={{padding:"9px 12px",fontFamily:"monospace",color:"#4a6fa5"}}>{fmtPct(c._comPct)}</td>
-                    <td style={{padding:"9px 12px",fontFamily:"monospace",fontWeight:700,color:"#dc2626"}}>{fmt(c.comissao_valor)}</td>
-                    <td style={{padding:"9px 12px",fontFamily:"monospace",color:"#16a34a"}}>{c._comPago>0?fmt(c._comPago):"—"}</td>
-                    <td style={{padding:"9px 12px",fontFamily:"monospace",color:c._comPend>0?"#dc2626":"#aaa",fontWeight:c._comPend>0?700:400}}>{c._comPend>0?fmt(c._comPend):"—"}</td>
-                    <td style={{padding:"9px 12px",color:"#888"}}>{(c.comissao_parcelas||[]).length||"—"}</td>
-                    <td style={{padding:"9px 12px"}}>
-                      <span style={{background:c.status==="Paga"?"#f0fdf4":c.status==="Parcial"?"#eff6ff":"#fffbeb",
-                        color:c.status==="Paga"?"#16a34a":c.status==="Parcial"?"#2563eb":"#d97706",
-                        fontSize:9,padding:"2px 8px",borderRadius:20,fontFamily:"monospace",fontWeight:600}}>{c.status}</span>
-                    </td>
-                    <td style={{padding:"9px 12px"}}>
-                      {c.fatura_criada
-                        ?<span style={{fontSize:9,color:"#16a34a",border:"1px solid #bbf7d0",background:"#f0fdf4",padding:"2px 7px",borderRadius:4}}>✓ Criada</span>
-                        :<span style={{fontSize:9,color:"#aaa",border:"1px solid #eee",padding:"2px 7px",borderRadius:4}}>Não criada</span>
-                      }
-                    </td>
-                    <td style={{padding:"9px 12px"}}>
-                      {canEdit&&<button onClick={()=>setEditComissao(c)}
-                        style={{background:"#fffbeb",border:"1px solid #fde68a",color:"#d97706",padding:"3px 8px",borderRadius:5,fontSize:10,cursor:"pointer",fontWeight:600}}>✎ Editar</button>}
-                    </td>
-                  </tr>
-                ))}
-            </tbody>
-            {filtered.length>0&&(
-              <tfoot>
-                <tr style={{background:"#f0f4ff",borderTop:"2px solid #dde3f0"}}>
-                  <td colSpan={5} style={{padding:"9px 12px",fontSize:10,color:"#4a6fa5",fontWeight:700}}>TOTAL ({filtered.length})</td>
-                  <td style={{padding:"9px 12px",fontFamily:"monospace",fontWeight:700,color:"#dc2626"}}>{fmt(filtered.reduce((s,c)=>s+(c.comissao_valor||0),0))}</td>
-                  <td style={{padding:"9px 12px",fontFamily:"monospace",fontWeight:700,color:"#16a34a"}}>{fmt(filtered.reduce((s,c)=>s+c._comPago,0))}</td>
-                  <td style={{padding:"9px 12px",fontFamily:"monospace",fontWeight:700,color:"#dc2626"}}>{fmt(filtered.reduce((s,c)=>s+c._comPend,0))}</td>
-                  <td colSpan={4}/>
-                </tr>
-              </tfoot>
-            )}
-          </table>
-        </div>
-      </div>
-      {editComissao&&<ComissaoModal venda={editComissao} fracao={editComissao._frac}
-        onSave={u=>{onUpdateVenda?.(editComissao.id,u);setEditComissao(null);}}
-        onClose={()=>setEditComissao(null)}
-        onGerarFatura={v=>{handleGerarFatura(v);setEditComissao(null);}}/>}
-    </div>
-  );
-}
-
-// ─── MAIN ──────────────────────────────────────────────────────────────────────
 export default function ComercialView({ currentUser, onAddFatura, empresasVisiveis }) {
   // Um investidor só vê os projetos que lhe foram atribuídos. A base de dados já
   // filtra as linhas por RLS; aqui filtra-se também a lista de projetos, para os
@@ -780,7 +665,6 @@ export default function ComercialView({ currentUser, onAddFatura, empresasVisive
   const projetosPermitidos = empresas.map(e => e.nome);
   const limitado = Array.isArray(empresasVisiveis) && empresasVisiveis.length < EMPRESAS.length;
 
-  const [subTab, setSubTab] = useState("tabela");
   const { fracoes: fracoesTodas, loaded: fracoesLoaded, upsertFracao, deleteFracao } = useFracoes();
   const { vendas: vendasTodas, loaded: vendasLoaded, upsertVenda, deleteVenda } = useVendas();
 
@@ -809,33 +693,16 @@ export default function ComercialView({ currentUser, onAddFatura, empresasVisive
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 20, fontFamily: "'DM Sans', sans-serif" }}>
-      <div style={{ display: "flex", gap: 4, background: "#fff", border: "1px solid #f0f0f0", borderRadius: 12, padding: 6, width: "fit-content" }}>
-        {[["tabela", "📋 Tabela de Vendas"], ["comissoes", "🤝 Gestão de Comissões"]].map(([id, label]) => (
-          <button key={id} onClick={() => setSubTab(id)}
-            style={{ background: subTab === id ? "#1a1a2e" : "none", color: subTab === id ? "#fff" : "#888", border: "none", padding: "9px 20px", borderRadius: 8, fontSize: 13, cursor: "pointer", fontWeight: subTab === id ? 700 : 400 }}>
-            {label}
-          </button>
-        ))}
-      </div>
-      {subTab === "tabela" && (
-        <TabelaVendas
-          fracoes={fracoes} vendas={vendas} canEdit={canEdit}
-          onAddFatura={onAddFatura}
-          onUpdateFracao={updateFracao}
-          onUpdateVenda={updateVenda}
-          onUpsertVenda={upsertVenda}
-          onUpsertFracao={upsertFracao}
-          onDeleteFracao={deleteFracao}
-          projetosDisponiveis={projetosPermitidos}
-        />
-      )}
-      {subTab === "comissoes" && (
-        <GestaoComissoes
-          vendas={vendas} fracoes={fracoes} canEdit={canEdit}
-          onAddFatura={onAddFatura}
-          onUpdateVenda={updateVenda}
-        />
-      )}
+      <TabelaVendas
+        fracoes={fracoes} vendas={vendas} canEdit={canEdit}
+        onAddFatura={onAddFatura}
+        onUpdateFracao={updateFracao}
+        onUpdateVenda={updateVenda}
+        onUpsertVenda={upsertVenda}
+        onUpsertFracao={upsertFracao}
+        onDeleteFracao={deleteFracao}
+        projetosDisponiveis={projetosPermitidos}
+      />
     </div>
   );
 }
