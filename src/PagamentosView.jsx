@@ -2,6 +2,7 @@ import { useState, useMemo, useEffect } from "react";
 import { useMapasPagamento, useMapaItens, useVendas } from "./hooks.js";
 import { supabase } from "./supabase.js";
 import { fmtEUR, fmtDataHora } from "./formato.js";
+import { statusFatura, faturaPaga } from "./status.js";
 
 const fmtFull = (v) => fmtEUR(v);
 const fmtDate = (s) => {
@@ -194,9 +195,13 @@ function NovoMapa({ faturas, pagamentosExtras, vendas, currentUser, onCancel, on
   const candidatos = useMemo(() => {
     const out = [];
 
-    // 1. Faturas (Contas a Pagar) que estão Pendente ou Vencida
+    // 1. Faturas (Contas a Pagar) — só as que continuam por pagar.
+    //    Comparar com a string "Paga" já não chega: depois da migração v7 os
+    //    estados passaram a ser "Pago" e "Lançado no banco", e as faturas
+    //    liquidadas voltavam a aparecer aqui para seleção.
     (faturas || []).forEach(f => {
-      if (f.status === "Paga") return;
+      if (faturaPaga(f)) return;                              // Pago / Lançado no banco
+      if (!statusFatura(f).startsWith("Pendente")) return;    // exclui bloqueadas
       out.push({
         key: `fatura:${f.id}`,
         tipo_origem: "fatura",
@@ -213,7 +218,7 @@ function NovoMapa({ faturas, pagamentosExtras, vendas, currentUser, onCancel, on
 
     // 2. Pagamentos extras Pendentes
     (pagamentosExtras || []).forEach(p => {
-      if (p.status === "Paga" || p.status === "Pago") return;
+      if (["Paga", "Pago", "Convertida"].includes(p.status)) return;  // convertida já virou fatura
       if (p.tipo === "entrada") return;  // só saídas vão para mapa
       out.push({
         key: `pagamento_extra:${p.id}`,

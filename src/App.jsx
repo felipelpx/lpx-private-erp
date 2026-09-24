@@ -659,7 +659,7 @@ function ContasPagar({canEdit, faturas: faturasTodas, setFaturas, addFatura, upd
                     onMouseEnter={e=>e.currentTarget.style.background=rejeitada?"#f5f5f5":vencida?"#fff0f0":inMapa?"#e8f4ff":"#fafafa"}
                     onMouseLeave={e=>e.currentTarget.style.background=rejeitada?"#f9f9f9":vencida?"#fff8f8":inMapa?"#f0f9ff":""}>
                     <td style={{padding:"11px 14px"}}>
-                      {!rejeitada&&f.status!=="Paga"&&<input type="checkbox" checked={inMapa} onChange={()=>toggleMapa(f.id)} style={{cursor:"pointer",width:15,height:15}}/>}
+                      {!rejeitada&&!faturaPaga(f)&&<input type="checkbox" checked={inMapa} onChange={()=>toggleMapa(f.id)} style={{cursor:"pointer",width:15,height:15}}/>}
                     </td>
                     <td style={{padding:"11px 14px"}}><div style={{fontWeight:600,color:emp?"#1a1a2e":"#c2410c",fontSize:12}}>{emp?.nome||(f.empresa||"— sem empresa —")}</div><div style={{fontSize:10,color:"#bbb",fontFamily:"monospace"}}>{emp?`NIPC:${emp.nipc||""}`:"por atribuir"}</div></td>
                     <td style={{padding:"11px 14px",color:"#555"}}>{f.projeto}</td>
