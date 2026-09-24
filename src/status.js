@@ -34,10 +34,26 @@ const hojeISO = () => {
 
 // Estado a mostrar: traduz o legado e marca como atrasado o que passou da data.
 // A fatura guardada não é alterada — só a leitura.
+// Normaliza para comparar: sem espaços extra, sem acentos, minúsculas.
+// Protege contra "PAGO", "pago ", "Pagas" e variantes vindas de importações.
+const chave = (t) => String(t || "")
+  .trim()
+  .normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+  .toLowerCase();
+
+const POR_CHAVE = {};
+STATUS_FATURA.forEach(s => { POR_CHAVE[chave(s)] = s; });
+Object.entries(LEGADO).forEach(([antigo, novo]) => { POR_CHAVE[chave(antigo)] = novo; });
+// Variantes soltas que aparecem em ficheiros importados
+Object.assign(POR_CHAVE, {
+  "pagas": "Pago", "pagos": "Pago", "liquidado": "Pago", "liquidada": "Pago",
+  "pendentes": "Pendente em dia", "por pagar": "Pendente em dia",
+  "cancelado": "Pagamento bloqueado", "cancelada": "Pagamento bloqueado",
+});
+
 export function statusFatura(f) {
   if (!f) return "Pendente em dia";
-  const bruto = f.status || "";
-  const s = STATUS_FATURA.includes(bruto) ? bruto : (LEGADO[bruto] || "Pendente em dia");
+  const s = POR_CHAVE[chave(f.status)] || "Pendente em dia";
   if (s === "Pendente em dia") {
     const venc = f.previsao_pagamento || f.vencimento;
     if (venc && String(venc).slice(0, 10) < hojeISO()) return "Pendente atrasado";
