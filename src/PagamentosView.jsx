@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect } from "react";
-import { useMapasPagamento, useMapaItens, useVendas } from "./hooks.js";
+import { useMapasPagamento, useMapaItens } from "./hooks.js";
 import { supabase } from "./supabase.js";
 import { fmtEUR, fmtDataHora } from "./formato.js";
 import { statusFatura, faturaPaga } from "./status.js";
@@ -26,7 +26,6 @@ const STATUS_INFO = {
 
 export default function PagamentosView({ faturas, pagamentosExtras, currentUser, profiles = [] }) {
   const { mapas, loading: mapasLoading, addMapa, updateMapa, deleteMapa } = useMapasPagamento();
-  const { vendas } = useVendas();
   const [view, setView] = useState("lista");  // 'lista' | 'novo' | 'detalhe'
   const [activeMapaId, setActiveMapaId] = useState(null);
 
@@ -59,7 +58,7 @@ export default function PagamentosView({ faturas, pagamentosExtras, currentUser,
 
   if (view === "novo") {
     return <NovoMapa
-      faturas={faturas} pagamentosExtras={pagamentosExtras} vendas={vendas}
+      faturas={faturas}
       currentUser={currentUser}
       onCancel={() => setView("lista")}
       onCreated={async (mapa, itens) => {
@@ -181,7 +180,7 @@ export default function PagamentosView({ faturas, pagamentosExtras, currentUser,
 }
 
 // ─── Componente: criar novo mapa ─────────────────────────────────────────────
-function NovoMapa({ faturas, pagamentosExtras, vendas, currentUser, onCancel, onCreated }) {
+function NovoMapa({ faturas, currentUser, onCancel, onCreated }) {
   const hoje = new Date().toISOString().slice(0, 10);
   const [descricao, setDescricao] = useState(`Mapa de ${hoje.split("-").reverse().join("-")}`);
   const [selected, setSelected] = useState({});  // key -> true
@@ -191,7 +190,7 @@ function NovoMapa({ faturas, pagamentosExtras, vendas, currentUser, onCancel, on
   const [filtroVencDe, setFiltroVencDe] = useState("");
   const [filtroVencAte, setFiltroVencAte] = useState("");
 
-  // Construir lista de candidatos: faturas pendentes + pagamentos manuais pendentes + comissões pendentes
+  // Candidatos ao mapa: SÓ faturas de Contas a Pagar que continuam por pagar.
   const candidatos = useMemo(() => {
     const out = [];
 
@@ -216,60 +215,22 @@ function NovoMapa({ faturas, pagamentosExtras, vendas, currentUser, onCancel, on
       });
     });
 
-    // 2. Pagamentos extras Pendentes
-    (pagamentosExtras || []).forEach(p => {
-      if (["Paga", "Pago", "Convertida"].includes(p.status)) return;  // convertida já virou fatura
-      if (p.tipo === "entrada") return;  // só saídas vão para mapa
-      out.push({
-        key: `pagamento_extra:${p.id}`,
-        tipo_origem: "pagamento_extra",
-        origem_id: p.id,
-        descricao: p.descricao || "",
-        fornecedor: "",
-        empresa: p.empresa || "",
-        categoria: p.categoria || "",
-        valor: parseFloat(p.valor) || 0,
-        vencimento: p.data_inicio,
-        _label: "Pagamento",
-      });
-    });
+    // As previsões do Fluxo Futuro NÃO entram no mapa de pagamento.
+    // Um mapa autoriza pagamentos a fornecedores, e isso só existe depois de
+    // haver fatura em Contas a Pagar. Previsões são estimativas — quando a
+    // fatura chega, converte-se a previsão e a fatura passa a estar disponível
+    // aqui automaticamente.
 
-    // 3. Comissões pendentes de vendas (sinal e escritura)
-    (vendas || []).forEach(v => {
-      if (v.comissao_pendente_sinal > 0 && v.data_pagamento_sinal) {
-        out.push({
-          key: `comissao_sinal:${v.id}`,
-          tipo_origem: "comissao_sinal",
-          origem_id: String(v.id),
-          descricao: `Comissão sinal · ${v.fracao} (${v.cliente || "—"})`,
-          fornecedor: v.imobiliaria || "",
-          empresa: v.projeto || "",
-          categoria: "Comissão",
-          valor: parseFloat(v.comissao_pendente_sinal) || 0,
-          vencimento: v.data_pagamento_sinal,
-          _label: "Comissão Sinal",
-        });
-      }
-      if (v.comissao_pendente_escritura > 0 && v.data_pagamento_escritura) {
-        out.push({
-          key: `comissao_escritura:${v.id}`,
-          tipo_origem: "comissao_escritura",
-          origem_id: String(v.id),
-          descricao: `Comissão escritura · ${v.fracao} (${v.cliente || "—"})`,
-          fornecedor: v.imobiliaria || "",
-          empresa: v.projeto || "",
-          categoria: "Comissão",
-          valor: parseFloat(v.comissao_pendente_escritura) || 0,
-          vencimento: v.data_pagamento_escritura,
-          _label: "Comissão Escritura",
-        });
-      }
-    });
+    // As comissões de vendas também não entram diretamente: só chegam aqui
+    // depois de virarem fatura. Na aba Comercial, o botão 🤝 de cada venda
+    // gera a fatura da comissão em Contas a Pagar — e a partir daí aparece
+    // nesta lista como qualquer outra. Evita que a mesma comissão seja paga
+    // duas vezes, uma pelo mapa e outra pela fatura gerada.
 
     // Ordenar por data de vencimento (mais antigo primeiro)
     out.sort((a, b) => (a.vencimento || "9999").localeCompare(b.vencimento || "9999"));
     return out;
-  }, [faturas, pagamentosExtras, vendas]);
+  }, [faturas]);
 
   // Listas únicas para dropdowns
   const empresasUnicas = useMemo(() => {
