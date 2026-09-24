@@ -1,6 +1,6 @@
 import { useState, useMemo } from "react";
 import { EMPRESAS, agruparPorGrupo } from "./empresas.js";
-import { useRecebiveis } from "./hooks.js";
+import { useRecebiveis, usePagamentosExtras } from "./hooks.js";
 import { fmtEUR, fmtEUR0, fmtData, fmtInt, fmtNum, parseNumero } from "./formato.js";
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -22,6 +22,9 @@ export default function ContasReceber({ currentUser, empresasVisiveis }) {
   const empresas = Array.isArray(empresasVisiveis) ? empresasVisiveis : EMPRESAS;
   const podeEditar = currentUser?.role === "admin" || currentUser?.role === "gestor";
   const { recebiveis, loading, addRecebivel, updateRecebivel, deleteRecebivel } = useRecebiveis();
+  // As entradas previstas no Fluxo Futuro também são contas a receber.
+  // Aparecem aqui em conjunto, marcadas com a origem, para a carteira ser uma só.
+  const { pagamentos, updatePagamento } = usePagamentosExtras();
 
   // Obrigatório escolher um projeto — olhar tudo junto não ajuda a decidir
   const [empSel, setEmpSel] = useState(empresas[0]?.id || "");
@@ -29,12 +32,32 @@ export default function ContasReceber({ currentUser, empresasVisiveis }) {
   const [form, setForm] = useState(null);       // objeto em edição, ou null
 
   const ids = empresas.map(e => e.id);
-  const lista = useMemo(() => (recebiveis || [])
+
+  // Entradas do Fluxo Futuro convertidas para o formato da carteira
+  const doFluxo = useMemo(() => (pagamentos || [])
+    .filter(p => p.tipo === "entrada")
+    .filter(p => !["Convertida"].includes(p.status))
+    .map(p => ({
+      id: p.id,
+      empresa: p.empresa,
+      projeto: "",
+      descricao: p.descricao || p.categoria || "Entrada prevista",
+      cliente: "",
+      fracao: "",
+      valor: Math.abs(Number(p.valor) || 0),
+      data_prevista: p.data_inicio,
+      status: ["Paga", "Pago"].includes(p.status) ? "Recebido" : "Previsto",
+      obs: p.obs || "",
+      _origem: "fluxo",          // veio do Fluxo Futuro
+      _raw: p,
+    })), [pagamentos]);
+
+  const lista = useMemo(() => [...(recebiveis || []).map(r => ({ ...r, _origem: "carteira" })), ...doFluxo]
     .filter(r => ids.includes(r.empresa))
     .filter(r => r.empresa === empSel)
     .filter(r => fStatus === "Todos" || (r.status || "Previsto") === fStatus)
     .sort((a, b) => (a.data_prevista || "9999").localeCompare(b.data_prevista || "9999")),
-    [recebiveis, ids, empSel, fStatus]);
+    [recebiveis, doFluxo, ids, empSel, fStatus]);
 
   const tot = {
     previsto: lista.filter(r => (r.status || "Previsto") === "Previsto").reduce((s, r) => s + (Number(r.valor) || 0), 0),
@@ -66,11 +89,17 @@ export default function ContasReceber({ currentUser, empresasVisiveis }) {
 
   const marcarRecebido = async (r) => {
     if (!confirm(`Marcar como recebido?\n\n${r.descricao || r.cliente || "—"}\n${fmtEUR(r.valor)}`)) return;
-    const res = await updateRecebivel(r.id, { status: "Recebido" });
+    const res = r._origem === "fluxo"
+      ? await updatePagamento(r.id, { ...r._raw, status: "Paga" })
+      : await updateRecebivel(r.id, { status: "Recebido" });
     if (res?.error) alert("Erro: " + (res.error.message || res.error));
   };
 
   const apagar = async (r) => {
+    if (r._origem === "fluxo") {
+      alert("Esta entrada veio do Fluxo Futuro.\n\nElimina-a lá, no separador Fluxo Futuro, para não ficarem os dois ecrãs em desacordo.");
+      return;
+    }
     if (!confirm(`Eliminar este recebível?\n\n${r.descricao || "—"} · ${fmtEUR(r.valor)}`)) return;
     const res = await deleteRecebivel(r.id);
     if (res?.error) alert("Erro: " + (res.error.message || res.error));
@@ -127,7 +156,7 @@ export default function ContasReceber({ currentUser, empresasVisiveis }) {
           <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
             <thead>
               <tr style={{ background: "#f8f9fc" }}>
-                {[["Projeto", "left"], ["Descrição", "left"], ["Cliente", "left"], ["Fração", "center"],
+                {[["Projeto", "left"], ["Descrição", "left"], ["Origem", "center"], ["Cliente", "left"], ["Fração", "center"],
                   ["Valor", "right"], ["Data prevista", "center"], ["Estado", "center"], ["", "center"]].map(([h, al]) => (
                   <th key={h} style={{ padding: "10px 12px", textAlign: al, color: "#aaa", fontSize: 9, textTransform: "uppercase", fontFamily: "monospace", letterSpacing: "0.06em", borderBottom: "1px solid #f0f0f0", whiteSpace: "nowrap" }}>{h}</th>
                 ))}
@@ -135,15 +164,24 @@ export default function ContasReceber({ currentUser, empresasVisiveis }) {
             </thead>
             <tbody>
               {loading ? (
-                <tr><td colSpan={8} style={{ padding: 40, textAlign: "center", color: "#ccc" }}>A carregar…</td></tr>
+                <tr><td colSpan={9} style={{ padding: 40, textAlign: "center", color: "#ccc" }}>A carregar…</td></tr>
               ) : lista.length === 0 ? (
-                <tr><td colSpan={8} style={{ padding: 40, textAlign: "center", color: "#ccc" }}>Sem recebíveis registados.</td></tr>
+                <tr><td colSpan={9} style={{ padding: 40, textAlign: "center", color: "#ccc" }}>Sem recebíveis registados.</td></tr>
               ) : lista.map(r => {
                 const est = ESTILO[r.status || "Previsto"];
                 return (
                   <tr key={r.id} style={{ borderBottom: "1px solid #fafafa" }}>
                     <td style={{ padding: "10px 12px", color: "#888", fontSize: 11 }}>{nomeEmp(r.empresa)}</td>
                     <td style={{ padding: "10px 12px", color: "#1a1a2e" }}>{r.descricao || "—"}</td>
+                    <td style={{ padding: "10px 12px", textAlign: "center" }}>
+                      <span title={r._origem === "fluxo" ? "Entrada prevista no Fluxo Futuro" : "Registada na carteira de Contas a Receber"}
+                        style={{ background: r._origem === "fluxo" ? "#fef3c7" : "#eef1f5",
+                                 color: r._origem === "fluxo" ? "#92400e" : "#6B7C93",
+                                 padding: "2px 8px", borderRadius: 20, fontSize: 9, fontWeight: 700,
+                                 fontFamily: "monospace", letterSpacing: "0.04em" }}>
+                        {r._origem === "fluxo" ? "FLUXO" : "CARTEIRA"}
+                      </span>
+                    </td>
                     <td style={{ padding: "10px 12px", color: "#666" }}>{r.cliente || "—"}</td>
                     <td style={{ padding: "10px 12px", textAlign: "center", fontWeight: 700, color: "#1a1a2e" }}>{r.fracao || "—"}</td>
                     <td style={{ padding: "10px 12px", textAlign: "right", fontFamily: "monospace", fontWeight: 700, color: "#16a34a" }}>{fmtEUR(r.valor)}</td>
@@ -160,9 +198,12 @@ export default function ContasReceber({ currentUser, empresasVisiveis }) {
                             <button onClick={() => marcarRecebido(r)} title="Marcar como recebido"
                               style={{ background: "#f0fdf4", border: "1px solid #bbf7d0", color: "#16a34a", padding: "3px 8px", borderRadius: 5, fontSize: 10, cursor: "pointer", fontWeight: 700 }}>✓€</button>
                           )}
-                          <button onClick={() => setForm({ ...r, valor: String(r.valor ?? "") })} title="Editar"
-                            style={{ background: "#f0f4ff", border: "none", color: "#4a6fa5", padding: "3px 8px", borderRadius: 5, fontSize: 10, cursor: "pointer" }}>✎</button>
-                          <button onClick={() => apagar(r)} title="Eliminar"
+                          {r._origem === "fluxo"
+                            ? <span title="Editar no separador Fluxo Futuro"
+                                style={{ color: "#ccc", padding: "3px 8px", fontSize: 10 }}>✎</span>
+                            : <button onClick={() => setForm({ ...r, valor: String(r.valor ?? "") })} title="Editar"
+                                style={{ background: "#f0f4ff", border: "none", color: "#4a6fa5", padding: "3px 8px", borderRadius: 5, fontSize: 10, cursor: "pointer" }}>✎</button>}
+                          <button onClick={() => apagar(r)} title={r._origem === "fluxo" ? "Eliminar no Fluxo Futuro" : "Eliminar"}
                             style={{ background: "#fff0f0", border: "none", color: "#dc2626", padding: "3px 8px", borderRadius: 5, fontSize: 10, cursor: "pointer" }}>✕</button>
                         </div>
                       )}

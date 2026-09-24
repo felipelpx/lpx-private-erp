@@ -653,6 +653,18 @@ export default function IRView({ currentUser, empresasVisiveis }) {
   // Carteira de recebíveis
   const recebiveisPorMes = useMemo(() => {
     const porMes = {};
+    // Entradas previstas no Fluxo Futuro (mesma regra do ecrã Contas a Receber)
+    (pagamentosExtras || [])
+      .filter(p => idsAtivos.includes(p.empresa) && p.tipo === "entrada" && p.status !== "Convertida")
+      .forEach(p => {
+        const k = (p.data_inicio || "").slice(0, 7);
+        if (!k) return;
+        if (!porMes[k]) porMes[k] = { real: 0, projetado: 0 };
+        const v = Math.abs(Number(p.valor) || 0);
+        if (["Paga", "Pago"].includes(p.status)) porMes[k].real += v;
+        else porMes[k].projetado += v;
+      });
+
     // Carteira de Contas a Receber
     (recebiveis || []).filter(r => idsAtivos.includes(r.empresa)).forEach(r => {
       const k = (r.data_prevista || "").slice(0, 7);
@@ -673,7 +685,7 @@ export default function IRView({ currentUser, empresasVisiveis }) {
       const [a, mm] = k.split("-");
       return { rotulo: `${mm}/${a.slice(2)}`, ...porMes[k] };
     });
-  }, [vendas, projetosVisiveis, recebiveis, idsAtivos]);
+  }, [vendas, projetosVisiveis, recebiveis, pagamentosExtras, idsAtivos]);
 
   const totalRecebido = recebiveisPorMes.reduce((s, m) => s + m.real, 0);
   const totalPorReceber = recebiveisPorMes.reduce((s, m) => s + m.projetado, 0);
