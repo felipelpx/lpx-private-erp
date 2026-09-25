@@ -29,6 +29,50 @@ const COR = {
 const PALETA = ["#4a6fa5","#6B7C93","#8b7355","#5b8c85","#9c6b8e","#7a8b6f","#b08968","#5f7a8c","#8c7ba6","#a67b5b"];
 const corCategoria = (nome, i) => PALETA[i % PALETA.length];
 
+// ─── POSICIONAMENTO DE RÓTULOS ───────────────────────────────────────────────
+// Os gráficos desenham valores junto a pontos e barras. Como cada rótulo era
+// colocado sem saber dos outros, sobrepunham-se. Esta função recebe todos os
+// candidatos de um gráfico e devolve só os que cabem: para cada um tenta as
+// posições alternativas indicadas e, se todas colidirem, descarta-o.
+//
+//   cand = { x, y, texto, fontSize, alternativas: [dy1, dy2, …] }
+//
+// A largura é estimada a partir do número de caracteres — chega, porque o tipo
+// é monoespaçado.
+function colocarRotulos(cands, { margemX = 1, margemY = 1 } = {}) {
+  const postos = [];
+  const cai = (a, b) =>
+    Math.abs(a.cx - b.cx) * 2 < (a.w + b.w) + margemX * 2 &&
+    Math.abs(a.cy - b.cy) * 2 < (a.h + b.h) + margemY * 2;
+
+  cands.forEach(c => {
+    const fs = c.fontSize || 8;
+    const w = String(c.texto).length * fs * 0.58;
+    const h = fs;
+    const opcoes = c.alternativas && c.alternativas.length ? c.alternativas : [0];
+    for (const dy of opcoes) {
+      const caixa = { cx: c.x, cy: c.y + dy, w, h };
+      if (!postos.some(p => cai(caixa, p))) {
+        postos.push({ ...caixa, texto: c.texto, cor: c.cor, fontSize: fs, ancora: c.ancora || "middle" });
+        return;
+      }
+    }
+    // Não coube em posição nenhuma — fica de fora, para não tapar outro valor
+  });
+  return postos;
+}
+
+const Rotulos = ({ postos }) => (
+  <>
+    {postos.map((p, i) => (
+      <text key={i} x={p.cx} y={p.cy} textAnchor={p.ancora} fontSize={p.fontSize}
+            fontFamily="monospace" fontWeight="700" fill={p.cor}>
+        {p.texto}
+      </text>
+    ))}
+  </>
+);
+
 const Card = ({ titulo, subtitulo, children, acao }) => (
   <div style={{ background: "#fff", border: "1px solid #f0f0f0", borderRadius: 14, padding: 20 }}>
     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 16, gap: 12 }}>
@@ -106,11 +150,7 @@ function Cascata({ inicial, entradas, saidas, final, largura = 900 }) {
                     rx="2" opacity={b.tipo === "total" ? 1 : 0.9}>
                 <title>{`${b.rotulo}: ${fmtEUR(b.valor)}`}</title>
               </rect>
-              {/* valor */}
-              <text x={cx} y={yTopo - 6} textAnchor="middle" fontSize="8.5" fontFamily="monospace"
-                    fontWeight="700" fill={cor}>
-                {fmtCompacto(b.valor)}
-              </text>
+
               {/* rótulo */}
               <text x={cx} y={altura - 18} textAnchor="middle" fontSize="8" fill={COR.texto}
                     transform={`rotate(-30 ${cx} ${altura - 18})`}>
@@ -120,6 +160,15 @@ function Cascata({ inicial, entradas, saidas, final, largura = 900 }) {
             </g>
           );
         })}
+
+        {/* Valores das barras, resolvidos em conjunto para não se taparem */}
+        <Rotulos postos={colocarRotulos(barras.map((b, i) => {
+          const cx = margemX + passo * i + passo / 2;
+          const yTopo = y(Math.max(b.base, b.topo));
+          const cor = b.tipo === "total" ? COR.saldo : b.tipo === "entrada" ? COR.entrada : COR.saida;
+          return { x: cx, y: yTopo - 6, texto: fmtCompacto(b.valor), fontSize: 8.5, cor,
+                   alternativas: [0, -11, -22] };
+        }), { margemX: 2, margemY: 2 })} />
       </svg>
     </div>
   );
@@ -183,28 +232,24 @@ function EvolucaoSaldo({ serie }) {
         ))}
         <path d={area} fill={COR.saldo} opacity="0.10" />
         <path d={linha} fill="none" stroke={COR.saldo} strokeWidth="2.2" strokeLinejoin="round" />
-        {serie.map((p, i) => {
-          // Com muitos pontos, mostrar todos os valores fica ilegível:
-          // acima de 18 meses rotula-se um ponto sim, outro não.
-          const passo = serie.length > 18 ? 2 : 1;
-          const mostra = i % passo === 0 || i === serie.length - 1;
-          return (
-            <g key={i}>
-              <circle cx={x(i)} cy={y(p.saldo)} r="3" fill="#fff" stroke={COR.saldo} strokeWidth="1.8">
-                <title>{`${p.rotulo}: ${fmtEUR(p.saldo)}`}</title>
-              </circle>
-              {mostra && (
-                <text x={x(i)} y={y(p.saldo) - 8} textAnchor="middle" fontSize="8"
-                      fontFamily="monospace" fontWeight="700" fill={p.saldo < 0 ? COR.saida : COR.saldo}>
-                  {fmtCompacto(p.saldo)}
-                </text>
-              )}
-              {(i === 0 || i === serie.length - 1 || serie.length <= 12) && (
-                <text x={x(i)} y={A - 5} textAnchor="middle" fontSize="8.5" fill="#bbb">{p.rotulo}</text>
-              )}
-            </g>
-          );
-        })}
+        {serie.map((p, i) => (
+          <g key={i}>
+            <circle cx={x(i)} cy={y(p.saldo)} r="3" fill="#fff" stroke={COR.saldo} strokeWidth="1.8">
+              <title>{`${p.rotulo}: ${fmtEUR(p.saldo)}`}</title>
+            </circle>
+            {(i === 0 || i === serie.length - 1 || serie.length <= 12) && (
+              <text x={x(i)} y={A - 5} textAnchor="middle" fontSize="8.5" fill="#bbb">{p.rotulo}</text>
+            )}
+          </g>
+        ))}
+
+        {/* Valores — acima do ponto; se não couber, abaixo; se ainda assim
+            colidir com outro, é omitido (o valor exato fica no tooltip) */}
+        <Rotulos postos={colocarRotulos(serie.map((p, i) => ({
+          x: x(i), y: y(p.saldo), texto: fmtCompacto(p.saldo), fontSize: 8,
+          cor: p.saldo < 0 ? COR.saida : COR.saldo,
+          alternativas: [-9, 13],
+        })), { margemX: 3, margemY: 2 })} />
       </svg>
     </div>
   );
@@ -235,21 +280,27 @@ function BarrasRecebiveis({ meses }) {
               <rect x={cx - lb - 2} y={y(m.real)} width={lb} height={Math.max(1, y(0) - y(m.real))} fill={COR.entrada} rx="2">
                 <title>{`${m.rotulo} — recebido: ${fmtEUR(m.real)}`}</title>
               </rect>
-              {m.real > 0 && (
-                <text x={cx - lb / 2 - 2} y={y(m.real) - 4} textAnchor="middle" fontSize="7.5"
-                      fontFamily="monospace" fontWeight="700" fill={COR.entrada}>{fmtCompacto(m.real)}</text>
-              )}
+
               <rect x={cx + 2} y={y(m.projetado)} width={lb} height={Math.max(1, y(0) - y(m.projetado))} fill={COR.saldo} opacity="0.5" rx="2">
                 <title>{`${m.rotulo} — projetado: ${fmtEUR(m.projetado)}`}</title>
               </rect>
-              {m.projetado > 0 && (
-                <text x={cx + lb / 2 + 2} y={y(m.projetado) - 4} textAnchor="middle" fontSize="7.5"
-                      fontFamily="monospace" fontWeight="700" fill={COR.saldo}>{fmtCompacto(m.projetado)}</text>
-              )}
+
               <text x={cx} y={A - 5} textAnchor="middle" fontSize="8.5" fill="#bbb">{m.rotulo}</text>
             </g>
           );
         })}
+        <Rotulos postos={colocarRotulos([
+          ...meses.map((m, i) => ({
+            x: mX + passo * i + passo / 2 - lb / 2 - 2, y: y(m.real) - 4,
+            texto: fmtCompacto(m.real), fontSize: 7.5, cor: COR.entrada,
+            alternativas: [0, -10], _salta: !(m.real > 0),
+          })).filter(c => !c._salta),
+          ...meses.map((m, i) => ({
+            x: mX + passo * i + passo / 2 + lb / 2 + 2, y: y(m.projetado) - 4,
+            texto: fmtCompacto(m.projetado), fontSize: 7.5, cor: COR.saldo,
+            alternativas: [0, -10], _salta: !(m.projetado > 0),
+          })).filter(c => !c._salta),
+        ], { margemX: 2, margemY: 2 })} />
       </svg>
       <div style={{ display: "flex", gap: 18, justifyContent: "center", marginTop: 8 }}>
         <span style={{ fontSize: 10.5, color: COR.texto }}>
@@ -423,17 +474,11 @@ function BarrasFluxoFuturo({ meses, saldoArranque }) {
               <rect x={cx - lb - 1} y={zero - h(m.entradas)} width={lb} height={Math.max(1, h(m.entradas))} fill={COR.entrada} rx="2">
                 <title>{`${m.rotulo} — entradas: ${fmtEUR(m.entradas)}`}</title>
               </rect>
-              {m.entradas > 0 && (
-                <text x={cx - lb / 2 - 1} y={zero - h(m.entradas) - 4} textAnchor="middle" fontSize="7.5"
-                      fontFamily="monospace" fontWeight="700" fill={COR.entrada}>{fmtCompacto(m.entradas)}</text>
-              )}
+
               <rect x={cx + 1} y={zero} width={lb} height={Math.max(1, h(m.saidas))} fill={COR.saida} rx="2">
                 <title>{`${m.rotulo} — saídas: ${fmtEUR(m.saidas)}`}</title>
               </rect>
-              {Math.abs(m.saidas) > 0 && (
-                <text x={cx + lb / 2 + 1} y={zero + h(m.saidas) + 9} textAnchor="middle" fontSize="7.5"
-                      fontFamily="monospace" fontWeight="700" fill={COR.saida}>{fmtCompacto(m.saidas)}</text>
-              )}
+
               <text x={cx} y={A - 4} textAnchor="middle" fontSize="8.5" fill="#bbb">{m.rotulo}</text>
             </g>
           );
@@ -442,24 +487,32 @@ function BarrasFluxoFuturo({ meses, saldoArranque }) {
         {/* Linha do saldo projetado */}
         <path d={saldos.map((v, i) => `${i === 0 ? "M" : "L"} ${mX + passo * i + passo / 2} ${ySaldo(v)}`).join(" ")}
               fill="none" stroke={COR.tinta} strokeWidth="1.8" strokeDasharray="4 3" />
-        {saldos.map((v, i) => {
-          const passoRot = meses.length > 18 ? 3 : meses.length > 10 ? 2 : 1;
-          const mostra = i % passoRot === 0 || i === saldos.length - 1;
-          return (
-            <g key={i}>
-              <circle cx={mX + passo * i + passo / 2} cy={ySaldo(v)} r="2.6"
-                      fill={v < 0 ? COR.saida : "#fff"} stroke={COR.tinta} strokeWidth="1.4">
-                <title>{`${meses[i].rotulo} — saldo projetado: ${fmtEUR(v)}`}</title>
-              </circle>
-              {mostra && (
-                <text x={mX + passo * i + passo / 2} y={ySaldo(v) - 7} textAnchor="middle" fontSize="7.5"
-                      fontFamily="monospace" fontWeight="700" fill={v < 0 ? COR.saida : COR.tinta}>
-                  {fmtCompacto(v)}
-                </text>
-              )}
-            </g>
-          );
-        })}
+        {saldos.map((v, i) => (
+          <circle key={i} cx={mX + passo * i + passo / 2} cy={ySaldo(v)} r="2.6"
+                  fill={v < 0 ? COR.saida : "#fff"} stroke={COR.tinta} strokeWidth="1.4">
+            <title>{`${meses[i].rotulo} — saldo projetado: ${fmtEUR(v)}`}</title>
+          </circle>
+        ))}
+
+        {/* Todos os valores num só passe: entradas, saídas e saldo projetado
+            disputam o mesmo espaço, por isso têm de ser resolvidos juntos. */}
+        <Rotulos postos={colocarRotulos([
+          // saldo primeiro — é a leitura mais importante e fica com prioridade
+          ...saldos.map((v, i) => ({
+            x: mX + passo * i + passo / 2, y: ySaldo(v), texto: fmtCompacto(v), fontSize: 7.5,
+            cor: v < 0 ? COR.saida : COR.tinta, alternativas: [-8, 13, -18],
+          })),
+          ...meses.map((m, i) => ({
+            x: mX + passo * i + passo / 2 - lb / 2 - 1, y: zero - h(m.entradas) - 4,
+            texto: fmtCompacto(m.entradas), fontSize: 7.5, cor: COR.entrada,
+            alternativas: m.entradas > 0 ? [0, -10] : null, _salta: !(m.entradas > 0),
+          })).filter(c => !c._salta),
+          ...meses.map((m, i) => ({
+            x: mX + passo * i + passo / 2 + lb / 2 + 1, y: zero + h(m.saidas) + 9,
+            texto: fmtCompacto(m.saidas), fontSize: 7.5, cor: COR.saida,
+            alternativas: Math.abs(m.saidas) > 0 ? [0, 10] : null, _salta: !(Math.abs(m.saidas) > 0),
+          })).filter(c => !c._salta),
+        ], { margemX: 2, margemY: 2 })} />
       </svg>
       <div style={{ display: "flex", gap: 18, justifyContent: "center", marginTop: 8, flexWrap: "wrap" }}>
         {[["Entradas previstas", COR.entrada], ["Saídas previstas", COR.saida]].map(([t, c]) => (
