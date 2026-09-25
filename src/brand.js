@@ -3,6 +3,10 @@
 // Único sítio a alterar para mudar identidade visual da app.
 // ─────────────────────────────────────────────────────────────────────────────
 
+// Marca a versão publicada. Serve para confirmar, no próprio ecrã, se o
+// deploy chegou — aparece ao lado do nome do utilizador na barra de cima.
+export const VERSAO = "v40";
+
 export const BRAND = {
   nome: "LPX Private",
   nomeCurto: "LPX",

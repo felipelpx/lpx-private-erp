@@ -183,16 +183,28 @@ function EvolucaoSaldo({ serie }) {
         ))}
         <path d={area} fill={COR.saldo} opacity="0.10" />
         <path d={linha} fill="none" stroke={COR.saldo} strokeWidth="2.2" strokeLinejoin="round" />
-        {serie.map((p, i) => (
-          <g key={i}>
-            <circle cx={x(i)} cy={y(p.saldo)} r="3" fill="#fff" stroke={COR.saldo} strokeWidth="1.8">
-              <title>{`${p.rotulo}: ${fmtEUR(p.saldo)}`}</title>
-            </circle>
-            {(i === 0 || i === serie.length - 1 || serie.length <= 12) && (
-              <text x={x(i)} y={A - 5} textAnchor="middle" fontSize="8.5" fill="#bbb">{p.rotulo}</text>
-            )}
-          </g>
-        ))}
+        {serie.map((p, i) => {
+          // Com muitos pontos, mostrar todos os valores fica ilegível:
+          // acima de 18 meses rotula-se um ponto sim, outro não.
+          const passo = serie.length > 18 ? 2 : 1;
+          const mostra = i % passo === 0 || i === serie.length - 1;
+          return (
+            <g key={i}>
+              <circle cx={x(i)} cy={y(p.saldo)} r="3" fill="#fff" stroke={COR.saldo} strokeWidth="1.8">
+                <title>{`${p.rotulo}: ${fmtEUR(p.saldo)}`}</title>
+              </circle>
+              {mostra && (
+                <text x={x(i)} y={y(p.saldo) - 8} textAnchor="middle" fontSize="8"
+                      fontFamily="monospace" fontWeight="700" fill={p.saldo < 0 ? COR.saida : COR.saldo}>
+                  {fmtCompacto(p.saldo)}
+                </text>
+              )}
+              {(i === 0 || i === serie.length - 1 || serie.length <= 12) && (
+                <text x={x(i)} y={A - 5} textAnchor="middle" fontSize="8.5" fill="#bbb">{p.rotulo}</text>
+              )}
+            </g>
+          );
+        })}
       </svg>
     </div>
   );
@@ -223,9 +235,17 @@ function BarrasRecebiveis({ meses }) {
               <rect x={cx - lb - 2} y={y(m.real)} width={lb} height={Math.max(1, y(0) - y(m.real))} fill={COR.entrada} rx="2">
                 <title>{`${m.rotulo} — recebido: ${fmtEUR(m.real)}`}</title>
               </rect>
+              {m.real > 0 && (
+                <text x={cx - lb / 2 - 2} y={y(m.real) - 4} textAnchor="middle" fontSize="7.5"
+                      fontFamily="monospace" fontWeight="700" fill={COR.entrada}>{fmtCompacto(m.real)}</text>
+              )}
               <rect x={cx + 2} y={y(m.projetado)} width={lb} height={Math.max(1, y(0) - y(m.projetado))} fill={COR.saldo} opacity="0.5" rx="2">
                 <title>{`${m.rotulo} — projetado: ${fmtEUR(m.projetado)}`}</title>
               </rect>
+              {m.projetado > 0 && (
+                <text x={cx + lb / 2 + 2} y={y(m.projetado) - 4} textAnchor="middle" fontSize="7.5"
+                      fontFamily="monospace" fontWeight="700" fill={COR.saldo}>{fmtCompacto(m.projetado)}</text>
+              )}
               <text x={cx} y={A - 5} textAnchor="middle" fontSize="8.5" fill="#bbb">{m.rotulo}</text>
             </g>
           );
@@ -403,9 +423,17 @@ function BarrasFluxoFuturo({ meses, saldoArranque }) {
               <rect x={cx - lb - 1} y={zero - h(m.entradas)} width={lb} height={Math.max(1, h(m.entradas))} fill={COR.entrada} rx="2">
                 <title>{`${m.rotulo} — entradas: ${fmtEUR(m.entradas)}`}</title>
               </rect>
+              {m.entradas > 0 && (
+                <text x={cx - lb / 2 - 1} y={zero - h(m.entradas) - 4} textAnchor="middle" fontSize="7.5"
+                      fontFamily="monospace" fontWeight="700" fill={COR.entrada}>{fmtCompacto(m.entradas)}</text>
+              )}
               <rect x={cx + 1} y={zero} width={lb} height={Math.max(1, h(m.saidas))} fill={COR.saida} rx="2">
                 <title>{`${m.rotulo} — saídas: ${fmtEUR(m.saidas)}`}</title>
               </rect>
+              {Math.abs(m.saidas) > 0 && (
+                <text x={cx + lb / 2 + 1} y={zero + h(m.saidas) + 9} textAnchor="middle" fontSize="7.5"
+                      fontFamily="monospace" fontWeight="700" fill={COR.saida}>{fmtCompacto(m.saidas)}</text>
+              )}
               <text x={cx} y={A - 4} textAnchor="middle" fontSize="8.5" fill="#bbb">{m.rotulo}</text>
             </g>
           );
@@ -414,12 +442,24 @@ function BarrasFluxoFuturo({ meses, saldoArranque }) {
         {/* Linha do saldo projetado */}
         <path d={saldos.map((v, i) => `${i === 0 ? "M" : "L"} ${mX + passo * i + passo / 2} ${ySaldo(v)}`).join(" ")}
               fill="none" stroke={COR.tinta} strokeWidth="1.8" strokeDasharray="4 3" />
-        {saldos.map((v, i) => (
-          <circle key={i} cx={mX + passo * i + passo / 2} cy={ySaldo(v)} r="2.6"
-                  fill={v < 0 ? COR.saida : "#fff"} stroke={COR.tinta} strokeWidth="1.4">
-            <title>{`${meses[i].rotulo} — saldo projetado: ${fmtEUR(v)}`}</title>
-          </circle>
-        ))}
+        {saldos.map((v, i) => {
+          const passoRot = meses.length > 18 ? 3 : meses.length > 10 ? 2 : 1;
+          const mostra = i % passoRot === 0 || i === saldos.length - 1;
+          return (
+            <g key={i}>
+              <circle cx={mX + passo * i + passo / 2} cy={ySaldo(v)} r="2.6"
+                      fill={v < 0 ? COR.saida : "#fff"} stroke={COR.tinta} strokeWidth="1.4">
+                <title>{`${meses[i].rotulo} — saldo projetado: ${fmtEUR(v)}`}</title>
+              </circle>
+              {mostra && (
+                <text x={mX + passo * i + passo / 2} y={ySaldo(v) - 7} textAnchor="middle" fontSize="7.5"
+                      fontFamily="monospace" fontWeight="700" fill={v < 0 ? COR.saida : COR.tinta}>
+                  {fmtCompacto(v)}
+                </text>
+              )}
+            </g>
+          );
+        })}
       </svg>
       <div style={{ display: "flex", gap: 18, justifyContent: "center", marginTop: 8, flexWrap: "wrap" }}>
         {[["Entradas previstas", COR.entrada], ["Saídas previstas", COR.saida]].map(([t, c]) => (
@@ -610,9 +650,17 @@ export default function IRView({ currentUser, empresasVisiveis }) {
   }, [movsAnterior]);
 
   // Top de entradas e saídas para a cascata (o resto agrega-se em "Outros")
+  // Uma categoria de custo pode ter entradas E saídas — típico da Obra, onde
+  // as entradas são desembolsos do banco. Sem distinguir, a cascata mostrava
+  // duas barras chamadas "Obra". As entradas de categorias que também têm
+  // saídas passam a aparecer como "Funding — <categoria>".
   const topN = (obj, chave, n = 5) => {
     const lista = Object.entries(obj)
-      .map(([nome, v]) => ({ nome, valor: v[chave] }))
+      .map(([nome, v]) => {
+        const temAmbos = Math.abs(v.entrada) > 0.005 && Math.abs(v.saida) > 0.005;
+        const rotulo = (chave === "entrada" && temAmbos) ? `Funding — ${nome}` : nome;
+        return { nome: rotulo, valor: v[chave] };
+      })
       .filter(x => Math.abs(x.valor) > 0.005)
       .sort((a, b) => Math.abs(b.valor) - Math.abs(a.valor));
     if (lista.length <= n) return lista;

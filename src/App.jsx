@@ -25,7 +25,7 @@ const STATUS_FILTRO = (() => {
   });
   return l;
 })();
-import { BRAND } from "./brand.js";
+import { BRAND, VERSAO } from "./brand.js";
 import { fmtEUR, fmtCompacto, fmtPct, fmtInt, fmtData } from "./formato.js";
 
 const ROLE_LABELS = { admin: "Administrador", gestor: "Gestor", viewer: "Visualizador", investidor: "Investidor" };
@@ -1335,7 +1335,10 @@ export default function App() {
               {currentUser.nome.charAt(0).toUpperCase()}
             </div>
             <div>
-              <div style={{fontSize:12,fontWeight:600,color:"#1a1a2e",lineHeight:1.2}}>{currentUser.nome}</div>
+              <div style={{fontSize:12,fontWeight:600,color:"#1a1a2e",lineHeight:1.2}}>
+                {currentUser.nome}
+                <span title="Versão publicada" style={{fontSize:9,color:"#c8ccd4",fontFamily:"monospace",fontWeight:400,marginLeft:6}}>{VERSAO}</span>
+              </div>
               <div style={{display:"flex",gap:4,alignItems:"center"}}>
                 <Chip text={ROLE_LABELS[currentUser.role]} color={ROLE_COLORS[currentUser.role]}/>
                 {currentUser.approval_level === 1 && <Chip text="Aprovador N1" color="#f59e0b"/>}
