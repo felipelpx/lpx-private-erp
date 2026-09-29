@@ -15,6 +15,7 @@ import IRView from "./IRView.jsx";
 import ContasReceber from "./ContasReceber.jsx";
 import Questoes, { porLer } from "./Questoes.jsx";
 import { STATUS_FATURA, STATUS_STYLES, statusFatura, faturaPaga, faturaAtrasada } from "./status.js";
+import { temFunding, pctFunding, valorFunding, ERRO_SEM_COLUNAS, faltamColunas } from "./funding.js";
 
 // Filtros do Contas a Pagar: "Pendente atrasado" e "Pendente em dia" juntam-se
 // num só botão "Pendente". Cada linha continua a mostrar se está em atraso.
@@ -443,6 +444,21 @@ function ContasPagar({canEdit, faturas: faturasTodas, setFaturas, addFatura, upd
     setShowForm(false); reset();
   };
 
+  // Funding bancário: a despesa é paga, mas o banco repõe o valor, por isso
+  // deixa de pesar no caixa do projeto. A marcação fica na fatura e é o Fluxo
+  // Futuro que gera a entrada correspondente (ver src/funding.js).
+  const alternaFunding = async (f) => {
+    const liga = !temFunding(f);
+    const res = await updateFatura?.(f.id, {
+      funding: liga,
+      funding_pct: liga ? (Number(f.funding_pct) || 100) : 100,
+    });
+    if (res?.error) {
+      alert(faltamColunas(res.error) ? ERRO_SEM_COLUNAS
+        : "Erro a guardar o funding:\n\n" + (res.error.message || res.error));
+    }
+  };
+
   // Marcar como paga — duas confirmações, porque mexe com dinheiro e não tem
   // desfazer imediato.
   const marcarPaga = async (f) => {
@@ -643,13 +659,13 @@ function ContasPagar({canEdit, faturas: faturasTodas, setFaturas, addFatura, upd
           <table style={{width:"100%",borderCollapse:"collapse",fontSize:12}}>
             <thead>
               <tr style={{background:"#f8f9fc"}}>
-                {["","Empresa","Projeto","Fatura","Fornecedor","Categoria","Valor","Vencimento","Prev. pagto","Status","Obs.",""].map(h=>(
+                {["","Empresa","Projeto","Fatura","Fornecedor","Categoria","Valor","🏦","Vencimento","Prev. pagto","Status","Obs.",""].map(h=>(
                   <th key={h} style={{padding:"10px 14px",textAlign:"left",color:"#aaa",fontSize:10,letterSpacing:"0.08em",textTransform:"uppercase",fontFamily:"monospace",borderBottom:"1px solid #f0f0f0",whiteSpace:"nowrap"}}>{h}</th>
                 ))}
               </tr>
             </thead>
             <tbody>
-              {filtered.length===0&&<tr><td colSpan={10} style={{textAlign:"center",padding:32,color:"#ccc"}}>Nenhuma fatura encontrada</td></tr>}
+              {filtered.length===0&&<tr><td colSpan={13} style={{textAlign:"center",padding:32,color:"#ccc"}}>Nenhuma fatura encontrada</td></tr>}
               {filtered.map(f=>{
                 const emp=EMPRESAS.find(e=>e.id===f.empresa);
                 const vencida=faturaAtrasada(f);
@@ -668,6 +684,21 @@ function ContasPagar({canEdit, faturas: faturasTodas, setFaturas, addFatura, upd
                     <td style={{padding:"11px 14px",color:"#444",maxWidth:140,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{f.fornecedor}</td>
                     <td style={{padding:"11px 14px"}}><span style={{background:"#f0f4ff",color:"#4a6fa5",fontSize:10,padding:"2px 8px",borderRadius:4,fontFamily:"monospace"}}>{f.categoria}</span></td>
                     <td style={{padding:"11px 14px",fontFamily:"monospace",fontWeight:700,whiteSpace:"nowrap",textDecoration:rejeitada?"line-through":"none"}}>{fmt(f.valor)}</td>
+                    <td style={{padding:"8px 10px",whiteSpace:"nowrap"}}>
+                      {canEdit ? (
+                        <button onClick={()=>alternaFunding(f)}
+                          title={temFunding(f)
+                            ? `Financiada pelo banco a ${pctFunding(f)}% (${fmt(valorFunding(f,f.valor))}) — no Fluxo Futuro o banco repõe este valor. Clica para desligar.`
+                            : "Marcar como financiada pelo banco — a saída passa a ser neutralizada no fluxo"}
+                          style={{background:temFunding(f)?"#dcfce7":"transparent",border:temFunding(f)?"none":"1px solid #eee",
+                                  color:temFunding(f)?"#15803d":"#d4d7dd",padding:"3px 8px",borderRadius:5,fontSize:10,
+                                  cursor:"pointer",fontWeight:700,fontFamily:"monospace"}}>
+                          {temFunding(f) ? `🏦 ${pctFunding(f)}%` : "🏦"}
+                        </button>
+                      ) : temFunding(f) ? (
+                        <span style={{color:"#15803d",fontSize:10,fontFamily:"monospace",fontWeight:700}}>🏦 {pctFunding(f)}%</span>
+                      ) : <span style={{color:"#e8e8e8",fontSize:10}}>—</span>}
+                    </td>
                     <td style={{padding:"11px 14px",fontFamily:"monospace",fontSize:11,color:vencida?"#dc2626":"#888",fontWeight:vencida?700:400}}>{fmtDate(f.vencimento)}{vencida?" ⚠":""}</td>
                     <td style={{padding:"11px 14px",fontFamily:"monospace",fontSize:11,color:f.previsao_pagamento?"#4a6fa5":"#ddd"}}
                       title={f.previsao_pagamento?"Data em que tencionamos pagar — é esta que conta no Fluxo Futuro":"Sem previsão: o fluxo usa o vencimento"}>

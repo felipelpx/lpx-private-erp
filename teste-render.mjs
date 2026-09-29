@@ -97,7 +97,7 @@ export const MOVS_TESTE = MOVS;
 writeFileSync(join(dir, "entrada.jsx"), `
 import React from "react";
 import { renderToString } from "react-dom/server";
-import IRView from "SRC/IRView.jsx";
+import IRView, { agregarSaldo } from "SRC/IRView.jsx";
 import ExtratosView from "SRC/ExtratosView.jsx";
 import Questoes, { ModalQuestionar, porLer } from "SRC/Questoes.jsx";
 import ContasReceber from "SRC/ContasReceber.jsx";
@@ -143,6 +143,28 @@ for (const [nome, el] of casos) {
     console.log(\`  ✗ \${nome}: \${e && e.message}\`);
     if (e && e.stack) console.log(String(e.stack).split("\\n").slice(1, 4).join("\\n"));
   }
+}
+
+// agregarSaldo: o saldo é um stock — agregar é ficar com o ÚLTIMO do período
+{
+  const serie = [
+    { chave: "2026-01", rotulo: "01/26", saldo: 100 },
+    { chave: "2026-02", rotulo: "02/26", saldo: 250 },
+    { chave: "2026-03", rotulo: "03/26", saldo: 180 },
+    { chave: "2026-04", rotulo: "04/26", saldo: 400 },
+    { chave: "2027-01", rotulo: "01/27", saldo: -50 },
+  ];
+  const t = agregarSaldo(serie, "trimestre");
+  const a = agregarSaldo(serie, "ano");
+  const m = agregarSaldo(serie, "mes");
+  const check = (c, msg) => { console.log((c ? "  ✓ " : "  ✗ ") + msg); if (!c) mau++; };
+  check(m.length === 5, "grão mês devolve a série intacta");
+  check(t.length === 3, \`trimestre agrupa em 3 pontos (\${t.length})\`);
+  check(t[0].saldo === 180, \`T1/26 fica com o saldo de março, não com a soma (\${t[0].saldo})\`);
+  check(t[1].saldo === 400, \`T2/26 fica com abril (\${t[1].saldo})\`);
+  check(t[0].rotulo === "T1/26", \`rótulo do trimestre (\${t[0].rotulo})\`);
+  check(a.length === 2 && a[0].saldo === 400 && a[1].saldo === -50,
+        "ano fica com o último saldo de cada ano");
 }
 
 // porLer: o contador do sino

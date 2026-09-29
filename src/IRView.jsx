@@ -5,6 +5,7 @@ import { CRONOGRAMAS, ESTADO_MARCO, TIR_PROJETO } from "./cronogramas.js";
 import { RealOrcado } from "./RealOrcadoView.jsx";
 import { MODELO_REAL_ORCADO } from "./modeloRealOrcado.js";
 import { statusFatura, faturaPaga } from "./status.js";
+import { valorFunding, temFunding } from "./funding.js";
 import { larguraGrafico, colocarRotulos } from "./rotulos.js";
 import { fmtEUR, fmtEUR0, fmtNum, fmtInt, fmtCompacto, fmtData, fmtPctSinal } from "./formato.js";
 
@@ -68,7 +69,7 @@ function Cascata({ inicial, entradas, saidas, final }) {
   const altura = 300, margemY = 40, margemX = 10;
   // Largura em função do número de barras: com 12 rubricas em 900 px os
   // valores não cabiam lado a lado por mais alternativas que tentassem.
-  const largura = larguraGrafico(entradas.length + saidas.length + 2, 74, 900);
+  const largura = larguraGrafico(entradas.length + saidas.length + 2, 88, 900);
 
   // Barras: inicial (total), cada entrada (sobe), cada saída (desce), final (total)
   const passos = [
@@ -101,7 +102,7 @@ function Cascata({ inicial, entradas, saidas, final }) {
 
   return (
     <div style={{ overflowX: "auto" }}>
-      <svg viewBox={`0 0 ${largura} ${altura}`} style={{ width: "100%", minWidth: Math.min(largura, 1080), height: "auto", display: "block" }}>
+      <svg viewBox={`0 0 ${largura} ${altura}`} width={largura} height={altura} style={{ minWidth: "100%", height: "auto", display: "block" }}>
         {/* linha do zero */}
         <line x1={margemX} y1={y(0)} x2={largura - margemX} y2={y(0)} stroke="#ddd" strokeWidth="1" />
 
@@ -128,7 +129,7 @@ function Cascata({ inicial, entradas, saidas, final }) {
               </rect>
 
               {/* rótulo */}
-              <text x={cx} y={altura - 18} textAnchor="middle" fontSize="8" fill={COR.texto}
+              <text x={cx} y={altura - 18} textAnchor="middle" fontSize="10" fill={COR.texto}
                     transform={`rotate(-30 ${cx} ${altura - 18})`}>
                 {b.rotulo.length > 18 ? b.rotulo.slice(0, 17) + "…" : b.rotulo}
                 <title>{b.rotulo}</title>
@@ -142,8 +143,8 @@ function Cascata({ inicial, entradas, saidas, final }) {
           const cx = margemX + passo * i + passo / 2;
           const yTopo = y(Math.max(b.base, b.topo));
           const cor = b.tipo === "total" ? COR.saldo : b.tipo === "entrada" ? COR.entrada : COR.saida;
-          return { x: cx, y: yTopo - 6, texto: fmtCompacto(b.valor), fontSize: 8.5, cor,
-                   alternativas: [0, -11, -22, -33] };
+          return { x: cx, y: yTopo - 7, texto: fmtCompacto(b.valor), fontSize: 10.5, cor,
+                   alternativas: [0, -14, -28, -42] };
         }), { margemX: 3, margemY: 2, limites: { x0: 2, y0: 2, x1: largura - 2, y1: altura - 34 } })} />
       </svg>
     </div>
@@ -183,56 +184,115 @@ function BarrasCentroCusto({ dados }) {
 }
 
 // ─── EVOLUÇÃO DO SALDO (área + linha) ────────────────────────────────────────
+// O saldo é um stock, não um fluxo: para agregar num trimestre ou num ano
+// vale o ÚLTIMO saldo do período, nunca a soma.
+export function agregarSaldo(serie, grao) {
+  if (grao === "mes") return serie;
+  const balde = (p) => {
+    const [a, m] = String(p.chave || "").split("-");
+    if (!a) return p.rotulo;
+    if (grao === "ano") return a;
+    return `${a}-T${Math.floor((Number(m) - 1) / 3) + 1}`;
+  };
+  const rotulo = (p) => {
+    const [a, m] = String(p.chave || "").split("-");
+    if (!a) return p.rotulo;
+    if (grao === "ano") return a;
+    return `T${Math.floor((Number(m) - 1) / 3) + 1}/${a.slice(2)}`;
+  };
+  const ultimo = new Map();
+  serie.forEach(p => ultimo.set(balde(p), { chave: balde(p), rotulo: rotulo(p), saldo: p.saldo }));
+  return [...ultimo.values()];
+}
+
 function EvolucaoSaldo({ serie }) {
+  // Grão automático: mais de 16 meses fica ilegível ao largo do ecrã, por isso
+  // passa a trimestres (e a anos se ainda assim forem demasiados).
+  const auto = serie.length > 40 ? "ano" : serie.length > 16 ? "trimestre" : "mes";
+  const [grao, setGrao] = useState("auto");
+  const efetivo = grao === "auto" ? auto : grao;
+  const pontos = useMemo(() => agregarSaldo(serie, efetivo), [serie, efetivo]);
+
   if (serie.length < 2) return <Vazio texto="Poucos dados para desenhar a evolução." />;
-  const L = larguraGrafico(serie.length, 70, 900), A = 268;
-  const mX = 46, mTopo = 26, mBase = 44;   // folga para o valor acima/abaixo do ponto
-  const vals = serie.map(p => p.saldo);
+
+  // 1 unidade do viewBox = 1 px no ecrã: é isto que mantém o texto do tamanho
+  // que foi pedido. Se não couber na largura do cartão, o gráfico rola na
+  // horizontal em vez de encolher a letra até deixar de se ler.
+  const porPonto = 78;
+  const L = Math.max(900, Math.round(70 + pontos.length * porPonto));
+  const A = 330;
+  const mX = 58, mTopo = 34, mBase = 52;
+  const vals = pontos.map(p => p.saldo);
   const max = Math.max(...vals, 0), min = Math.min(...vals, 0);
   const amp = (max - min) || 1;
-  const x = (i) => mX + i / (serie.length - 1) * (L - mX - 16);
+  const x = (i) => pontos.length === 1 ? L / 2 : mX + i / (pontos.length - 1) * (L - mX - 22);
   const y = (v) => mTopo + (max - v) / amp * (A - mTopo - mBase);
 
-  const linha = serie.map((p, i) => `${i === 0 ? "M" : "L"} ${x(i)} ${y(p.saldo)}`).join(" ");
-  const area = `${linha} L ${x(serie.length - 1)} ${y(min)} L ${x(0)} ${y(min)} Z`;
+  const linha = pontos.map((p, i) => `${i === 0 ? "M" : "L"} ${x(i)} ${y(p.saldo)}`).join(" ");
+  const area = `${linha} L ${x(pontos.length - 1)} ${y(min)} L ${x(0)} ${y(min)} Z`;
+
+  const OPCOES = [["auto", "Auto"], ["mes", "Mês"], ["trimestre", "Trimestre"], ["ano", "Ano"]];
+  const nomeGrao = { mes: "mês a mês", trimestre: "por trimestre", ano: "por ano" }[efetivo];
 
   return (
-    <div style={{ overflowX: "auto" }}>
-      <svg viewBox={`0 0 ${L} ${A}`} style={{ width: "100%", minWidth: Math.min(L, 1080), height: "auto", display: "block" }}>
-        {[max, (max + min) / 2, min].map((v, i) => (
-          <g key={i}>
-            <line x1={mX} y1={y(v)} x2={L - 16} y2={y(v)} stroke={COR.grelha} strokeWidth="1" />
-            <text x={mX - 6} y={y(v) + 3} textAnchor="end" fontSize="9" fontFamily="monospace" fill="#bbb">
-              {fmtCompacto(v)}
-            </text>
-          </g>
-        ))}
-        <path d={area} fill={COR.saldo} opacity="0.10" />
-        <path d={linha} fill="none" stroke={COR.saldo} strokeWidth="2.2" strokeLinejoin="round" />
-        {serie.map((p, i) => (
-          <g key={i}>
-            <circle cx={x(i)} cy={y(p.saldo)} r="3" fill="#fff" stroke={COR.saldo} strokeWidth="1.8">
-              <title>{`${p.rotulo}: ${fmtEUR(p.saldo)}`}</title>
-            </circle>
-            {(i === 0 || i === serie.length - 1 || serie.length <= 12) && (
-              <text x={x(i)} y={A - 8} textAnchor="middle" fontSize="8.5" fill="#bbb">{p.rotulo}</text>
-            )}
-          </g>
-        ))}
+    <div>
+      <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10, flexWrap: "wrap" }}>
+        <span style={{ fontSize: 10, color: "#bbb", fontFamily: "monospace", textTransform: "uppercase", letterSpacing: "0.07em" }}>
+          Detalhe
+        </span>
+        <div style={{ display: "flex", background: "#f4f5f7", borderRadius: 8, padding: 2, gap: 2 }}>
+          {OPCOES.map(([k, label]) => (
+            <button key={k} onClick={() => setGrao(k)}
+              title={k === "auto" ? "Ajusta o detalhe ao número de meses para os valores continuarem legíveis" : undefined}
+              style={{ background: grao === k ? "#1a1a2e" : "transparent", color: grao === k ? "#fff" : "#777",
+                       border: "none", padding: "4px 12px", borderRadius: 6, fontSize: 11, fontWeight: 600, cursor: "pointer" }}>
+              {label}
+            </button>
+          ))}
+        </div>
+        <span style={{ fontSize: 10.5, color: "#bbb" }}>
+          {pontos.length} pontos · {nomeGrao}
+        </span>
+      </div>
 
-        {/* Valores — acima do ponto; se não couber, abaixo, e depois mais
-            afastado. A própria linha entra como obstáculo, e o contorno
-            branco garante leitura mesmo quando tem de a cruzar. */}
-        <Rotulos postos={colocarRotulos(serie.map((p, i) => ({
-          x: x(i), y: y(p.saldo), texto: fmtCompacto(p.saldo), fontSize: 8,
-          cor: p.saldo < 0 ? COR.saida : COR.saldo,
-          alternativas: [-10, 15, -21, 26, -32],
-        })), {
-          margemX: 3, margemY: 2,
-          linhas: [serie.map((p, i) => ({ x: x(i), y: y(p.saldo) }))],
-          limites: { x0: mX - 4, y0: 2, x1: L - 2, y1: A - 18 },
-        })} />
-      </svg>
+      <div style={{ overflowX: "auto" }}>
+        <svg viewBox={`0 0 ${L} ${A}`} width={L} height={A}
+             style={{ minWidth: "100%", height: "auto", display: "block" }}>
+          {[max, (max + min) / 2, min].map((v, i) => (
+            <g key={i}>
+              <line x1={mX} y1={y(v)} x2={L - 22} y2={y(v)} stroke={COR.grelha} strokeWidth="1" />
+              <text x={mX - 8} y={y(v) + 4} textAnchor="end" fontSize="11" fontFamily="monospace" fill="#aaa">
+                {fmtCompacto(v)}
+              </text>
+            </g>
+          ))}
+          <path d={area} fill={COR.saldo} opacity="0.10" />
+          <path d={linha} fill="none" stroke={COR.saldo} strokeWidth="2.4" strokeLinejoin="round" />
+          {pontos.map((p, i) => (
+            <g key={i}>
+              <circle cx={x(i)} cy={y(p.saldo)} r="3.4" fill="#fff" stroke={COR.saldo} strokeWidth="2">
+                <title>{`${p.rotulo}: ${fmtEUR(p.saldo)}`}</title>
+              </circle>
+              <text x={x(i)} y={A - 12} textAnchor="middle" fontSize="11" fontFamily="monospace" fill="#aaa">
+                {p.rotulo}
+              </text>
+            </g>
+          ))}
+
+          {/* Valores — acima do ponto; se não couber, abaixo, e depois mais
+              afastado. A própria linha entra como obstáculo, e o contorno
+              branco garante leitura mesmo quando tem de a cruzar. */}
+          <Rotulos postos={colocarRotulos(pontos.map((p, i) => ({
+            x: x(i), y: y(p.saldo), texto: fmtCompacto(p.saldo), fontSize: 11,
+            cor: p.saldo < 0 ? COR.saida : COR.saldo,
+            alternativas: [-13, 20, -27, 34, -41],
+          })), {
+            margemX: 4, margemY: 3,
+            linhas: [pontos.map((p, i) => ({ x: x(i), y: y(p.saldo) }))],
+            limites: { x0: mX - 6, y0: 2, x1: L - 2, y1: A - 24 },
+          })} />
+        </svg>
+      </div>
     </div>
   );
 }
@@ -240,8 +300,8 @@ function EvolucaoSaldo({ serie }) {
 // ─── BARRAS AGRUPADAS: recebíveis real vs projetado ──────────────────────────
 function BarrasRecebiveis({ meses }) {
   if (!meses.length) return <Vazio texto="Sem recebíveis previstos. Regista vendas com data de escritura na aba Comercial." />;
-  const L = larguraGrafico(meses.length, 68, 900), A = 286;
-  const mX = 48, mTopo = 56, mBase = 26;   // mTopo: espaço para o valor na vertical
+  const L = larguraGrafico(meses.length, 76, 900), A = 310;
+  const mX = 54, mTopo = 64, mBase = 32;   // mTopo: espaço para o valor na vertical
   const max = Math.max(...meses.flatMap(m => [m.real, m.projetado]), 1);
   const passo = (L - mX - 16) / meses.length;
   const lb = Math.min(20, passo / 2.8);
@@ -249,11 +309,11 @@ function BarrasRecebiveis({ meses }) {
 
   return (
     <div style={{ overflowX: "auto" }}>
-      <svg viewBox={`0 0 ${L} ${A}`} style={{ width: "100%", minWidth: Math.min(L, 1080), height: "auto", display: "block" }}>
+      <svg viewBox={`0 0 ${L} ${A}`} width={L} height={A} style={{ minWidth: "100%", height: "auto", display: "block" }}>
         {[max, max / 2, 0].map((v, i) => (
           <g key={i}>
             <line x1={mX} y1={y(v)} x2={L - 16} y2={y(v)} stroke={COR.grelha} strokeWidth="1" />
-            <text x={mX - 6} y={y(v) + 3} textAnchor="end" fontSize="9" fontFamily="monospace" fill="#bbb">{fmtCompacto(v)}</text>
+            <text x={mX - 8} y={y(v) + 4} textAnchor="end" fontSize="11" fontFamily="monospace" fill="#aaa">{fmtCompacto(v)}</text>
           </g>
         ))}
         {meses.map((m, i) => {
@@ -268,7 +328,7 @@ function BarrasRecebiveis({ meses }) {
                 <title>{`${m.rotulo} — projetado: ${fmtEUR(m.projetado)}`}</title>
               </rect>
 
-              <text x={cx} y={A - 5} textAnchor="middle" fontSize="8.5" fill="#bbb">{m.rotulo}</text>
+              <text x={cx} y={A - 10} textAnchor="middle" fontSize="11" fontFamily="monospace" fill="#aaa">{m.rotulo}</text>
             </g>
           );
         })}
@@ -277,15 +337,15 @@ function BarrasRecebiveis({ meses }) {
         <Rotulos postos={colocarRotulos([
           ...meses.map((m, i) => (m.real > 0 ? {
             x: mX + passo * i + passo / 2 - lb / 2 - 2, y: y(m.real) - 5,
-            texto: fmtCompacto(m.real), fontSize: 7.5, cor: COR.entrada,
-            rot: -90, ancora: "start", alternativas: [0, -7],
+            texto: fmtCompacto(m.real), fontSize: 10, cor: COR.entrada,
+            rot: -90, ancora: "start", alternativas: [0, -9],
           } : null)),
           ...meses.map((m, i) => (m.projetado > 0 ? {
             x: mX + passo * i + passo / 2 + lb / 2 + 2, y: y(m.projetado) - 5,
-            texto: fmtCompacto(m.projetado), fontSize: 7.5, cor: COR.saldo,
-            rot: -90, ancora: "start", alternativas: [0, -7],
+            texto: fmtCompacto(m.projetado), fontSize: 10, cor: COR.saldo,
+            rot: -90, ancora: "start", alternativas: [0, -9],
           } : null)),
-        ], { margemX: 1.5, margemY: 2, limites: { x0: mX - 6, y0: 2, x1: L - 2, y1: A - 16 } })} />
+        ], { margemX: 1.5, margemY: 2, limites: { x0: mX - 6, y0: 2, x1: L - 2, y1: A - 22 } })} />
       </svg>
       <div style={{ display: "flex", gap: 18, justifyContent: "center", marginTop: 8 }}>
         <span style={{ fontSize: 10.5, color: COR.texto }}>
@@ -433,8 +493,8 @@ function BarrasFluxoFuturo({ meses, saldoArranque }) {
   if (!meses.length) return <Vazio texto="Sem entradas nem saídas previstas. Lança previsões no Fluxo Futuro ou faturas com previsão de pagamento." />;
   // Margens generosas em cima e em baixo: os valores das barras são escritos
   // na vertical e precisam de ~40 px para lá da ponta da barra.
-  const L = larguraGrafico(meses.length, 78, 940), A = 360;
-  const mX = 52, mTopo = 50, mBase = 50;
+  const L = larguraGrafico(meses.length, 84, 940), A = 390;
+  const mX = 58, mTopo = 62, mBase = 58;
   const base = A - mTopo - mBase;
   const max = Math.max(...meses.flatMap(m => [m.entradas, Math.abs(m.saidas)]), 1);
   const passo = (L - mX - 16) / meses.length;
@@ -450,10 +510,10 @@ function BarrasFluxoFuturo({ meses, saldoArranque }) {
 
   return (
     <div style={{ overflowX: "auto" }}>
-      <svg viewBox={`0 0 ${L} ${A}`} style={{ width: "100%", minWidth: Math.min(L, 1080), height: "auto", display: "block" }}>
+      <svg viewBox={`0 0 ${L} ${A}`} width={L} height={A} style={{ minWidth: "100%", height: "auto", display: "block" }}>
         <line x1={mX} y1={zero} x2={L - 16} y2={zero} stroke="#ccc" strokeWidth="1" />
-        <text x={mX - 6} y={zero - h(max) + 4} textAnchor="end" fontSize="9" fontFamily="monospace" fill="#bbb">{fmtCompacto(max)}</text>
-        <text x={mX - 6} y={zero + h(max) + 4} textAnchor="end" fontSize="9" fontFamily="monospace" fill="#bbb">{fmtCompacto(-max)}</text>
+        <text x={mX - 8} y={zero - h(max) + 4} textAnchor="end" fontSize="11" fontFamily="monospace" fill="#aaa">{fmtCompacto(max)}</text>
+        <text x={mX - 8} y={zero + h(max) + 4} textAnchor="end" fontSize="11" fontFamily="monospace" fill="#aaa">{fmtCompacto(-max)}</text>
 
         {meses.map((m, i) => {
           const cx = mX + passo * i + passo / 2;
@@ -467,7 +527,7 @@ function BarrasFluxoFuturo({ meses, saldoArranque }) {
                 <title>{`${m.rotulo} — saídas: ${fmtEUR(m.saidas)}`}</title>
               </rect>
 
-              <text x={cx} y={A - 6} textAnchor="middle" fontSize="8.5" fill="#bbb">{m.rotulo}</text>
+              <text x={cx} y={A - 10} textAnchor="middle" fontSize="11" fontFamily="monospace" fill="#aaa">{m.rotulo}</text>
             </g>
           );
         })}
@@ -489,24 +549,24 @@ function BarrasFluxoFuturo({ meses, saldoArranque }) {
         <Rotulos postos={colocarRotulos([
           // saldo primeiro — é a leitura mais importante e fica com prioridade
           ...saldos.map((v, i) => ({
-            x: mX + passo * i + passo / 2, y: ySaldo(v), texto: fmtCompacto(v), fontSize: 7.5,
+            x: mX + passo * i + passo / 2, y: ySaldo(v), texto: fmtCompacto(v), fontSize: 10,
             cor: v < 0 ? COR.saida : COR.tinta,
-            alternativas: [-9, 15, -20, 26, -31, 37],
+            alternativas: [-12, 19, -26, 33, -40, 47],
           })),
           ...meses.map((m, i) => (m.entradas > 0 ? {
-            x: mX + passo * i + passo / 2 - lb / 2 - 1, y: zero - h(m.entradas) - 5,
-            texto: fmtCompacto(m.entradas), fontSize: 7.5, cor: COR.entrada,
-            rot: -90, ancora: "start", alternativas: [0, -7],
+            x: mX + passo * i + passo / 2 - lb / 2 - 1, y: zero - h(m.entradas) - 6,
+            texto: fmtCompacto(m.entradas), fontSize: 10, cor: COR.entrada,
+            rot: -90, ancora: "start", alternativas: [0, -9],
           } : null)),
           ...meses.map((m, i) => (Math.abs(m.saidas) > 0 ? {
-            x: mX + passo * i + passo / 2 + lb / 2 + 1, y: zero + h(m.saidas) + 5,
-            texto: fmtCompacto(m.saidas), fontSize: 7.5, cor: COR.saida,
-            rot: -90, ancora: "end", alternativas: [0, 7],
+            x: mX + passo * i + passo / 2 + lb / 2 + 1, y: zero + h(m.saidas) + 6,
+            texto: fmtCompacto(m.saidas), fontSize: 10, cor: COR.saida,
+            rot: -90, ancora: "end", alternativas: [0, 9],
           } : null)),
         ], {
           margemX: 1.5, margemY: 2,
           linhas: [saldos.map((v, i) => ({ x: mX + passo * i + passo / 2, y: ySaldo(v) }))],
-          limites: { x0: mX - 6, y0: 2, x1: L - 2, y1: A - 16 },
+          limites: { x0: mX - 6, y0: 2, x1: L - 2, y1: A - 22 },
         })} />
       </svg>
       <div style={{ display: "flex", gap: 18, justifyContent: "center", marginTop: 8, flexWrap: "wrap" }}>
@@ -735,7 +795,7 @@ export default function IRView({ currentUser, empresasVisiveis }) {
     return Object.keys(porMes).sort().map(k => {
       acc += porMes[k];
       const [a, mm] = k.split("-");
-      return { rotulo: `${mm}/${a.slice(2)}`, saldo: acc };
+      return { chave: k, rotulo: `${mm}/${a.slice(2)}`, saldo: acc };
     });
   }, [movimentos, saldoInicial]);
 
@@ -800,21 +860,33 @@ export default function IRView({ currentUser, empresasVisiveis }) {
     const junta = (data, valor, tipo) => {
       const k = String(data || "").slice(0, 7);
       if (!k || k.length !== 7) return;
+      if (!Number(valor)) return;   // despesa sem funding não abre mês nenhum
       if (!porMes[k]) porMes[k] = { entradas: 0, saidas: 0, itens: 0 };
       if (tipo === "entrada") porMes[k].entradas += Math.abs(valor);
       else porMes[k].saidas -= Math.abs(valor);
       porMes[k].itens++;
     };
 
+    // Despesas financiadas pelo banco trazem a entrada do banco no mesmo mês —
+    // a mesma regra do Fluxo Futuro (ver src/funding.js), para a tabela e o
+    // gráfico não contarem histórias diferentes.
     (pagamentosExtras || [])
       .filter(p => idsAtivos.includes(p.empresa))
       .filter(p => !["Convertida", "Paga", "Pago"].includes(p.status))
-      .forEach(p => junta(p.data_inicio, Number(p.valor) || 0, p.tipo === "entrada" ? "entrada" : "saida"));
+      .forEach(p => {
+        const ehEntrada = p.tipo === "entrada";
+        junta(p.data_inicio, Number(p.valor) || 0, ehEntrada ? "entrada" : "saida");
+        if (!ehEntrada) junta(p.data_inicio, valorFunding(p, p.valor), "entrada");
+      });
 
     (faturas || [])
       .filter(f => idsAtivos.includes(f.empresa))
       .filter(f => !faturaPaga(f))
-      .forEach(f => junta(f.previsao_pagamento || f.vencimento, Number(f.valor) || 0, "saida"));
+      .forEach(f => {
+        const data = f.previsao_pagamento || f.vencimento;
+        junta(data, Number(f.valor) || 0, "saida");
+        junta(data, valorFunding(f, f.valor), "entrada");
+      });
 
     // Entradas: carteira de Contas a Receber (só o que ainda está previsto)
     (recebiveis || [])

@@ -206,3 +206,52 @@ node teste-rotulos.mjs       # geometria dos rótulos dos gráficos
 node teste-render.mjs        # renderização das vistas (SSR)
 node teste-extrato-dom.mjs   # fluxo do questionamento em DOM real
 ```
+
+---
+
+## v43 — Funding bancário e legibilidade dos gráficos
+
+### Funding bancário
+
+Há despesas que o banco financia: o empreiteiro é pago, mas o banco liberta o
+mesmo montante, e a saída acaba neutralizada no caixa do projeto.
+
+- Cada despesa do **Fluxo Futuro** (previsão ou fatura) tem um botão **🏦**.
+- Ligado, o fluxo gera automaticamente a **entrada do banco** no mesmo mês,
+  como linha própria (`Funding — <despesa>`).
+- Ao lado do botão fica a **percentagem financiada**, editável: o banco
+  raramente cobre 100%. A 70%, só 70% da despesa é reposta e os restantes 30%
+  continuam a pesar no projeto.
+- O **Contas a Pagar** tem a mesma coluna 🏦, para marcar a fatura onde ela
+  vive.
+- Quando uma previsão financiada é convertida em fatura, a fatura **herda** a
+  marcação — senão a entrada do banco desaparecia do fluxo no dia em que a
+  fatura chegasse.
+- O cartão **Financiado (banco)** no topo mostra quanto do período está
+  coberto, e os gráficos do Investor Relations usam exatamente a mesma regra
+  (`src/funding.js` é a fonte única).
+
+Instalação: correr `supabase/migracao-v12-funding.sql` no SQL Editor do
+Supabase. Nada é recalculado — todas as despesas começam sem funding.
+
+### Evolução do saldo legível
+
+O gráfico crescia em largura mas era comprimido para caber no cartão, e o
+texto encolhia com ele até deixar de se ler. Agora:
+
+- **1 unidade do desenho = 1 pixel**: o texto tem sempre o tamanho pedido e o
+  gráfico rola na horizontal em vez de encolher (vale para todos os gráficos).
+- Letra maior (11 px nos valores e nos eixos) e gráfico mais alto.
+- Seletor de detalhe **Auto / Mês / Trimestre / Ano**. Em Auto, mais de 16
+  meses passa a trimestres e mais de 40 a anos — porque o saldo é um *stock*,
+  cada período fica com o **último** saldo, nunca com a soma.
+
+### Testes
+
+```
+node teste-funding.mjs       # aritmética do funding
+node teste-rotulos.mjs       # geometria dos rótulos dos gráficos
+node teste-render.mjs        # renderização das vistas (SSR) + agregação do saldo
+node teste-extrato-dom.mjs   # questionamentos em DOM real
+node teste-fluxo-dom.mjs     # funding no Fluxo Futuro em DOM real
+```

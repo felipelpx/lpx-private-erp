@@ -4,6 +4,7 @@ import { CATEGORIAS } from "./categorias.js";
 import { faturaPaga, faturaAtrasada, statusFatura } from "./status.js";
 import { fmtEUR as fmtEuro } from "./formato.js";
 import { labelEmpresa, EMPRESAS as EMPRESAS_TODAS } from "./empresas.js";
+import { temFunding, pctFunding, linhaFunding, ERRO_SEM_COLUNAS, faltamColunas, CATEGORIA_FUNDING } from "./funding.js";
 
 const fmt = (v) => fmtEuro(v, 0);
 // Valor exato com 2 casas decimais (para parcelas individuais)
@@ -27,6 +28,61 @@ const PROJETO_EMPRESA_MAP = Object.fromEntries(
   EMPRESAS_TODAS.flatMap(e => [[e.nome, e.id], [e.projeto, e.id], [e.razaoSocial, e.id]])
     .filter(([k]) => k)
 );
+
+// ─── Botão de funding de uma despesa ────────────────────────────────────────
+// Desligado é um contorno cinzento; ligado fica verde e mostra a percentagem
+// financiada, editável ali mesmo (o banco raramente financia 100%).
+function BotaoFunding({ fonte, onAlternar, onPct }) {
+  const ligado = temFunding(fonte);
+  const pct = pctFunding(fonte);
+  const [aEditar, setAEditar] = useState(false);
+  const [rascunho, setRascunho] = useState(String(pct));
+
+  const confirma = () => {
+    setAEditar(false);
+    const v = Math.min(100, Math.max(0, parseFloat(String(rascunho).replace(",", ".")) || 0));
+    if (v !== pct) onPct(v);
+  };
+
+  if (ligado && aEditar) {
+    return (
+      <span onClick={e => e.stopPropagation()} style={{ display: "inline-flex", alignItems: "center", gap: 3 }}>
+        <input autoFocus type="number" min="0" max="100" value={rascunho}
+          onChange={e => setRascunho(e.target.value)}
+          onBlur={confirma}
+          onKeyDown={e => { if (e.key === "Enter") confirma(); if (e.key === "Escape") setAEditar(false); }}
+          style={{ width: 46, border: "1px solid #86efac", borderRadius: 5, padding: "2px 4px", fontSize: 10, fontFamily: "monospace" }} />
+        <span style={{ fontSize: 10, color: "#16a34a" }}>%</span>
+      </span>
+    );
+  }
+
+  return (
+    <span style={{ display: "inline-flex", alignItems: "center" }}>
+      <button onClick={(e) => { e.stopPropagation(); onAlternar(); }}
+        title={ligado
+          ? "Despesa financiada pelo banco: o banco liberta o valor e a saída fica neutralizada no caixa. Clica para desligar."
+          : "Marcar como financiada pelo banco — o fluxo passa a gerar a entrada correspondente"}
+        style={{
+          background: ligado ? "#dcfce7" : "transparent",
+          border: ligado ? "none" : "1px solid #e8e8e8",
+          color: ligado ? "#15803d" : "#c0c4cc",
+          padding: "3px 8px", borderRadius: ligado ? "5px 0 0 5px" : 5,
+          fontSize: 10, cursor: "pointer", fontWeight: 700, marginLeft: 4, whiteSpace: "nowrap",
+        }}>
+        🏦{ligado ? "" : ""}
+      </button>
+      {ligado && (
+        <button onClick={(e) => { e.stopPropagation(); setRascunho(String(pct)); setAEditar(true); }}
+          title="Percentagem financiada pelo banco"
+          style={{ background: "#bbf7d0", border: "none", color: "#15803d", padding: "3px 7px",
+                   borderRadius: "0 5px 5px 0", fontSize: 10, cursor: "pointer", fontWeight: 700, fontFamily: "monospace" }}>
+          {pct}%
+        </button>
+      )}
+    </span>
+  );
+}
 
 export default function FluxoFuturo({ faturas: faturasTodas, faturasLoading, pagamentosExtras: pagamentosTodos, pagamentosLoading, onAddPagamento, onUpdatePagamento, onDeletePagamento, onUpdateFatura, onDeleteFatura, currentUser, EMPRESAS, caixaUnico }) {
   // Só as empresas visíveis (filtro de grupo LPX/HDG e perfil investidor).
@@ -195,6 +251,30 @@ export default function FluxoFuturo({ faturas: faturasTodas, faturasLoading, pag
     }
   };
 
+  // ── Funding bancário ──────────────────────────────────────────────────────
+  // Liga/desliga o financiamento da despesa. A marcação fica no registo
+  // (previsão ou fatura), por isso sobrevive à conversão previsão → fatura.
+  const gravaFunding = async (item, patch) => {
+    const fonte = item.pagamento || item.fatura;
+    if (!fonte) return;
+    const res = item.pagamento
+      ? await onUpdatePagamento?.(fonte.id, patch)
+      : await onUpdateFatura?.(fonte.id, patch);
+    if (res?.error) {
+      alert(faltamColunas(res.error) ? ERRO_SEM_COLUNAS
+        : "Erro a guardar o funding:\n\n" + (res.error.message || res.error));
+    }
+  };
+  const alternaFunding = (item) => {
+    const fonte = item.pagamento || item.fatura;
+    const liga = !temFunding(fonte);
+    gravaFunding(item, { funding: liga, funding_pct: liga ? (Number(fonte?.funding_pct) || 100) : 100 });
+  };
+  const defineFundingPct = (item, valor) => {
+    const p = Math.min(100, Math.max(0, Number(valor) || 0));
+    gravaFunding(item, { funding: true, funding_pct: p });
+  };
+
   // ── Converter previsão em custo real ──────────────────────────────────────
   // Quando chega a fatura de algo que estava previsto, a previsão tem de sair
   // do fluxo — senão o mês fica com o valor a dobrar. Marca-se o pagamento
@@ -215,6 +295,18 @@ export default function FluxoFuturo({ faturas: faturasTodas, faturasLoading, pag
         alert("Erro ao converter:\n\n" + msg);
       }
       return;
+    }
+    // O funding acompanha a despesa: se a previsão estava marcada como
+    // financiada, a fatura que a substitui herda a marcação — senão a entrada
+    // do banco desaparecia do fluxo no dia em que chega a fatura.
+    if (fatura && temFunding(pag) && !temFunding(fatura)) {
+      const r = await onUpdateFatura?.(fatura.id, {
+        funding: true, funding_pct: pctFunding(pag),
+      });
+      if (r?.error && !faltamColunas(r.error)) {
+        alert("A previsão foi convertida, mas não foi possível passar o funding para a fatura:\n\n"
+          + (r.error.message || r.error));
+      }
     }
     setConverter(null);
   };
@@ -360,6 +452,15 @@ export default function FluxoFuturo({ faturas: faturasTodas, faturasLoading, pag
     };
   });
 
+  // Uma saída financiada pelo banco traz atrás de si a entrada do banco, no
+  // mesmo mês: é isso que a neutraliza no caixa do projeto.
+  const comFunding = (bucket, fonte, saida, extra = {}) => {
+    const linha = linhaFunding(fonte, saida);
+    if (!linha) return;
+    bucket.entradas += linha.valor;
+    bucket.items.push({ ...linha, ...extra });
+  };
+
   const getMesKey = (dateStr) => {
     if (!dateStr) return null;
     return dateStr.substring(0, 7);
@@ -382,8 +483,7 @@ export default function FluxoFuturo({ faturas: faturasTodas, faturasLoading, pag
     const key = getMesKey(dataFluxo);
     // Se a fatura já está marcada como Vencida, ou se a data passou (independentemente do mês) → bucket "vencidas"
     if (faturaAtrasada(f)) {
-      vencidas.saidas += parseFloat(f.valor) || 0;
-      vencidas.items.push({
+      const saida = {
         tipo: "saida",
         desc: f.fornecedor || f.fatura,
         valor: f.valor,
@@ -392,13 +492,18 @@ export default function FluxoFuturo({ faturas: faturasTodas, faturasLoading, pag
         natureza: "real",
         vencimento: dataFluxo,
         fatura: f,
-      });
+      };
+      vencidas.saidas += parseFloat(f.valor) || 0;
+      vencidas.items.push(saida);
+      comFunding(vencidas, f, saida, { vencimento: dataFluxo, fatura: f });
       return;
     }
     const m = meses.find(m => m.key === key);
     if (m) {
+      const saida = { tipo: "saida", desc: f.fornecedor || f.fatura, valor: f.valor, cat: f.categoria, origem: "Contas a Pagar", natureza: "real", fatura: f };
       m.saidas += parseFloat(f.valor) || 0;
-      m.items.push({ tipo: "saida", desc: f.fornecedor || f.fatura, valor: f.valor, cat: f.categoria, origem: "Contas a Pagar", natureza: "real", fatura: f });
+      m.items.push(saida);
+      comFunding(m, f, saida, { fatura: f });
     }
   });
 
@@ -484,8 +589,10 @@ export default function FluxoFuturo({ faturas: faturasTodas, faturasLoading, pag
           vencidas.entradas += valor;
           vencidas.items.push({ ...base, tipo: "entrada", vencimento: dataParcelaISO });
         } else {
+          const saida = { ...base, tipo: "saida", vencimento: dataParcelaISO };
           vencidas.saidas += valor;
-          vencidas.items.push({ ...base, tipo: "saida", vencimento: dataParcelaISO });
+          vencidas.items.push(saida);
+          comFunding(vencidas, p, saida, { vencimento: dataParcelaISO, pagamento: p, pagamentoId: p.id });
         }
         continue;
       }
@@ -496,8 +603,10 @@ export default function FluxoFuturo({ faturas: faturasTodas, faturasLoading, pag
           m.entradas += valor;
           m.items.push({ ...base, tipo: "entrada" });
         } else {
+          const saida = { ...base, tipo: "saida" };
           m.saidas += valor;
-          m.items.push({ ...base, tipo: "saida" });
+          m.items.push(saida);
+          comFunding(m, p, saida, { pagamento: p, pagamentoId: p.id });
         }
       }
     }
@@ -773,16 +882,22 @@ export default function FluxoFuturo({ faturas: faturasTodas, faturasLoading, pag
           ? (mesesFiltrados.length === 1 ? mesesFiltrados[0].label : `${mesesFiltrados[0]?.label || ""}—${ultimoMesFiltrado?.label || ""}`)
           : `${mesesFiltrados.length}m`;
         const saldoProjetado = ultimoMesFiltrado?.saldo_fim || 0;
+        // Parte das saídas do período que o banco financia
+        const totalFunding = mesesFiltrados.reduce((s, m) =>
+          s + (m.items || []).filter(i => i._funding).reduce((t, i) => t + (parseFloat(i.valor) || 0), 0), 0);
         return (
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: 12 }}>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(6, 1fr)", gap: 12 }}>
             {[
               { label: "Caixa Atual", value: fmt(saldoAtual), color: saldoAtual >= 0 ? "#16a34a" : "#dc2626" },
               { label: `Vencidas (${vencidas.items.length})`, value: vencidas.saidas > 0 ? fmtK(-vencidas.saidas) : "—", color: vencidas.saidas > 0 ? "#dc2626" : "#aaa", warn: vencidas.saidas > 0 },
               { label: "Caixa Líquido", value: fmt(saldoLiquido), color: saldoLiquido >= 0 ? "#16a34a" : "#dc2626" },
               { label: `Total Saídas (${labelPeriodo})`, value: fmtK(totalSaidasFiltrado), color: "#dc2626" },
+              { label: "Financiado (banco)", value: totalFunding > 0 ? fmtK(totalFunding) : "—",
+                color: totalFunding > 0 ? "#0e7490" : "#aaa",
+                dica: "Entradas do banco geradas pelas despesas marcadas com 🏦 — neutralizam a saída no caixa do projeto" },
               { label: filtroAtivo ? `Saldo no fim do período` : "Saldo Projetado (3a)", value: fmtK(saldoProjetado), color: saldoProjetado >= 0 ? "#16a34a" : "#dc2626" },
             ].map((k, i) => (
-              <div key={i} style={{ background: "#fff", border: "1px solid #f0f0f0", borderRadius: 12, padding: "14px 18px", borderTop: `3px solid ${k.color}` }}>
+              <div key={i} title={k.dica} style={{ background: "#fff", border: "1px solid #f0f0f0", borderRadius: 12, padding: "14px 18px", borderTop: `3px solid ${k.color}` }}>
                 <div style={{ fontSize: 10, color: "#aaa", textTransform: "uppercase", fontFamily: "monospace", letterSpacing: "0.07em", marginBottom: 5 }}>{k.label}</div>
                 <div style={{ fontSize: 17, fontWeight: 700, color: k.color, fontFamily: "monospace" }}>{k.value}</div>
               </div>
@@ -1119,6 +1234,17 @@ export default function FluxoFuturo({ faturas: faturasTodas, faturasLoading, pag
                                   title="Eliminar pagamento"
                                   style={{ background: "#fff0f0", border: "none", color: "#dc2626", padding: "3px 7px", borderRadius: 5, fontSize: 10, cursor: "pointer" }}>✕</button>
                               </>
+                            )}
+                            {isAdmin && item.tipo === "saida" && (item.pagamento || item.fatura) && (
+                              <BotaoFunding fonte={item.pagamento || item.fatura}
+                                onAlternar={() => alternaFunding(item)}
+                                onPct={(v) => defineFundingPct(item, v)} />
+                            )}
+                            {item._funding && (
+                              <span title={`Entrada do banco associada a "${item.funding_de}" — neutraliza a despesa no caixa`}
+                                style={{ background: "#ecfdf5", color: "#047857", fontSize: 9, padding: "1px 6px", borderRadius: 3, fontFamily: "monospace", fontWeight: 700 }}>
+                                🏦 funding
+                              </span>
                             )}
                             {isAdmin && (item.origem === "Contas a Pagar" || item.origem === "Vencida") && item.fatura && (
                               <>
