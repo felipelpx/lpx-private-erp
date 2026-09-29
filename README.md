@@ -153,3 +153,56 @@ public/
 supabase/
   schema.sql               schema completo + seed das contas
 ```
+
+---
+
+## v42 — Questionamentos dos investidores
+
+### O que muda
+
+1. **Extratos** — cada linha passa a ter uma coluna `?`.
+   O investidor clica e escreve a dúvida numa caixa de texto; a pergunta fica
+   agarrada ao lançamento (data, descrição e valor ficam copiados, para
+   continuar legível mesmo que o extrato seja reimportado).
+   O gestor vê na mesma linha um balão `💬 n` com as questões levantadas.
+2. **Separador Questões** — o gestor vê todas as perguntas, responde, fecha ou
+   reabre. O investidor vê só as suas e as respostas.
+3. **Notificação aos gestores** — contador vermelho no separador, aviso
+   flutuante em tempo real para quem tem o ERP aberto, notificação do sistema
+   (se o gestor carregar em «🔔 Ativar avisos») e, opcionalmente, email.
+4. **Gráficos do Investor Relations** — os valores deixaram de se sobrepor:
+   contorno branco por baixo de cada número, valores das barras escritos na
+   vertical, deteção de colisão entre rótulos e contra a linha do saldo, e
+   largura do gráfico proporcional ao número de meses.
+
+### Instalação
+
+Correr no SQL Editor do Supabase:
+
+```
+supabase/migracao-v11-questionamentos.sql
+```
+
+### Email (opcional)
+
+Sem estas variáveis o ERP notifica à mesma dentro da aplicação — o email é um
+extra. Em Netlify → Site configuration → Environment variables:
+
+| Variável | Para que serve |
+|---|---|
+| `RESEND_API_KEY` | chave da Resend (resend.com) |
+| `NOTIFICACOES_DE` | remetente verificado, ex.: `erp@lpxprivate.com` |
+| `SUPABASE_URL` | `https://<projeto>.supabase.co` |
+| `SUPABASE_SERVICE_ROLE_KEY` | chave `service_role` (só no servidor!) |
+| `NOTIFICACOES_PARA` | alternativa: lista fixa de emails, separada por vírgulas |
+
+A `service_role` nunca pode ir para uma variável `VITE_*`: essas são
+compiladas para dentro do bundle e ficam visíveis no browser.
+
+### Testes
+
+```
+node teste-rotulos.mjs       # geometria dos rótulos dos gráficos
+node teste-render.mjs        # renderização das vistas (SSR)
+node teste-extrato-dom.mjs   # fluxo do questionamento em DOM real
+```

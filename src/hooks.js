@@ -551,3 +551,40 @@ export function useRecebiveis() {
   }
   return { recebiveis: data, loading, addRecebivel, updateRecebivel, deleteRecebivel }
 }
+
+// ─── QUESTIONAMENTOS (perguntas dos investidores sobre lançamentos) ──────────
+// O RLS (migração v11) trata do isolamento: o investidor só recebe as suas,
+// o gestor recebe todas. Aqui não é preciso filtrar nada por role.
+export function useQuestionamentos() {
+  const { data, loading, error, reload } = useRealtimeTable('questionamentos',
+    () => supabase.from('questionamentos').select('*').order('created_at', { ascending: false }))
+
+  const addQuestionamento = async (q) => {
+    const { data, error } = await supabase.from('questionamentos').insert([q]).select()
+    if (error) console.error('addQuestionamento:', error)
+    return { data, error }
+  }
+  const updateQuestionamento = async (id, u) => {
+    const { data, error } = await supabase.from('questionamentos').update(u).eq('id', id).select()
+    if (error) console.error('updateQuestionamento:', error)
+    return { data, error }
+  }
+  const deleteQuestionamento = async (id) => {
+    const { error } = await supabase.from('questionamentos').delete().eq('id', id)
+    if (error) console.error('deleteQuestionamento:', error)
+    return { error }
+  }
+  // Marca uma questão como lida por este gestor (é o que apaga o contador)
+  const marcarLida = async (q, userId) => {
+    if (!q?.id || !userId) return
+    const lidos = Array.isArray(q.lido_por) ? q.lido_por : []
+    if (lidos.includes(userId)) return
+    await supabase.from('questionamentos')
+      .update({ lido_por: [...lidos, userId] }).eq('id', q.id)
+  }
+
+  return {
+    questionamentos: data, loading, error, reload,
+    addQuestionamento, updateQuestionamento, deleteQuestionamento, marcarLida,
+  }
+}

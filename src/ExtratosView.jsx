@@ -4,6 +4,7 @@ import { supabase } from "./supabase.js";
 import { CATEGORIAS } from "./categorias.js";
 import { fmtEUR, fmtNum, fmtInt, fmtPctSinal, fmtDataHora, fmtData as fmtDataCfg } from "./formato.js";
 import { agruparPorGrupo, GRUPOS_INFO } from "./empresas.js";
+import { ModalQuestionar } from "./Questoes.jsx";
 
 const BANCO_COLORS = {"Millennium":"#e84393","BNI":"#0057b7","BB Americas":"#c8a500","Eurobic":"#e74c3c","Revolut":"#6772e5","CGD":"#00a859","NovoBanco":"#ff6200","Banco Invest":"#1e3a6e","BAE":"#6c3483","BCP":"#002fa7","Miami":"#0891b2","Cartao 7449":"#f59e0b","Caixa Livre":"#8b5cf6"};
 
@@ -1657,7 +1658,8 @@ function GerarApresentacaoModal({ empresasEnriquecidas, onClose }) {
 }
 
 
-export default function ExtratosView({ EMPRESAS, extrato, caixaUnico, setCaixaUnico, currentUser, autoOpenConta, movCounts = {}, faturas = [], pagamentosExtras = [], onUpdateFatura, onUpdatePagamento }) {
+export default function ExtratosView({ EMPRESAS, extrato, caixaUnico, setCaixaUnico, currentUser, autoOpenConta, movCounts = {}, faturas = [], pagamentosExtras = [], onUpdateFatura, onUpdatePagamento,
+  questionamentos = [], addQuestionamento, onVerQuestoes }) {
   const [checkedEmps, setCheckedEmps] = useState([]);
   const [activeEmp, setActiveEmp] = useState(null);
   const [activeConta, setActiveConta] = useState(null);
@@ -1672,6 +1674,20 @@ export default function ExtratosView({ EMPRESAS, extrato, caixaUnico, setCaixaUn
   // Editar/eliminar movimentos: admin e gestor (antes era só admin, o que
   // deixava os gestores sem forma de corrigir lançamentos).
   const podeEditarMov = currentUser?.role === "admin" || currentUser?.role === "gestor";
+
+  // ─── Questionamentos ──────────────────────────────────────────────────────
+  // O investidor abre uma caixa de texto na própria linha do extrato; o gestor
+  // vê, na mesma linha, quantas questões já foram levantadas sobre ela.
+  const ehInvestidor = currentUser?.role === "investidor";
+  const [movQuestionar, setMovQuestionar] = useState(null);
+  const questoesPorMov = useMemo(() => {
+    const m = {};
+    (questionamentos || []).forEach(q => {
+      if (!q.movimento_id) return;
+      (m[q.movimento_id] = m[q.movimento_id] || []).push(q);
+    });
+    return m;
+  }, [questionamentos]);
 
   // ─── Coluna FATURA ────────────────────────────────────────────────────────
   // Para cada saída, diz se já existe documento: procura no Contas a Pagar uma
@@ -2266,7 +2282,7 @@ export default function ExtratosView({ EMPRESAS, extrato, caixaUnico, setCaixaUn
                 <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
                   <thead>
                     <tr style={{ background: "#fafafa" }}>
-                      {["Data", "Descrição", "Valor", "Saldo", "Fatura", "Categoria", "Detalhes", ...(podeEditarMov?["Ações"]:[])].map(h => (
+                      {["Data", "Descrição", "Valor", "Saldo", "Fatura", "Categoria", "Detalhes", "?", ...(podeEditarMov?["Ações"]:[])].map(h => (
                         <th key={h} style={{ padding: "9px 16px", textAlign: "left", color: "#aaa", fontSize: 10, letterSpacing: "0.07em", textTransform: "uppercase", fontFamily: "monospace", borderBottom: "1px solid #f0f0f0", whiteSpace: "nowrap" }}>{h}</th>
                       ))}
                     </tr>
@@ -2316,6 +2332,29 @@ export default function ExtratosView({ EMPRESAS, extrato, caixaUnico, setCaixaUn
                             movId={m.id}
                             onSave={sbUpdate}
                           />
+                        </td>
+                        <td style={{ padding: "6px 8px", textAlign: "center" }}>
+                          {(() => {
+                            const qs = m.id ? (questoesPorMov[m.id] || []) : [];
+                            const abertas = qs.filter(q => q.status === "aberto").length;
+                            if (ehInvestidor) {
+                              return (
+                                <button onClick={() => setMovQuestionar(m)}
+                                  title={qs.length ? `Já colocaste ${qs.length} questão(ões) sobre este lançamento. Clica para ver ou acrescentar.` : "Colocar uma dúvida sobre este lançamento"}
+                                  style={{ background: qs.length ? "#fef3c7" : "#f4f5f7", color: qs.length ? "#b45309" : "#8a8f99", border: "none", borderRadius: 20, padding: "3px 10px", fontSize: 11, fontWeight: 700, fontFamily: "monospace", cursor: "pointer", whiteSpace: "nowrap" }}>
+                                  {qs.length ? `? ${qs.length}` : "?"}
+                                </button>
+                              );
+                            }
+                            if (!qs.length) return <span style={{ color: "#e8e8e8", fontSize: 11 }}>—</span>;
+                            return (
+                              <button onClick={() => onVerQuestoes?.()}
+                                title={`${qs.length} questão(ões) de investidor sobre este lançamento${abertas ? ` · ${abertas} por responder` : ""}`}
+                                style={{ background: abertas ? "#fef3c7" : "#f0fdf4", color: abertas ? "#b45309" : "#15803d", border: "none", borderRadius: 20, padding: "3px 10px", fontSize: 11, fontWeight: 700, fontFamily: "monospace", cursor: "pointer", whiteSpace: "nowrap" }}>
+                                {`💬 ${qs.length}`}
+                              </button>
+                            );
+                          })()}
                         </td>
                         {podeEditarMov && (
                           <td style={{ padding: "10px 16px" }}>
@@ -2397,6 +2436,20 @@ export default function ExtratosView({ EMPRESAS, extrato, caixaUnico, setCaixaUn
           )}
         </div>
       )}
+      {/* Modal: o investidor coloca uma dúvida sobre este lançamento */}
+      {movQuestionar && (
+        <ModalQuestionar
+          movimento={movQuestionar}
+          empresa={activeEmp?.id}
+          banco={activeConta?.banco}
+          contaId={activeConta?.id}
+          currentUser={currentUser}
+          existentes={(questoesPorMov[movQuestionar.id] || [])}
+          onClose={() => setMovQuestionar(null)}
+          onEnviar={addQuestionamento}
+        />
+      )}
+
       {/* Edit movement modal */}
       {/* Modal: sugestões de match para o movimento selecionado */}
       {matchMov && (() => {

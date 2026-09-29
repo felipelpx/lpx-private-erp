@@ -1,9 +1,9 @@
-import React, { useState, useEffect, useMemo } from "react";
+import React, { useState, useEffect, useMemo, useRef } from "react";
 import ImportarExtrato from "./ImportarExtrato.jsx";
 import ImportarFatura from "./ImportarFatura.jsx";
 import FluxoFuturo from "./FluxoFuturo.jsx";
 import ExtratosView from "./ExtratosView.jsx";
-import { useAuth, useContas, useFaturas, usePagamentosExtras, useOrcamento, useMovimentosCounts, useProfiles } from "./hooks.js";
+import { useAuth, useContas, useFaturas, usePagamentosExtras, useOrcamento, useMovimentosCounts, useProfiles, useQuestionamentos } from "./hooks.js";
 import { supabase } from "./supabase.js";
 import ComercialView from "./ComercialView.jsx";
 import PagamentosView from "./PagamentosView.jsx";
@@ -13,6 +13,7 @@ const EMPRESAS = EMPRESAS_ALL;
 import FotosView from "./FotosView.jsx";
 import IRView from "./IRView.jsx";
 import ContasReceber from "./ContasReceber.jsx";
+import Questoes, { porLer } from "./Questoes.jsx";
 import { STATUS_FATURA, STATUS_STYLES, statusFatura, faturaPaga, faturaAtrasada } from "./status.js";
 
 // Filtros do Contas a Pagar: "Pendente atrasado" e "Pendente em dia" juntam-se
@@ -1153,6 +1154,7 @@ const TABS_CONFIG = [
   {id:"receber",   label:"Contas a Receber",  roles:["admin","gestor","viewer","investidor"]},
   {id:"pagar",     label:"Contas a Pagar",     roles:["admin","gestor","viewer","investidor"]},
   {id:"pagamentos",label:"Pagamentos",         roles:["admin","gestor","viewer"]},
+  {id:"questoes",  label:"Questões",           roles:["admin","gestor","investidor"]},
   {id:"importar",  label:"Importar",           roles:["admin","gestor"]},
   {id:"users",     label:"Utilizadores",       roles:["admin"]},
 ];
@@ -1191,8 +1193,73 @@ export default function App() {
   const { contas: supaContas, updateSaldo, upsertConta } = useContas();
   const { counts: movCounts, reload: reloadMovCounts } = useMovimentosCounts();
   const { profiles } = useProfiles();
+  const {
+    questionamentos, loading: questoesLoading, error: questoesErro,
+    addQuestionamento: inserirQuestionamento, updateQuestionamento,
+    deleteQuestionamento, marcarLida,
+  } = useQuestionamentos();
 
   const [tab, setTab] = useState("extrato");
+
+  // ─── Notificação de questionamentos ───────────────────────────────────────
+  // Quando um investidor coloca uma dúvida, todos os gestores são avisados:
+  //   · contador no separador "Questões" (sempre);
+  //   · aviso flutuante no ecrã de quem tem o ERP aberto (via realtime);
+  //   · notificação do sistema, se o gestor tiver autorizado o browser;
+  //   · email, se a função notificar-questao estiver configurada no Netlify.
+  const [avisos, setAvisos] = useState([]);
+  const jaAvisado = useRef(new Set());
+  const abertoEm = useRef(Date.now());
+
+  useEffect(() => {
+    const role = profile?.role;
+    if (role !== "admin" && role !== "gestor") return;
+    const novas = (questionamentos || []).filter(q =>
+      q.status === "aberto" &&
+      !jaAvisado.current.has(q.id) &&
+      !(Array.isArray(q.lido_por) ? q.lido_por : []).includes(user?.id) &&
+      new Date(q.created_at || 0).getTime() > abertoEm.current
+    );
+    if (!novas.length) return;
+    novas.forEach(q => jaAvisado.current.add(q.id));
+    setAvisos(a => [...novas, ...a].slice(0, 4));
+    try {
+      if (typeof Notification !== "undefined" && Notification.permission === "granted") {
+        novas.forEach(q => new Notification("Nova questão de investidor", {
+          body: `${q.autor_nome || "Investidor"}: ${String(q.texto || "").slice(0, 120)}`,
+          tag: q.id,
+        }));
+      }
+    } catch {}
+  }, [questionamentos, profile?.role, user?.id]);
+
+  useEffect(() => {
+    if (!avisos.length) return;
+    const t = setTimeout(() => setAvisos(a => a.slice(0, -1)), 14000);
+    return () => clearTimeout(t);
+  }, [avisos]);
+
+  // Insere a questão e avisa os gestores por email (se estiver configurado).
+  // O email é acessório: se falhar, a questão fica na mesma e o aviso in-app
+  // chega à mesma pelo realtime.
+  const addQuestionamento = async (q) => {
+    const res = await inserirQuestionamento(q);
+    if (!res?.error) {
+      try {
+        await fetch("/.netlify/functions/notificar-questao", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            empresa: q.empresa, autor: q.autor_nome || q.autor_email,
+            texto: q.texto, mov_data: q.mov_data,
+            mov_descricao: q.mov_descricao, mov_valor: q.mov_valor,
+          }),
+        });
+      } catch (e) { console.warn("notificar-questao:", e?.message || e); }
+    }
+    return res;
+  };
+
   const [extratoRefreshKey, setExtratoRefreshKey] = useState(0);
   const [lastImportedConta, setLastImportedConta] = useState(null);
 
@@ -1273,6 +1340,7 @@ export default function App() {
   };
 
   const canEdit = currentUser.role === "admin" || currentUser.role === "gestor";
+  const questoesPorLer = porLer(questionamentos, currentUser);
   const availTabs = TABS_CONFIG.filter(t => t.roles.includes(currentUser.role));
 
   // Empresas visíveis: o investidor só vê as que lhe foram atribuídas.
@@ -1324,8 +1392,14 @@ export default function App() {
                 // Refresh automático ao entrar no tab Extratos
                 if (t.id === "extrato") reloadMovCounts?.();
               }}
-                style={{background:tab===t.id?"#1a1a2e":"none",color:tab===t.id?"#fff":"#888",border:"none",padding:"7px 15px",borderRadius:7,fontSize:12,cursor:"pointer",fontWeight:tab===t.id?600:400,whiteSpace:"nowrap"}}>
+                style={{background:tab===t.id?"#1a1a2e":"none",color:tab===t.id?"#fff":"#888",border:"none",padding:"7px 15px",borderRadius:7,fontSize:12,cursor:"pointer",fontWeight:tab===t.id?600:400,whiteSpace:"nowrap",position:"relative"}}>
                 {t.label}
+                {t.id==="questoes" && questoesPorLer > 0 && (
+                  <span title={`${questoesPorLer} questão(ões) por ler`}
+                    style={{marginLeft:6,background:"#dc2626",color:"#fff",borderRadius:20,padding:"1px 6px",fontSize:9.5,fontWeight:800,fontFamily:"monospace",verticalAlign:"middle"}}>
+                    {questoesPorLer}
+                  </span>
+                )}
               </button>
             ))}
           </div>
@@ -1356,7 +1430,7 @@ export default function App() {
 
       <div style={{padding:"28px",maxWidth:1500,margin:"0 auto"}}>
         <TabErrorBoundary key={tab}>
-          {tab==="extrato"   && <ExtratosView EMPRESAS={empresasVisiveis} extrato={[]} caixaUnico={caixaUnico} setCaixaUnico={handleSetCaixaUnico} currentUser={currentUser} autoOpenConta={lastImportedConta} movCounts={movCounts} faturas={faturas} pagamentosExtras={pagamentosExtras} onUpdateFatura={updateFatura} onUpdatePagamento={updatePagamento}/>}
+          {tab==="extrato"   && <ExtratosView EMPRESAS={empresasVisiveis} extrato={[]} caixaUnico={caixaUnico} setCaixaUnico={handleSetCaixaUnico} currentUser={currentUser} autoOpenConta={lastImportedConta} movCounts={movCounts} faturas={faturas} pagamentosExtras={pagamentosExtras} onUpdateFatura={updateFatura} onUpdatePagamento={updatePagamento} questionamentos={questionamentos} addQuestionamento={addQuestionamento} onVerQuestoes={()=>setTab("questoes")}/>}
           {tab==="comercial" && <ComercialView currentUser={currentUser} onAddFatura={addFatura} empresasVisiveis={empresasVisiveis}/>}
           {tab==="ir"        && <IRView currentUser={currentUser} empresasVisiveis={empresasVisiveis}/>}
           {tab==="fotos"     && <FotosView currentUser={currentUser} empresasVisiveis={empresasVisiveis}/>}
@@ -1364,6 +1438,7 @@ export default function App() {
           {tab==="receber"   && <ContasReceber currentUser={currentUser} empresasVisiveis={empresasVisiveis}/>}
           {tab==="pagar"     && <ContasPagar canEdit={canEdit && !isInvestidor} EMPRESAS={empresasVisiveis} faturas={faturas} setFaturas={handleSetFaturas} addFatura={addFatura} updateFatura={updateFatura} deleteFatura={deleteFatura}/>}
           {tab==="pagamentos"&& <PagamentosView faturas={faturas.filter(f=>empresasVisiveis.some(e=>e.id===f.empresa)||!f.empresa)} pagamentosExtras={pagamentosExtras.filter(p=>empresasVisiveis.some(e=>e.id===p.empresa)||!p.empresa)} currentUser={currentUser} profiles={profiles}/>}
+          {tab==="questoes"  && <Questoes currentUser={currentUser} questionamentos={questionamentos} loading={questoesLoading} error={questoesErro} updateQuestionamento={updateQuestionamento} deleteQuestionamento={deleteQuestionamento} marcarLida={marcarLida} empresasVisiveis={empresasVisiveis}/>}
           {tab==="users"     && <Utilizadores currentUser={currentUser}/>}
           {tab==="importar"  && <ImportarView
             faturas={faturas} setFaturas={handleSetFaturas}
@@ -1374,6 +1449,26 @@ export default function App() {
           />}
         </TabErrorBoundary>
       </div>
+
+      {/* Avisos de novas questões — aparecem a quem está com o ERP aberto */}
+      {avisos.length > 0 && (
+        <div style={{position:"fixed",right:20,bottom:20,zIndex:300,display:"flex",flexDirection:"column",gap:10,maxWidth:340}}>
+          {avisos.map(q=>(
+            <div key={q.id} onClick={()=>{setTab("questoes");setAvisos(a=>a.filter(x=>x.id!==q.id));}}
+              style={{background:"#1a1a2e",color:"#fff",borderRadius:12,padding:"13px 16px",cursor:"pointer",boxShadow:"0 8px 28px rgba(0,0,0,0.22)"}}>
+              <div style={{display:"flex",justifyContent:"space-between",gap:10,alignItems:"center"}}>
+                <span style={{fontSize:10,color:"#9aa4b5",fontFamily:"monospace",textTransform:"uppercase",letterSpacing:"0.07em"}}>Nova questão</span>
+                <span onClick={e=>{e.stopPropagation();setAvisos(a=>a.filter(x=>x.id!==q.id));}}
+                  style={{color:"#6b7280",fontSize:14,lineHeight:1,cursor:"pointer"}}>×</span>
+              </div>
+              <div style={{fontSize:12.5,marginTop:6,lineHeight:1.45}}>{String(q.texto||"").slice(0,130)}</div>
+              <div style={{fontSize:10.5,color:"#8b93a3",marginTop:6}}>
+                {q.autor_nome||"Investidor"} · {EMPRESAS.find(e=>e.id===q.empresa)?.nome||q.empresa}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
