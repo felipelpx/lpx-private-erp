@@ -175,6 +175,43 @@ async function abreExtrato(props) {
   ok(desalinhadas.length === 0, \`colunas alinhadas com o cabeçalho (\${cols} colunas)\`);
 }
 
+// ── Match: só faturas e previsões da empresa do extrato ────────────────────
+{
+  const FATURAS = [
+    { id:"f-adseq", empresa:"adseq", fornecedor:"Clausula Dominante", valor:12500,
+      vencimento:"2026-09-01", status:"Pendente em dia", categoria:"Obra" },
+    { id:"f-pearl", empresa:"pearl", fornecedor:"Vertical Media", valor:12500,
+      vencimento:"2026-09-02", status:"Pendente em dia", categoria:"Marketing" },
+    { id:"f-sem",   empresa:null,    fornecedor:"Órfã sem empresa", valor:12500,
+      vencimento:"2026-09-03", status:"Pendente em dia", categoria:"Outro" },
+  ];
+  const PAGS = [
+    { id:"p-adseq", empresa:"adseq", tipo:"saida", descricao:"White Helmet (1/8)", valor:12500,
+      data_inicio:"2026-09-04", status:"Pendente", categoria:"Obra" },
+    { id:"p-infin", empresa:"infinite", tipo:"saida", descricao:"White Helmet (1/13)", valor:12500,
+      data_inicio:"2026-09-04", status:"Pendente", categoria:"Obra" },
+  ];
+  const host = await abreExtrato({
+    EMPRESAS: emp, extrato: [], caixaUnico: {}, setCaixaUnico: ()=>{},
+    currentUser: gestor, movCounts: {}, faturas: FATURAS, pagamentosExtras: PAGS,
+    questionamentos: [], addQuestionamento: async()=>({error:null}), onVerQuestoes: ()=>{},
+  });
+  // O botão de match só existe em saídas: m1 vale -12.500
+  const btn = [...host.querySelectorAll("button")].find(b => txt(b) === "🔗");
+  ok(!!btn, "a saída tem botão de match");
+  await act(async () => { btn.dispatchEvent(new window.MouseEvent("click", { bubbles: true })); });
+
+  const modal = [...document.querySelectorAll("div")].find(d => /Procurar match/.test(txt(d)));
+  const linhas = modal ? [...modal.querySelectorAll("tbody tr")].map(txt) : [];
+  ok(linhas.length > 0, "o modal lista candidatos (" + linhas.length + ")");
+  ok(linhas.some(t => /Clausula Dominante/.test(t)), "inclui a fatura da própria empresa");
+  ok(!linhas.some(t => /Vertical Media/.test(t)), "não inclui fatura da pearl");
+  ok(!linhas.some(t => /Órfã sem empresa/.test(t)), "não inclui fatura sem empresa");
+  ok(linhas.some(t => t.indexOf("(1/8)") >= 0), "inclui a previsão da própria empresa");
+  ok(!linhas.some(t => t.indexOf("(1/13)") >= 0), "não inclui a previsão da infinite");
+  ok(linhas.every(t => !/pearl|infinite/.test(t)), "nenhuma linha de outra empresa");
+}
+
 // ── Plano de contas: HDG tem subcategoria, LPX não ─────────────────────────
 {
   const host = await abreExtrato({

@@ -2569,15 +2569,21 @@ export default function ExtratosView({ EMPRESAS, extrato, caixaUnico, setCaixaUn
           return s;
         };
 
+        // Só o que pertence à empresa cujo extrato está aberto. Um pagamento
+        // desta conta não pode liquidar a fatura de outra sociedade, e mostrar
+        // faturas de outras empresas só serve para alguém fazer o match errado.
+        const empDoExtrato = activeEmp?.id || null;
+        const daEmpresa = (x) => !empDoExtrato || x?.empresa === empDoExtrato;
+
         const sugestoes = [];
         // Faturas pendentes/vencidas
-        (faturas || []).forEach(f => {
+        (faturas || []).filter(daEmpresa).forEach(f => {
           if (f.status === "Paga") return;
           const sc = score(f, parseFloat(f.valor), f.vencimento);
           if (sc > 0) sugestoes.push({ tipo: "fatura", ref: f, score: sc, desc: f.fornecedor || f.fatura, valor: f.valor, data: f.vencimento, empresa: f.empresa, categoria: f.categoria });
         });
         // Pagamentos extras pendentes (só saídas)
-        (pagamentosExtras || []).forEach(p => {
+        (pagamentosExtras || []).filter(daEmpresa).forEach(p => {
           if (p.status === "Paga" || p.status === "Pago") return;
           if (p.tipo === "entrada") return;
           const sc = score(p, parseFloat(p.valor), p.data_inicio);
@@ -2616,12 +2622,19 @@ export default function ExtratosView({ EMPRESAS, extrato, caixaUnico, setCaixaUn
                   <div style={{ fontSize: 12, color: "#888", marginTop: 4 }}>
                     Movimento: <strong>{matchMov.movimento}</strong> · <span style={{ color: "#dc2626", fontFamily: "monospace" }}>{fmtN(matchMov.valor)}</span> · {matchMov.data}
                   </div>
+                  <div style={{ fontSize: 11, color: "#aaa", marginTop: 3 }}>
+                    Só o Contas a Pagar e o Fluxo Futuro de <strong style={{ color: "#4a6fa5" }}>{activeEmp?.nome || "—"}</strong>
+                  </div>
                 </div>
                 <button onClick={() => setMatchMov(null)} style={{ background: "none", border: "none", fontSize: 20, cursor: "pointer", color: "#aaa" }}>✕</button>
               </div>
               {top.length === 0 ? (
                 <div style={{ padding: 30, textAlign: "center", color: "#888" }}>
-                  Nenhuma fatura nem pagamento pendente com valor próximo a {fmtN(matchMov.valor)}.
+                  Nenhuma fatura nem pagamento pendente de <strong>{activeEmp?.nome || "—"}</strong> com
+                  valor próximo a {fmtN(matchMov.valor)}.
+                  <div style={{ fontSize: 11, color: "#bbb", marginTop: 8 }}>
+                    A procura é restrita a esta empresa — um pagamento desta conta não liquida a fatura de outra sociedade.
+                  </div>
                 </div>
               ) : (
                 <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>

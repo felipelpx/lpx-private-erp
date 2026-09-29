@@ -9,15 +9,27 @@
 --   infinite_red). Os movimentos do grupo LPX não são tocados.
 --
 -- DEPENDE da migração v13 (coluna `subcategoria`). Corre-a primeiro.
--- Faz cópia de segurança antes de alterar e, no fim, diz o que não casou.
+--
+-- NOTA sobre o editor SQL do Supabase: não usamos tabelas TEMPORÁRIAS, porque
+-- cada statement pode correr numa ligação diferente e uma tabela temporária
+-- não lhe sobrevive. As tabelas de trabalho são normais e o último passo
+-- apaga-as.
+--
+-- Podes correr o ficheiro inteiro de uma vez, ou passo a passo. É repetível:
+-- correr duas vezes dá o mesmo resultado.
 -- ═══════════════════════════════════════════════════════════════════════════
 
-BEGIN;
-
-CREATE TEMP TABLE hdg_class (
-  conta_id    text, data date, valor numeric, descritivo text,
-  categoria   text, subcategoria text, observacoes text
-) ON COMMIT DROP;
+-- ─── PASSO 1 · Carregar as classificações do Caixa Único ───────────────────
+DROP TABLE IF EXISTS hdg_class;
+CREATE TABLE hdg_class (
+  conta_id     text,
+  data         date,
+  valor        numeric,
+  descritivo   text,
+  categoria    text,
+  subcategoria text,
+  observacoes  text
+);
 
 INSERT INTO hdg_class (conta_id, data, valor, descritivo, categoria, subcategoria, observacoes) VALUES
   ('adseq_bcp','2024-10-03'::date,30165.88,'TRF DE SEGUNDA PARCELA SINAL','Sócios','Suprimentos','Suprimento Maurício Cergner'),
@@ -637,7 +649,10 @@ INSERT INTO hdg_class (conta_id, data, valor, descritivo, categoria, subcategori
   ('infinite_red','2026-09-25'::date,-607.19,'IMP ABERT CRED EMPRES NR. 21594155','Financiamento','Outflow - Taxas e comissões',''),
   ('infinite_red','2026-09-25'::date,-98110.72,'TRF P/ COMPLAI CONSTRUCAO SA','Obras','Gasto com obras - trabalhos de Fundações/ Microestacas','');
 
--- ─── Cópia de segurança do que lá está hoje ────────────────────────────────
+CREATE INDEX idx_hdg_class_chave ON hdg_class (conta_id, data, round(valor, 2));
+
+
+-- ─── PASSO 2 · Cópia de segurança do que lá está hoje ──────────────────────
 CREATE TABLE IF NOT EXISTS hdg_classificacao_backup (
   id           uuid PRIMARY KEY,
   categoria    text,
@@ -645,15 +660,18 @@ CREATE TABLE IF NOT EXISTS hdg_classificacao_backup (
   detalhes     text,
   gravado_em   timestamptz NOT NULL DEFAULT now()
 );
+
 INSERT INTO hdg_classificacao_backup (id, categoria, subcategoria, detalhes)
 SELECT id, categoria, subcategoria, detalhes
   FROM movimentos
  WHERE conta_id IN ('adseq_bcp','adseq_red','infinite_bcp','infinite_red')
 ON CONFLICT (id) DO NOTHING;
 
-CREATE TEMP TABLE casados (id uuid PRIMARY KEY) ON COMMIT DROP;
 
--- ─── Passagem 1 · data + valor + descritivo ────────────────────────────────
+-- ─── PASSO 3 · Casar por data + valor + descritivo ─────────────────────────
+DROP TABLE IF EXISTS hdg_casados;
+CREATE TABLE hdg_casados (id uuid PRIMARY KEY);
+
 WITH alvo AS (
   SELECT DISTINCT ON (m.id) m.id, c.categoria, c.subcategoria, c.observacoes
     FROM movimentos m
@@ -672,33 +690,35 @@ WITH alvo AS (
    WHERE m.id = a.id
   RETURNING m.id
 )
-INSERT INTO casados SELECT id FROM feito;
+INSERT INTO hdg_casados SELECT id FROM feito;
 
--- ─── Passagem 2 · só data + valor, quando não há ambiguidade de lado nenhum ─
+
+-- ─── PASSO 4 · Casar só por data + valor, sem ambiguidade de lado nenhum ───
 -- Apanha os casos em que o descritivo difere entre o Excel e o ERP
 -- (truncagem, acentuação, espaços).
 WITH restantes AS (
-  SELECT m.id, m.conta_id, m.data, round(m.valor::numeric,2) AS v
+  SELECT m.id, m.conta_id, m.data, round(m.valor::numeric, 2) AS v
     FROM movimentos m
    WHERE m.conta_id IN ('adseq_bcp','adseq_red','infinite_bcp','infinite_red')
-     AND NOT EXISTS (SELECT 1 FROM casados k WHERE k.id = m.id)
+     AND NOT EXISTS (SELECT 1 FROM hdg_casados k WHERE k.id = m.id)
 ), um_so_no_erp AS (
   SELECT conta_id, data, v FROM restantes GROUP BY 1,2,3 HAVING count(*) = 1
 ), livres AS (
   SELECT c.* FROM hdg_class c
    WHERE NOT EXISTS (
-     SELECT 1 FROM movimentos m JOIN casados k ON k.id = m.id
+     SELECT 1 FROM movimentos m JOIN hdg_casados k ON k.id = m.id
       WHERE m.conta_id = c.conta_id AND m.data = c.data
-        AND round(m.valor::numeric,2) = round(c.valor,2)
+        AND round(m.valor::numeric, 2) = round(c.valor, 2)
         AND btrim(m.movimento) = btrim(c.descritivo))
 ), um_so_no_ficheiro AS (
-  SELECT conta_id, data, round(valor,2) AS v, min(categoria) AS categoria,
-         min(subcategoria) AS subcategoria, min(observacoes) AS observacoes
+  SELECT conta_id, data, round(valor, 2) AS v,
+         min(categoria) AS categoria, min(subcategoria) AS subcategoria,
+         min(observacoes) AS observacoes
     FROM livres GROUP BY 1,2,3 HAVING count(*) = 1
 ), par AS (
   SELECT r.id, f.categoria, f.subcategoria, f.observacoes
     FROM restantes r
-    JOIN um_so_no_erp u ON u.conta_id = r.conta_id AND u.data = r.data AND u.v = r.v
+    JOIN um_so_no_erp u      ON u.conta_id = r.conta_id AND u.data = r.data AND u.v = r.v
     JOIN um_so_no_ficheiro f ON f.conta_id = r.conta_id AND f.data = r.data AND f.v = r.v
 ), feito2 AS (
   UPDATE movimentos m
@@ -709,38 +729,63 @@ WITH restantes AS (
    WHERE m.id = p.id
   RETURNING m.id
 )
-INSERT INTO casados SELECT id FROM feito2;
+INSERT INTO hdg_casados SELECT id FROM feito2;
 
--- ─── Relatório ─────────────────────────────────────────────────────────────
-SELECT 'linhas no ficheiro'    AS o_que, (SELECT count(*) FROM hdg_class) AS n
-UNION ALL SELECT 'movimentos HDG no ERP', (SELECT count(*) FROM movimentos
-         WHERE conta_id IN ('adseq_bcp','adseq_red','infinite_bcp','infinite_red'))
-UNION ALL SELECT 'reclassificados',       (SELECT count(*) FROM casados);
 
--- Movimentos do ERP que o ficheiro não cobre (ficam exatamente como estavam):
+-- ─── PASSO 5 · Relatório ───────────────────────────────────────────────────
+SELECT 'linhas no ficheiro'     AS o_que, (SELECT count(*) FROM hdg_class) AS n
+UNION ALL
+SELECT 'movimentos HDG no ERP', (SELECT count(*) FROM movimentos
+        WHERE conta_id IN ('adseq_bcp','adseq_red','infinite_bcp','infinite_red'))
+UNION ALL
+SELECT 'reclassificados',       (SELECT count(*) FROM hdg_casados);
+
+-- Movimentos do ERP que o ficheiro não cobre (ficam exatamente como estavam).
+-- É esta a lista a olhar: ou são movimentos novos, ou o descritivo/valor
+-- diverge do Caixa Único.
 SELECT m.conta_id, m.data, m.valor, left(m.movimento, 48) AS descritivo,
-       COALESCE(NULLIF(m.categoria,''),'— sem categoria —') AS categoria_atual
+       COALESCE(NULLIF(m.categoria, ''), '— sem categoria —') AS categoria_atual
   FROM movimentos m
  WHERE m.conta_id IN ('adseq_bcp','adseq_red','infinite_bcp','infinite_red')
-   AND NOT EXISTS (SELECT 1 FROM casados k WHERE k.id = m.id)
+   AND NOT EXISTS (SELECT 1 FROM hdg_casados k WHERE k.id = m.id)
  ORDER BY m.conta_id, m.data
- LIMIT 100;
+ LIMIT 200;
 
-COMMIT;
+-- Linhas do ficheiro que não encontraram movimento no ERP:
+SELECT c.conta_id, c.data, c.valor, left(c.descritivo, 48) AS descritivo,
+       c.categoria, c.subcategoria
+  FROM hdg_class c
+ WHERE NOT EXISTS (
+   SELECT 1 FROM movimentos m JOIN hdg_casados k ON k.id = m.id
+    WHERE m.conta_id = c.conta_id AND m.data = c.data
+      AND round(m.valor::numeric, 2) = round(c.valor, 2))
+ ORDER BY c.conta_id, c.data
+ LIMIT 200;
 
--- ═══════════════════════════════════════════════════════════════════════════
--- CONFERÊNCIA — como ficou o plano de contas dos HDG
--- ═══════════════════════════════════════════════════════════════════════════
-SELECT categoria, COALESCE(NULLIF(subcategoria,''),'—') AS subcategoria,
-       count(*) AS movimentos, round(sum(valor)::numeric, 2) AS total
+
+-- ─── PASSO 6 · Conferência: como ficou o plano de contas dos HDG ───────────
+SELECT categoria,
+       COALESCE(NULLIF(subcategoria, ''), '—') AS subcategoria,
+       count(*) AS movimentos,
+       round(sum(valor)::numeric, 2) AS total
   FROM movimentos
  WHERE conta_id IN ('adseq_bcp','adseq_red','infinite_bcp','infinite_red')
- GROUP BY 1,2 ORDER BY 1,2;
+ GROUP BY 1, 2
+ ORDER BY 1, 2;
+
+
+-- ─── PASSO 7 · Limpar as tabelas de trabalho ───────────────────────────────
+-- Corre isto depois de leres os relatórios acima. A cópia de segurança
+-- (hdg_classificacao_backup) FICA — é o teu desfazer.
+DROP TABLE IF EXISTS hdg_class;
+DROP TABLE IF EXISTS hdg_casados;
+
 
 -- ═══════════════════════════════════════════════════════════════════════════
 -- REVERTER (corre só este bloco, se for preciso)
 -- ═══════════════════════════════════════════════════════════════════════════
--- UPDATE movimentos m SET categoria = b.categoria, subcategoria = b.subcategoria,
---        detalhes = b.detalhes
---   FROM hdg_classificacao_backup b WHERE m.id = b.id;
+-- UPDATE movimentos m
+--    SET categoria = b.categoria, subcategoria = b.subcategoria, detalhes = b.detalhes
+--   FROM hdg_classificacao_backup b
+--  WHERE m.id = b.id;
 -- DROP TABLE hdg_classificacao_backup;

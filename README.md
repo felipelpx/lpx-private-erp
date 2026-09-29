@@ -302,3 +302,25 @@ Os dois últimos guardam cópia de segurança antes de alterar e trazem o bloco
 de reversão comentado no fim. O `reclassificar-hdg.sql` só toca nas contas
 `adseq_bcp`, `adseq_red`, `infinite_bcp` e `infinite_red`, e lista no fim os
 movimentos que o ficheiro não cobre.
+
+---
+
+## v45 — Match por empresa
+
+Ao procurar match para uma linha do extrato, o ERP passa a mostrar **apenas
+faturas do Contas a Pagar e previsões do Fluxo Futuro da empresa cujo extrato
+está aberto**. Antes vinham todas as empresas, e um pagamento da Pearl podia
+liquidar, com um clique, a fatura da Infinite. O cabeçalho do modal diz agora
+de que empresa é a procura.
+
+### Correção no `reclassificar-hdg.sql`
+
+A primeira versão usava tabelas `TEMP`. No editor SQL do Supabase cada
+statement pode correr numa ligação diferente do pool, e uma tabela temporária
+não lhe sobrevive — daí o `relation "hdg_class" does not exist`. O script foi
+reescrito com tabelas normais (`hdg_class`, `hdg_casados`), que o **passo 7**
+apaga no fim. A cópia de segurança `hdg_classificacao_backup` fica, que é o
+desfazer.
+
+Passa também a listar, no fim, **as linhas do ficheiro que não encontraram
+movimento no ERP** — antes só listava o contrário.
