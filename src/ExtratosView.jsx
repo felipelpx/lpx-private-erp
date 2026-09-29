@@ -3,7 +3,8 @@ import { useMovimentosByConta, useSaldosAtuais } from "./hooks.js";
 import { supabase } from "./supabase.js";
 import { CATEGORIAS } from "./categorias.js";
 import { fmtEUR, fmtNum, fmtInt, fmtPctSinal, fmtDataHora, fmtData as fmtDataCfg } from "./formato.js";
-import { agruparPorGrupo, GRUPOS_INFO } from "./empresas.js";
+import { agruparPorGrupo, GRUPOS_INFO, EMPRESAS as EMPRESAS_TODAS } from "./empresas.js";
+import { CATEGORIAS_HDG, subcategoriasHDG, subcategoriaValida } from "./categoriasHDG.js";
 import { ModalQuestionar } from "./Questoes.jsx";
 
 const BANCO_COLORS = {"Millennium":"#e84393","BNI":"#0057b7","BB Americas":"#c8a500","Eurobic":"#e74c3c","Revolut":"#6772e5","CGD":"#00a859","NovoBanco":"#ff6200","Banco Invest":"#1e3a6e","BAE":"#6c3483","BCP":"#002fa7","Miami":"#0891b2","Cartao 7449":"#f59e0b","Caixa Livre":"#8b5cf6"};
@@ -23,7 +24,7 @@ function StatusBadge({ status }) {
 }
 
 // Select editável: salva imediatamente onChange, mostra estado
-function EditableCategoria({ initialValue, movId, onSave, disabled }) {
+function EditableCategoria({ initialValue, movId, onSave, disabled, opcoes = CATEGORIAS, extraPatch }) {
   const [val, setVal] = useState(initialValue || "");
   const [status, setStatus] = useState(null);
   // Sincroniza só quando o id muda OU quando o valor inicial muda E o utilizador não está a editar
@@ -45,7 +46,7 @@ function EditableCategoria({ initialValue, movId, onSave, disabled }) {
       return;
     }
     setStatus("saving");
-    const res = await onSave(movId, { categoria: newCat });
+    const res = await onSave(movId, { categoria: newCat, ...(extraPatch ? extraPatch(newCat) : {}) });
     if (res?.error) {
       setStatus("error");
       alert("Erro ao guardar categoria:\n\n" + (res.error.message || res.error));
@@ -70,9 +71,76 @@ function EditableCategoria({ initialValue, movId, onSave, disabled }) {
         style={{ background: val ? "#f0f4ff" : "#f8f8f8", color: val ? "#4a6fa5" : "#aaa", border: `1px solid ${status === "error" ? "#dc2626" : "#eee"}`, borderRadius: 6, padding: "3px 6px", fontSize: 10, fontFamily: "monospace", cursor: "pointer", outline: "none", maxWidth: 160 }}
       >
         <option value="">-- sem categoria --</option>
-        {CATEGORIAS.map(c => (
+        {/* O valor que já está gravado aparece mesmo que não pertença a esta
+            lista: mudar de plano de contas não pode apagar classificações. */}
+        {val && !opcoes.includes(val) && <option value={val}>{val} (fora do plano)</option>}
+        {opcoes.map(c => (
           <option key={c} value={c}>{c}</option>
         ))}
+      </select>
+      <StatusBadge status={status} />
+    </span>
+  );
+}
+
+// ─── Subcategoria (só nos projetos HDG) ─────────────────────────────────────
+// As opções dependem da categoria escolhida; sem categoria, ou numa categoria
+// sem subcategorias (Transferências), o campo fica inerte em vez de enganar.
+function EditableSubcategoria({ initialValue, categoria, movId, onSave, disabled }) {
+  const [val, setVal] = useState(initialValue || "");
+  const [status, setStatus] = useState(null);
+  const lastInitial = useRef(initialValue || "");
+  useEffect(() => {
+    if (initialValue !== lastInitial.current) {
+      setVal(initialValue || "");
+      lastInitial.current = initialValue || "";
+    }
+  }, [initialValue, movId]);
+
+  const opcoes = subcategoriasHDG(categoria);
+
+  const handleChange = async (e) => {
+    const nova = e.target.value;
+    setVal(nova);
+    if (!movId) {
+      alert("Movimento sem ID — reimporta o extrato para passar a editar.");
+      setVal(initialValue || "");
+      return;
+    }
+    setStatus("saving");
+    const res = await onSave(movId, { subcategoria: nova });
+    if (res?.error) {
+      setStatus("error");
+      alert(/subcategoria/i.test(res.error.message || "")
+        ? "A coluna 'subcategoria' ainda não existe.\n\nCorre supabase/migracao-v13-subcategoria.sql no SQL Editor do Supabase."
+        : "Erro ao guardar subcategoria:\n\n" + (res.error.message || res.error));
+      return;
+    }
+    if (!res?.data || res.data.length === 0) {
+      setStatus("error");
+      alert("Subcategoria não foi guardada.\n\nProvavelmente falta política UPDATE no RLS para 'movimentos'.");
+      return;
+    }
+    lastInitial.current = nova;
+    setStatus("saved");
+    setTimeout(() => setStatus(s => s === "saved" ? null : s), 1500);
+  };
+
+  if (!opcoes.length && !val) {
+    return <span style={{ color: "#ddd", fontSize: 10, fontFamily: "monospace" }}
+      title={categoria ? `"${categoria}" não tem subcategorias no plano HDG` : "Escolhe primeiro a categoria"}>—</span>;
+  }
+
+  return (
+    <span style={{ display: "inline-flex", alignItems: "center" }}>
+      <select value={val} disabled={disabled} onChange={handleChange}
+        style={{ background: val ? "#f5f3ff" : "#f8f8f8", color: val ? "#6d28d9" : "#aaa",
+                 border: `1px solid ${status === "error" ? "#dc2626" : "#eee"}`, borderRadius: 6,
+                 padding: "3px 6px", fontSize: 10, fontFamily: "monospace", cursor: "pointer",
+                 outline: "none", maxWidth: 190 }}>
+        <option value="">-- sem subcategoria --</option>
+        {val && !opcoes.includes(val) && <option value={val}>{val} (fora do plano)</option>}
+        {opcoes.map(c => <option key={c} value={c}>{c}</option>)}
       </select>
       <StatusBadge status={status} />
     </span>
@@ -517,7 +585,7 @@ const limparNomeFicheiro = (txt) =>
 const FMT_EUR = '#,##0.00\\ "€"';
 const FMT_DATA = "dd-mm-yyyy";
 
-async function exportarExtratoExcel({ empresaNome, banco, sheetOrigem, movimentos, dataDe, dataAte, descFiltro, catFiltro }) {
+async function exportarExtratoExcel({ empresaNome, banco, sheetOrigem, movimentos, dataDe, dataAte, descFiltro, catFiltro, comSubcategoria = false }) {
   const XLSX = await loadXLSX();
 
   // Ordem cronológica ascendente para leitura de extrato
@@ -553,7 +621,9 @@ async function exportarExtratoExcel({ empresaNome, banco, sheetOrigem, movimento
     ["Movimentos", movs.length],
     ["Exportado em", fmtDataHora(new Date())],
     [],
-    ["Data", "Descrição", "Valor", "Saldo", "Categoria", "Detalhes"],
+    comSubcategoria
+      ? ["Data", "Descrição", "Valor", "Saldo", "Categoria", "Subcategoria", "Observações"]
+      : ["Data", "Descrição", "Valor", "Saldo", "Categoria", "Detalhes"],
   ];
   const LINHA_CABECALHO = cabecalho.length; // índice 0-based da 1.ª linha de dados
 
@@ -563,6 +633,7 @@ async function exportarExtratoExcel({ empresaNome, banco, sheetOrigem, movimento
     Number(m.valor) || 0,
     m.saldo != null ? Number(m.saldo) : null,
     m.categoria || "",
+    ...(comSubcategoria ? [m.subcategoria || ""] : []),
     m.detalhes || "",
   ]));
 
@@ -594,7 +665,9 @@ async function exportarExtratoExcel({ empresaNome, banco, sheetOrigem, movimento
     if (cel && cel.t === "n") cel.z = FMT_EUR;
   }
 
-  ws["!cols"] = [{ wch: 12 }, { wch: 52 }, { wch: 15 }, { wch: 15 }, { wch: 20 }, { wch: 34 }];
+  ws["!cols"] = comSubcategoria
+    ? [{ wch: 12 }, { wch: 52 }, { wch: 15 }, { wch: 15 }, { wch: 22 }, { wch: 30 }, { wch: 34 }]
+    : [{ wch: 12 }, { wch: 52 }, { wch: 15 }, { wch: 15 }, { wch: 20 }, { wch: 34 }];
   ws["!autofilter"] = {
     ref: XLSX.utils.encode_range(
       { r: LINHA_CABECALHO - 1, c: 0 },
@@ -1678,6 +1751,11 @@ export default function ExtratosView({ EMPRESAS, extrato, caixaUnico, setCaixaUn
   // ─── Questionamentos ──────────────────────────────────────────────────────
   // O investidor abre uma caixa de texto na própria linha do extrato; o gestor
   // vê, na mesma linha, quantas questões já foram levantadas sobre ela.
+  // Plano de contas: os projetos HDG usam categoria + subcategoria + observações
+  // (folha cat_subcat.xlsx); os da LPX ficam exatamente como estavam.
+  const grupoAtivo = EMPRESAS_TODAS.find(e => e.id === activeEmp?.id)?.grupo;
+  const ehHDG = grupoAtivo === "HDG";
+
   const ehInvestidor = currentUser?.role === "investidor";
   const [movQuestionar, setMovQuestionar] = useState(null);
   const questoesPorMov = useMemo(() => {
@@ -1873,6 +1951,7 @@ export default function ExtratosView({ EMPRESAS, extrato, caixaUnico, setCaixaUn
     setExportando(true);
     try {
       await exportarExtratoExcel({
+        comSubcategoria: ehHDG,
         empresaNome: activeEmp?.nome || "",
         banco: activeConta.banco || "",
         sheetOrigem: activeConta.sheet || "",
@@ -2282,7 +2361,7 @@ export default function ExtratosView({ EMPRESAS, extrato, caixaUnico, setCaixaUn
                 <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
                   <thead>
                     <tr style={{ background: "#fafafa" }}>
-                      {["Data", "Descrição", "Valor", "Saldo", "Fatura", "Categoria", "Detalhes", "?", ...(podeEditarMov?["Ações"]:[])].map(h => (
+                      {["Data", "Descrição", "Valor", "Saldo", "Fatura", "Categoria", ...(ehHDG?["Subcategoria"]:[]), ehHDG?"Observações":"Detalhes", "?", ...(podeEditarMov?["Ações"]:[])].map(h => (
                         <th key={h} style={{ padding: "9px 16px", textAlign: "left", color: "#aaa", fontSize: 10, letterSpacing: "0.07em", textTransform: "uppercase", fontFamily: "monospace", borderBottom: "1px solid #f0f0f0", whiteSpace: "nowrap" }}>{h}</th>
                       ))}
                     </tr>
@@ -2324,8 +2403,22 @@ export default function ExtratosView({ EMPRESAS, extrato, caixaUnico, setCaixaUn
                             initialValue={m.categoria}
                             movId={m.id}
                             onSave={sbUpdate}
+                            opcoes={ehHDG ? CATEGORIAS_HDG : CATEGORIAS}
+                            extraPatch={ehHDG
+                              ? (nova) => (subcategoriaValida(nova, m.subcategoria) ? {} : { subcategoria: "" })
+                              : undefined}
                           />
                         </td>
+                        {ehHDG && (
+                          <td style={{ padding: "6px 10px" }}>
+                            <EditableSubcategoria
+                              initialValue={m.subcategoria}
+                              categoria={m.categoria}
+                              movId={m.id}
+                              onSave={sbUpdate}
+                            />
+                          </td>
+                        )}
                         <td style={{ padding: "6px 10px", maxWidth: 180 }}>
                           <EditableDetalhes
                             initialValue={m.detalhes}
@@ -2583,7 +2676,7 @@ export default function ExtratosView({ EMPRESAS, extrato, caixaUnico, setCaixaUn
               <button onClick={() => setEditingMov(null)} style={{ background: "none", border: "none", fontSize: 18, cursor: "pointer", color: "#aaa" }}>✕</button>
             </div>
             <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-              {[["Data","data","date"],["Descrição","movimento","text"],["Valor","valor","number"],["Saldo","saldo","number"],["Categoria","categoria","text"],["Detalhes","detalhes","text"]].map(([label,field,type])=>(
+              {[["Data","data","date"],["Descrição","movimento","text"],["Valor","valor","number"],["Saldo","saldo","number"],["Categoria","categoria","text"],...(ehHDG?[["Subcategoria","subcategoria","text"]]:[]),[ehHDG?"Observações":"Detalhes","detalhes","text"]].map(([label,field,type])=>(
                 <div key={field} style={{ display: "flex", flexDirection: "column", gap: 4 }}>
                   <label style={{ fontSize: 10, color: "#aaa", fontFamily: "monospace", textTransform: "uppercase" }}>{label}</label>
                   <input type={type} value={editingMov[field]||""} onChange={e=>setEditingMov(m=>({...m,[field]:type==="number"?parseFloat(e.target.value)||0:e.target.value}))}

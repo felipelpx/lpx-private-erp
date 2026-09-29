@@ -255,3 +255,50 @@ node teste-render.mjs        # renderização das vistas (SSR) + agregação do 
 node teste-extrato-dom.mjs   # questionamentos em DOM real
 node teste-fluxo-dom.mjs     # funding no Fluxo Futuro em DOM real
 ```
+
+---
+
+## v44 — Plano de contas HDG e funding nas vencidas
+
+### Funding nas vencidas
+
+O botão **🏦** passou a existir também nas faturas e previsões **vencidas**,
+que é onde estão precisamente os autos de medição por liquidar. A entrada do
+banco aparece na mesma linha do bloco de vencidas.
+
+### Plano de contas dos projetos HDG
+
+Nos projetos do grupo HDG — Admirable Sequence (Cinq Etoiles), Infinite Change
+(Paço D'arcos) e Traços e Angulos — o extrato mostra
+**Categoria | Subcategoria | Observações**. Nos projetos LPX nada muda: mesmas
+colunas, mesmo plano de contas de sempre.
+
+A lista vem de duas fontes (`src/categoriasHDG.js`):
+
+- `cat_subcat.xlsx`, folha **Menu1** — o plano como deve ser;
+- `Caixa_Unico_HDG_3.xlsm` — o que está mesmo em uso.
+
+São 17 categorias e 59 subcategorias. Os nomes com underscore
+(`Soft_Costs`, `Aquisição_de_Terreno`, …) são os do business plan e os que o
+Real × Orçado já usa — mudá-los partia esse cruzamento. Categorias como
+**Sócios** não constam do Menu1 mas têm 84 movimentos: entram, porque a folha
+de controlo manda mais do que o menu. Subcategorias usadas uma única vez
+(texto livre, do género «CSO Agosto (WH 371)») ficam fora da lista mas
+continuam gravadas — o ecrã mostra-as como **(fora do plano)**, que é o sinal
+de que há ali algo a arrumar.
+
+O exportador para Excel acompanha: nos HDG sai
+`Data | Descrição | Valor | Saldo | Categoria | Subcategoria | Observações`.
+
+### Instalação, por esta ordem
+
+| Ficheiro | O que faz |
+|---|---|
+| `supabase/migracao-v13-subcategoria.sql` | acrescenta a coluna `subcategoria` aos movimentos |
+| `supabase/reclassificar-hdg.sql` | passa as 616 classificações do Caixa Único HDG para o ERP |
+| `supabase/marcar-funding-obra.sql` | marca as faturas de obra a 100% de funding |
+
+Os dois últimos guardam cópia de segurança antes de alterar e trazem o bloco
+de reversão comentado no fim. O `reclassificar-hdg.sql` só toca nas contas
+`adseq_bcp`, `adseq_red`, `infinite_bcp` e `infinite_red`, e lista no fim os
+movimentos que o ficheiro não cobre.

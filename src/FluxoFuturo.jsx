@@ -1140,6 +1140,17 @@ export default function FluxoFuturo({ faturas: faturasTodas, faturasLoading, pag
                     <td style={{ padding: "7px 16px" }}>
                       <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
                         <span style={{ background: "#fee2e2", color: "#dc2626", fontSize: 9, padding: "1px 6px", borderRadius: 3, fontFamily: "monospace" }}>{item.cat || "—"}</span>
+                        {isAdmin && item.tipo === "saida" && (item.pagamento || item.fatura) && (
+                          <BotaoFunding fonte={item.pagamento || item.fatura}
+                            onAlternar={() => alternaFunding(item)}
+                            onPct={(v) => defineFundingPct(item, v)} />
+                        )}
+                        {item._funding && (
+                          <span title={`Entrada do banco associada a "${item.funding_de}" — neutraliza a despesa no caixa`}
+                            style={{ background: "#ecfdf5", color: "#047857", fontSize: 9, padding: "1px 6px", borderRadius: 3, fontFamily: "monospace", fontWeight: 700 }}>
+                            🏦 funding
+                          </span>
+                        )}
                         {isAdmin && item.origem === "Manual" && item.pagamento && (
                           <>
                             <button onClick={(e) => { e.stopPropagation(); handleMarkAsPaid(item.pagamento); }}

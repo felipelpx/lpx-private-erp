@@ -160,6 +160,38 @@ let semFunding, comFunding, parcial;
      "identificando a despesa que financia");
 }
 
+// ── Vencidas também têm botão de funding ──────────────────────────────────
+{
+  const atras = new Date(); atras.setMonth(atras.getMonth() - 2);
+  const DATA_PASSADA = atras.toISOString().slice(0, 10);
+  let gravado = null;
+  const { host } = await monta(base(
+    [pagamento({ id: "p9", descricao: "Auto de medição 3", data_inicio: DATA_PASSADA })],
+    { onUpdatePagamento: async (id, patch) => { gravado = { id, ...patch }; return { error: null }; } }
+  ));
+  const linhaVenc = [...host.querySelectorAll("tr")].find(tr => /Vencid/i.test(txt(tr)) && tr.style.cursor === "pointer");
+  ok(!!linhaVenc, "a linha das vencidas aparece");
+  if (linhaVenc) {
+    await act(async () => { linhaVenc.dispatchEvent(new window.MouseEvent("click", { bubbles: true })); });
+    const btn = [...host.querySelectorAll("button")].find(b => txt(b) === "🏦");
+    ok(!!btn, "a vencida tem botão de funding");
+    if (btn) {
+      await act(async () => { btn.dispatchEvent(new window.MouseEvent("click", { bubbles: true })); });
+      ok(gravado && gravado.id === "p9" && gravado.funding === true, "e o botão grava na vencida certa");
+    }
+  }
+}
+
+{
+  const atras = new Date(); atras.setMonth(atras.getMonth() - 2);
+  const { host } = await monta(base([pagamento({
+    id: "p9", descricao: "Auto de medição 3", data_inicio: atras.toISOString().slice(0,10), funding: true })]));
+  const linhaVenc = [...host.querySelectorAll("tr")].find(tr => /Vencid/i.test(txt(tr)) && tr.style.cursor === "pointer");
+  if (linhaVenc) await act(async () => { linhaVenc.dispatchEvent(new window.MouseEvent("click", { bubbles: true })); });
+  const linhas = [...host.querySelectorAll("tr")].map(txt);
+  ok(linhas.some(t => /Funding/i.test(t)), "a entrada do banco aparece também nas vencidas");
+}
+
 process.exit(mau ? 1 : 0);
 `.replace(/SRC\//g, pathToFileURL(join(process.cwd(), "src")).pathname + "/"));
 

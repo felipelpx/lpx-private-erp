@@ -175,6 +175,45 @@ async function abreExtrato(props) {
   ok(desalinhadas.length === 0, \`colunas alinhadas com o cabeçalho (\${cols} colunas)\`);
 }
 
+// ── Plano de contas: HDG tem subcategoria, LPX não ─────────────────────────
+{
+  const host = await abreExtrato({
+    EMPRESAS: emp, extrato: [], caixaUnico: {}, setCaixaUnico: ()=>{},
+    currentUser: gestor, movCounts: {}, faturas: [], pagamentosExtras: [],
+    questionamentos: [], addQuestionamento: async()=>({error:null}), onVerQuestoes: ()=>{},
+  });
+  const cabec = [...host.querySelectorAll("thead th")].map(txt);
+  ok(cabec.includes("Subcategoria"), \`HDG mostra a coluna Subcategoria (\${cabec.join("|")})\`);
+  ok(cabec.includes("Observações"), "HDG chama Observações ao campo de texto");
+  ok(!cabec.includes("Detalhes"), "HDG não mostra Detalhes");
+
+  const selects = [...host.querySelectorAll("select")];
+  const opcoes = selects.map(s => [...s.options].map(o => o.value));
+  const catHDG = opcoes.find(o => o.includes("Soft_Costs"));
+  ok(!!catHDG, "a categoria oferece o plano HDG (Soft_Costs)");
+  ok(catHDG && catHDG.includes("Sócios"), "inclui as categorias em uso fora do Menu1 (Sócios)");
+  ok(catHDG && !catHDG.includes("Ticket Refeição"), "não oferece o plano da LPX");
+}
+
+{
+  const lpx = EMPRESAS.filter(e => e.id === "favcloset");
+  const host = document.createElement("div");
+  document.body.appendChild(host);
+  const root = createRoot(host);
+  await act(async () => { root.render(React.createElement(ExtratosView, {
+    EMPRESAS: lpx, extrato: [], caixaUnico: {}, setCaixaUnico: ()=>{},
+    currentUser: gestor, movCounts: {}, faturas: [], pagamentosExtras: [],
+    questionamentos: [], addQuestionamento: async()=>({error:null}), onVerQuestoes: ()=>{},
+    autoOpenConta: { empresa: "favcloset", contaId: "adseq_bcp", banco: "BCP" },
+  })); });
+  const cabec = [...host.querySelectorAll("thead th")].map(txt);
+  ok(!cabec.includes("Subcategoria"), "LPX continua sem coluna Subcategoria");
+  ok(cabec.includes("Detalhes"), "LPX continua com Detalhes");
+  const opcoes = [...host.querySelectorAll("select")].map(s => [...s.options].map(o => o.value));
+  ok(opcoes.some(o => o.includes("Ticket Refeição")), "LPX mantém o seu plano de contas");
+  ok(!opcoes.some(o => o.includes("Soft_Costs")), "LPX não recebe o plano HDG");
+}
+
 // ── Separador Questões: responder e marcar como lida ───────────────────────
 {
   const lidas = [];
