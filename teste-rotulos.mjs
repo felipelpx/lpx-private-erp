@@ -38,82 +38,8 @@ function verifica(nome, postos, total, { L, A }) {
   ok(pct >= 85, `${nome}: só ${pct}% dos valores são mostrados`);
 }
 
-// ─── 1. Fluxo futuro: 14 meses, entradas, saídas e saldo projetado ──────────
-{
-  const meses = [];
-  for (let i = 0; i < 14; i++) {
-    meses.push({
-      rotulo: `${String((i % 12) + 1).padStart(2, "0")}/${2026 + Math.floor(i / 12)}`,
-      entradas: i === 8 ? 3550000 : i % 3 === 0 ? 120000 : 0,
-      saidas: -(40000 + i * 9000),
-    });
-  }
-  const L = larguraGrafico(meses.length, 84, 940), A = 390;
-  const mX = 58, mTopo = 62, mBase = 58, base = A - mTopo - mBase;
-  const max = Math.max(...meses.flatMap(m => [m.entradas, Math.abs(m.saidas)]), 1);
-  const passo = (L - mX - 16) / meses.length;
-  const lb = Math.min(18, passo / 3);
-  const zero = mTopo + base / 2;
-  const h = (v) => (Math.abs(v) / max) * (base / 2);
-  let acc = -200000;
-  const saldos = meses.map(m => { acc += m.entradas + m.saidas; return acc; });
-  const maxS = Math.max(...saldos.map(Math.abs), 1);
-  const yS = (v) => zero - (v / maxS) * (base / 2) * 0.9;
-
-  const cands = [
-    ...saldos.map((v, i) => ({
-      x: mX + passo * i + passo / 2, y: yS(v), texto: fmtC(v), fontSize: 10,
-      cor: "#1a1a2e", alternativas: [-12, 19, -26, 33, -40, 47],
-    })),
-    ...meses.map((m, i) => (m.entradas > 0 ? {
-      x: mX + passo * i + passo / 2 - lb / 2 - 1, y: zero - h(m.entradas) - 6,
-      texto: fmtC(m.entradas), fontSize: 10, cor: "#16a34a",
-      rot: -90, ancora: "start", alternativas: [0, -9],
-    } : null)),
-    ...meses.map((m, i) => (Math.abs(m.saidas) > 0 ? {
-      x: mX + passo * i + passo / 2 + lb / 2 + 1, y: zero + h(m.saidas) + 6,
-      texto: fmtC(m.saidas), fontSize: 10, cor: "#dc2626",
-      rot: -90, ancora: "end", alternativas: [0, 9],
-    } : null)),
-  ];
-  const linha = saldos.map((v, i) => ({ x: mX + passo * i + passo / 2, y: yS(v) }));
-  const postos = colocarRotulos(cands, { margemX: 1.5, margemY: 2, linhas: [linha], limites: { x0: mX - 6, y0: 2, x1: L - 2, y1: A - 22 } });
-  verifica("Fluxo futuro (14 meses)", postos, cands.filter(Boolean).length, { L, A });
-
-  // Quantos rótulos do saldo acabam por cruzar a linha (o contorno branco
-  // resolve a legibilidade, mas convém serem poucos)
-  const segs = [];
-  for (let i = 1; i < linha.length; i++) segs.push([linha[i - 1], linha[i]]);
-  const cruzam = postos.filter(p => segs.some(s => cortaSegmento(p, s))).length;
-  console.log(`  · ${cruzam} rótulo(s) sobre a linha do saldo (com contorno branco)`);
-  ok(cruzam <= 2, `Fluxo futuro: ${cruzam} rótulos por cima da linha do saldo`);
-}
-
-// ─── 2. Fluxo futuro denso: 24 meses ────────────────────────────────────────
-{
-  const meses = Array.from({ length: 24 }, (_, i) => ({
-    rotulo: `m${i}`, entradas: i % 4 === 0 ? 900000 : 0, saidas: -(150000 + i * 4000),
-  }));
-  const L = larguraGrafico(meses.length, 84, 940), A = 390;
-  const mX = 58, mTopo = 62, mBase = 58, base = A - mTopo - mBase;
-  const max = Math.max(...meses.flatMap(m => [m.entradas, Math.abs(m.saidas)]), 1);
-  const passo = (L - mX - 16) / meses.length;
-  const lb = Math.min(18, passo / 3);
-  const zero = mTopo + base / 2;
-  const h = (v) => (Math.abs(v) / max) * (base / 2);
-  let acc = 0;
-  const saldos = meses.map(m => { acc += m.entradas + m.saidas; return acc; });
-  const maxS = Math.max(...saldos.map(Math.abs), 1);
-  const yS = (v) => zero - (v / maxS) * (base / 2) * 0.9;
-  const cands = [
-    ...saldos.map((v, i) => ({ x: mX + passo * i + passo / 2, y: yS(v), texto: fmtC(v), fontSize: 10, cor: "#1a1a2e", alternativas: [-12, 19, -26, 33, -40, 47] })),
-    ...meses.map((m, i) => (m.entradas > 0 ? { x: mX + passo * i + passo / 2 - lb / 2 - 1, y: zero - h(m.entradas) - 6, texto: fmtC(m.entradas), fontSize: 10, cor: "#16a34a", rot: -90, ancora: "start", alternativas: [0, -9] } : null)),
-    ...meses.map((m, i) => (Math.abs(m.saidas) > 0 ? { x: mX + passo * i + passo / 2 + lb / 2 + 1, y: zero + h(m.saidas) + 6, texto: fmtC(m.saidas), fontSize: 10, cor: "#dc2626", rot: -90, ancora: "end", alternativas: [0, 9] } : null)),
-  ];
-  const linha = saldos.map((v, i) => ({ x: mX + passo * i + passo / 2, y: yS(v) }));
-  const postos = colocarRotulos(cands, { margemX: 1.5, margemY: 2, linhas: [linha], limites: { x0: mX - 6, y0: 2, x1: L - 2, y1: A - 22 } });
-  verifica("Fluxo futuro (24 meses)", postos, cands.filter(Boolean).length, { L, A });
-}
+// (O gráfico do Fluxo futuro deixou de usar o colocador: os valores passaram
+//  para uma tabela alinhada por baixo do eixo, onde não há colisões possíveis.)
 
 // ─── 3. Evolução do saldo: 18 pontos ────────────────────────────────────────
 {

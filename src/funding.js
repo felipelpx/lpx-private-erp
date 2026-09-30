@@ -11,8 +11,8 @@
 // Contas a Pagar e os gráficos do Investor Relations usam todos estas funções.
 // ─────────────────────────────────────────────────────────────────────────────
 
-export const CATEGORIA_FUNDING = "Funding bancário";
-export const ORIGEM_FUNDING = "Funding bancário";
+export const CATEGORIA_FUNDING = "Funding banco";
+export const ORIGEM_FUNDING = "Funding banco";
 
 export const temFunding = (x) => x?.funding === true || x?.funding === "true";
 

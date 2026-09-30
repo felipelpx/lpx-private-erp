@@ -6,6 +6,7 @@ import { RealOrcado } from "./RealOrcadoView.jsx";
 import { MODELO_REAL_ORCADO } from "./modeloRealOrcado.js";
 import { statusFatura, faturaPaga } from "./status.js";
 import { valorFunding, temFunding } from "./funding.js";
+import { rotuloGrafico, FUNDING } from "./nomenclatura.js";
 import { larguraGrafico, colocarRotulos } from "./rotulos.js";
 import { fmtEUR, fmtEUR0, fmtNum, fmtInt, fmtCompacto, fmtData, fmtPctSinal } from "./formato.js";
 
@@ -489,94 +490,153 @@ function Predinho({ fracoes }) {
 }
 
 // ─── FLUXO FUTURO PREVISTO (entradas e saídas por mês) ───────────────────────
-function BarrasFluxoFuturo({ meses, saldoArranque }) {
+// Desenho sóbrio, de relatório: duas cores só, e os valores numa tabela
+// alinhada por baixo do eixo em vez de espalhados pelo gráfico. Assim lê-se
+// cada número por inteiro (sem "k") e a área do gráfico fica limpa.
+const COR_FLUXO = {
+  entradas: "#4a6fa5",   // azul ardósia da marca
+  saidas:   "#97a0ae",   // cinzento-azulado: o sinal já é dado pelo lado do eixo
+  saldo:    "#1a1a2e",
+  negativo: "#b45309",
+};
+
+export function BarrasFluxoFuturo({ meses, saldoArranque }) {
   if (!meses.length) return <Vazio texto="Sem entradas nem saídas previstas. Lança previsões no Fluxo Futuro ou faturas com previsão de pagamento." />;
-  // Margens generosas em cima e em baixo: os valores das barras são escritos
-  // na vertical e precisam de ~40 px para lá da ponta da barra.
-  const L = larguraGrafico(meses.length, 84, 940), A = 390;
-  const mX = 58, mTopo = 62, mBase = 58;
-  const base = A - mTopo - mBase;
+
+  const LINHAS = [
+    { rotulo: "Entradas",       valor: (m) => m.entradas },
+    { rotulo: "Saídas",         valor: (m) => -Math.abs(m.saidas) },
+    { rotulo: "Fluxo do mês",   valor: (m) => m.entradas - Math.abs(m.saidas), forte: true },
+    { rotulo: "Saldo em caixa", valor: (m, i) => null, forte: true },   // preenchido abaixo
+  ];
+
   const max = Math.max(...meses.flatMap(m => [m.entradas, Math.abs(m.saidas)]), 1);
-  const passo = (L - mX - 16) / meses.length;
-  const lb = Math.min(18, passo / 3);
-  const zero = mTopo + base / 2;
-  const h = (v) => (Math.abs(v) / max) * (base / 2);
 
   // Saldo acumulado projetado
   let acc = saldoArranque;
   const saldos = meses.map(m => { acc += m.entradas + m.saidas; return acc; });
+
+  // A largura da coluna sai do maior número que lá tem de caber — não de um
+  // palpite. Números pequenos não desperdiçam largura; grandes não se tocam.
+  const TAM = 11.5;
+  const maiorTexto = Math.max(
+    ...meses.flatMap((m, i) => [m.entradas, -Math.abs(m.saidas),
+                                m.entradas - Math.abs(m.saidas), saldos[i]])
+            .map(v => fmtNum(v, 0).length),
+    ...meses.map(m => String(m.rotulo).length), 8);
+  const COL = Math.max(92, Math.round(maiorTexto * TAM * 0.62) + 34);
+  const ROTULOS = 112, FOLGA_DIR = 20;
+  const L = Math.max(940, ROTULOS + meses.length * COL + FOLGA_DIR);
+  const ALT_PLOT = 230, TOPO = 24;
+  const LINHA = 24, CABECALHO = 30;
+  const A = TOPO + ALT_PLOT + CABECALHO + LINHAS.length * LINHA + 8;
+
+  const passo = COL;
+  const x0 = ROTULOS;
+  const lb = 26;
+  const zero = TOPO + ALT_PLOT / 2;
+  const h = (v) => (Math.abs(v) / max) * (ALT_PLOT / 2 - 14);
+
   const maxSaldo = Math.max(...saldos.map(Math.abs), 1);
-  const ySaldo = (v) => zero - (v / maxSaldo) * (base / 2) * 0.9;
+  const ySaldo = (v) => zero - (v / maxSaldo) * (ALT_PLOT / 2 - 14) * 0.92;
+
+  const cxDe = (i) => x0 + passo * i + passo / 2;
+  const baseTabela = TOPO + ALT_PLOT + CABECALHO;
 
   return (
     <div style={{ overflowX: "auto" }}>
       <svg viewBox={`0 0 ${L} ${A}`} width={L} height={A} style={{ minWidth: "100%", height: "auto", display: "block" }}>
-        <line x1={mX} y1={zero} x2={L - 16} y2={zero} stroke="#ccc" strokeWidth="1" />
-        <text x={mX - 8} y={zero - h(max) + 4} textAnchor="end" fontSize="11" fontFamily="monospace" fill="#aaa">{fmtCompacto(max)}</text>
-        <text x={mX - 8} y={zero + h(max) + 4} textAnchor="end" fontSize="11" fontFamily="monospace" fill="#aaa">{fmtCompacto(-max)}</text>
+        {/* Grelha discreta */}
+        {[1, -1].map(sinal => (
+          <line key={sinal} x1={x0 - 8} y1={zero - sinal * h(max)} x2={L - 12} y2={zero - sinal * h(max)}
+                stroke={COR.grelha} strokeWidth="1" />
+        ))}
+        <line x1={x0 - 8} y1={zero} x2={L - 12} y2={zero} stroke="#c8ccd4" strokeWidth="1" />
+        <text x={x0 - 14} y={zero - h(max) + 4} textAnchor="end" fontSize="10.5" fontFamily="monospace" fill="#b4b9c2">{fmtNum(max, 0)}</text>
+        <text x={x0 - 14} y={zero + 4} textAnchor="end" fontSize="10.5" fontFamily="monospace" fill="#b4b9c2">0</text>
+        <text x={x0 - 14} y={zero + h(max) + 4} textAnchor="end" fontSize="10.5" fontFamily="monospace" fill="#b4b9c2">−{fmtNum(max, 0)}</text>
 
+        {/* Barras */}
         {meses.map((m, i) => {
-          const cx = mX + passo * i + passo / 2;
+          const cx = cxDe(i);
           return (
             <g key={i}>
-              <rect x={cx - lb - 1} y={zero - h(m.entradas)} width={lb} height={Math.max(1, h(m.entradas))} fill={COR.entrada} rx="2">
-                <title>{`${m.rotulo} — entradas: ${fmtEUR(m.entradas)}`}</title>
-              </rect>
-
-              <rect x={cx + 1} y={zero} width={lb} height={Math.max(1, h(m.saidas))} fill={COR.saida} rx="2">
-                <title>{`${m.rotulo} — saídas: ${fmtEUR(m.saidas)}`}</title>
-              </rect>
-
-              <text x={cx} y={A - 10} textAnchor="middle" fontSize="11" fontFamily="monospace" fill="#aaa">{m.rotulo}</text>
+              {m.entradas > 0 && (
+                <rect x={cx - lb - 2} y={zero - h(m.entradas)} width={lb} height={Math.max(2, h(m.entradas))}
+                      fill={COR_FLUXO.entradas} rx="1">
+                  <title>{`${m.rotulo} — entradas: ${fmtEUR(m.entradas)}`}</title>
+                </rect>
+              )}
+              {Math.abs(m.saidas) > 0 && (
+                <rect x={cx + 2} y={zero} width={lb} height={Math.max(2, h(m.saidas))}
+                      fill={COR_FLUXO.saidas} rx="1">
+                  <title>{`${m.rotulo} — saídas: ${fmtEUR(m.saidas)}`}</title>
+                </rect>
+              )}
             </g>
           );
         })}
 
-        {/* Linha do saldo projetado */}
-        <path d={saldos.map((v, i) => `${i === 0 ? "M" : "L"} ${mX + passo * i + passo / 2} ${ySaldo(v)}`).join(" ")}
-              fill="none" stroke={COR.tinta} strokeWidth="1.8" strokeDasharray="4 3" />
+        {/* Saldo acumulado */}
+        <path d={saldos.map((v, i) => `${i === 0 ? "M" : "L"} ${cxDe(i)} ${ySaldo(v)}`).join(" ")}
+              fill="none" stroke={COR_FLUXO.saldo} strokeWidth="1.6" strokeLinejoin="round" />
         {saldos.map((v, i) => (
-          <circle key={i} cx={mX + passo * i + passo / 2} cy={ySaldo(v)} r="2.6"
-                  fill={v < 0 ? COR.saida : "#fff"} stroke={COR.tinta} strokeWidth="1.4">
-            <title>{`${meses[i].rotulo} — saldo projetado: ${fmtEUR(v)}`}</title>
+          <circle key={i} cx={cxDe(i)} cy={ySaldo(v)} r="2.8"
+                  fill="#fff" stroke={v < 0 ? COR_FLUXO.negativo : COR_FLUXO.saldo} strokeWidth="1.6">
+            <title>{`${meses[i].rotulo} — saldo em caixa: ${fmtEUR(v)}`}</title>
           </circle>
         ))}
 
-        {/* Todos os valores num só passe: entradas, saídas e saldo projetado
-            disputam o mesmo espaço, por isso têm de ser resolvidos juntos.
-            As barras escrevem na vertical (8 px de largura em vez de 35) e a
-            linha do saldo entra como obstáculo do rótulo horizontal. */}
-        <Rotulos postos={colocarRotulos([
-          // saldo primeiro — é a leitura mais importante e fica com prioridade
-          ...saldos.map((v, i) => ({
-            x: mX + passo * i + passo / 2, y: ySaldo(v), texto: fmtCompacto(v), fontSize: 10,
-            cor: v < 0 ? COR.saida : COR.tinta,
-            alternativas: [-12, 19, -26, 33, -40, 47],
-          })),
-          ...meses.map((m, i) => (m.entradas > 0 ? {
-            x: mX + passo * i + passo / 2 - lb / 2 - 1, y: zero - h(m.entradas) - 6,
-            texto: fmtCompacto(m.entradas), fontSize: 10, cor: COR.entrada,
-            rot: -90, ancora: "start", alternativas: [0, -9],
-          } : null)),
-          ...meses.map((m, i) => (Math.abs(m.saidas) > 0 ? {
-            x: mX + passo * i + passo / 2 + lb / 2 + 1, y: zero + h(m.saidas) + 6,
-            texto: fmtCompacto(m.saidas), fontSize: 10, cor: COR.saida,
-            rot: -90, ancora: "end", alternativas: [0, 9],
-          } : null)),
-        ], {
-          margemX: 1.5, margemY: 2,
-          linhas: [saldos.map((v, i) => ({ x: mX + passo * i + passo / 2, y: ySaldo(v) }))],
-          limites: { x0: mX - 6, y0: 2, x1: L - 2, y1: A - 22 },
-        })} />
+        {/* ── Tabela de valores ────────────────────────────────────────────── */}
+        <line x1={4} y1={baseTabela - 22} x2={L - 12} y2={baseTabela - 22} stroke="#e6e8ee" strokeWidth="1" />
+        {meses.map((m, i) => (
+          <text key={i} x={cxDe(i) + passo / 2 - 10} y={baseTabela - 8} textAnchor="end"
+                fontSize="11.5" fontWeight="700" fontFamily="monospace" fill={COR.tinta}>
+            {m.rotulo}
+          </text>
+        ))}
+        <text x={6} y={baseTabela - 8} fontSize="10" fontFamily="monospace" fill="#b4b9c2"
+              letterSpacing="0.06em">VALORES EM €</text>
+
+        {LINHAS.map((linha, li) => {
+          const y = baseTabela + li * LINHA + 16;
+          return (
+            <g key={linha.rotulo}>
+              {li % 2 === 1 && (
+                <rect x={4} y={y - 16} width={L - 16} height={LINHA} fill="#fafbfc" />
+              )}
+              <text x={6} y={y} fontSize="11" fill={linha.forte ? COR.tinta : "#8a8f99"}
+                    fontWeight={linha.forte ? 700 : 400}>
+                {linha.rotulo}
+              </text>
+              {meses.map((m, i) => {
+                const v = linha.rotulo === "Saldo em caixa" ? saldos[i] : linha.valor(m, i);
+                const alerta = linha.forte && v < -0.005;
+                return (
+                  <text key={i} x={cxDe(i) + passo / 2 - 10} y={y} textAnchor="end"
+                        fontSize="11.5" fontFamily="monospace"
+                        fontWeight={linha.forte ? 700 : 400}
+                        fill={alerta ? COR_FLUXO.negativo : linha.forte ? COR.tinta : "#5c6370"}>
+                    {v === 0 ? "—" : fmtNum(v, 0)}
+                  </text>
+                );
+              })}
+            </g>
+          );
+        })}
+        <line x1={4} y1={baseTabela + 2 * LINHA} x2={L - 12} y2={baseTabela + 2 * LINHA}
+              stroke="#e6e8ee" strokeWidth="1" />
       </svg>
-      <div style={{ display: "flex", gap: 18, justifyContent: "center", marginTop: 8, flexWrap: "wrap" }}>
-        {[["Entradas previstas", COR.entrada], ["Saídas previstas", COR.saida]].map(([t, c]) => (
+
+      <div style={{ display: "flex", gap: 20, justifyContent: "center", marginTop: 10, flexWrap: "wrap" }}>
+        {[["Entradas previstas", COR_FLUXO.entradas], ["Saídas previstas", COR_FLUXO.saidas]].map(([t, c]) => (
           <span key={t} style={{ fontSize: 10.5, color: COR.texto }}>
-            <span style={{ display: "inline-block", width: 10, height: 10, background: c, borderRadius: 2, marginRight: 5 }} />{t}
+            <span style={{ display: "inline-block", width: 10, height: 10, background: c, borderRadius: 2, marginRight: 6 }} />{t}
           </span>
         ))}
         <span style={{ fontSize: 10.5, color: COR.texto }}>
-          <span style={{ display: "inline-block", width: 14, height: 0, borderTop: `2px dashed ${COR.tinta}`, marginRight: 5, verticalAlign: "middle" }} />Saldo projetado
+          <span style={{ display: "inline-block", width: 16, height: 0, borderTop: `2px solid ${COR_FLUXO.saldo}`, marginRight: 6, verticalAlign: "middle" }} />
+          Saldo em caixa acumulado
         </span>
       </div>
     </div>
@@ -735,23 +795,29 @@ export default function IRView({ currentUser, empresasVisiveis }) {
   );
 
   // Agregações do período
+  // As rubricas são agrupadas pelo que são, não pelo nome que levaram no
+  // extrato (ver src/nomenclatura.js). Os ajustes e transferências intra-grupo
+  // ficam de fora, mas o total do que foi excluído é mostrado no rodapé do
+  // gráfico — senão a cascata deixava de fechar sem se perceber porquê.
   const agregado = useMemo(() => {
     const porCat = {};
-    let entradas = 0, saidas = 0;
+    let entradas = 0, saidas = 0, excluido = 0, nExcluidos = 0;
     movimentos.forEach(m => {
-      const cat = (m.categoria || "").trim() || "Sem categoria";
+      const cat = rotuloGrafico(m.categoria, m.subcategoria);
+      if (!cat) { excluido += m.valor; nExcluidos++; return; }
       if (!porCat[cat]) porCat[cat] = { entrada: 0, saida: 0 };
       if (m.valor >= 0) { porCat[cat].entrada += m.valor; entradas += m.valor; }
       else { porCat[cat].saida += m.valor; saidas += m.valor; }
     });
-    return { porCat, entradas, saidas, resultado: entradas + saidas };
+    return { porCat, entradas, saidas, resultado: entradas + saidas, excluido, nExcluidos };
   }, [movimentos]);
 
   const anteriorPorCat = useMemo(() => {
     const p = {};
     movsAnterior.forEach(m => {
       if (m.valor >= 0) return;
-      const cat = (m.categoria || "").trim() || "Sem categoria";
+      const cat = rotuloGrafico(m.categoria, m.subcategoria);
+      if (!cat) return;
       p[cat] = (p[cat] || 0) + m.valor;
     });
     return p;
@@ -765,8 +831,12 @@ export default function IRView({ currentUser, empresasVisiveis }) {
   const topN = (obj, chave, n = 5) => {
     const lista = Object.entries(obj)
       .map(([nome, v]) => {
+        // Uma rubrica pode ter entradas E saídas (típico da Obra, onde as
+        // entradas são desembolsos do banco). Sem distinguir, a cascata
+        // mostrava duas barras com o mesmo nome.
         const temAmbos = Math.abs(v.entrada) > 0.005 && Math.abs(v.saida) > 0.005;
-        const rotulo = (chave === "entrada" && temAmbos) ? `Funding — ${nome}` : nome;
+        const rotulo = (chave === "entrada" && temAmbos && nome !== FUNDING)
+          ? `${FUNDING} — ${nome}` : nome;
         return { nome: rotulo, valor: v[chave] };
       })
       .filter(x => Math.abs(x.valor) > 0.005)
@@ -1010,6 +1080,13 @@ export default function IRView({ currentUser, empresasVisiveis }) {
             ? <Vazio texto="Sem movimentos no período selecionado." />
             : <Cascata inicial={saldoInicial} entradas={entradasTop} saidas={saidasTop}
                        final={saldoInicial + agregado.resultado} />}
+          {agregado.nExcluidos > 0 && (
+            <div style={{ fontSize: 10.5, color: "#aaa", marginTop: 10, textAlign: "right" }}>
+              Excluídos {fmtInt(agregado.nExcluidos)} movimentos de ajuste e transferência
+              intra-grupo ({fmtEUR0(agregado.excluido)} líquidos) — entram e saem pelo mesmo
+              valor e não são fluxo do projeto.
+            </div>
+          )}
         </Card>
       )}
 

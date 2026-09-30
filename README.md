@@ -313,14 +313,76 @@ está aberto**. Antes vinham todas as empresas, e um pagamento da Pearl podia
 liquidar, com um clique, a fatura da Infinite. O cabeçalho do modal diz agora
 de que empresa é a procura.
 
-### Correção no `reclassificar-hdg.sql`
+### `reclassificar-hdg` — dois ficheiros, sem tabelas de trabalho
 
-A primeira versão usava tabelas `TEMP`. No editor SQL do Supabase cada
-statement pode correr numa ligação diferente do pool, e uma tabela temporária
-não lhe sobrevive — daí o `relation "hdg_class" does not exist`. O script foi
-reescrito com tabelas normais (`hdg_class`, `hdg_casados`), que o **passo 7**
-apaga no fim. A cópia de segurança `hdg_classificacao_backup` fica, que é o
-desfazer.
+As duas primeiras versões criavam tabelas intermédias (primeiro `TEMP`, depois
+normais) e o editor SQL do Supabase perdia-as entre comandos:
+`relation "hdg_class" does not exist`. A causa deixou de interessar — o script
+passou a não depender de nada que tenha de sobreviver de um comando para o
+seguinte:
 
-Passa também a listar, no fim, **as linhas do ficheiro que não encontraram
-movimento no ERP** — antes só listava o contrário.
+| Ficheiro | Comandos | O que faz |
+|---|---|---|
+| `reclassificar-hdg-1-aplicar.sql` | 2 | cópia de segurança + um único `UPDATE` com as 616 classificações embutidas |
+| `reclassificar-hdg-2-conferir.sql` | 3 leituras | o que ficou classificado, o plano de contas resultante, e o que o ficheiro não cobriu |
+
+Cada comando basta-se a si próprio, pelo que corre bem quer o editor envie o
+ficheiro inteiro, quer o parta em pedaços. O `UPDATE` casa primeiro por
+conta + data + valor + descritivo e, para o que sobrar, por conta + data +
+valor quando há uma só linha de cada lado — o que apanha descritivos truncados
+ou com acentuação diferente.
+
+A cópia de segurança `hdg_classificacao_backup` fica na base de dados: é o
+desfazer, e o bloco de reversão está no fim do ficheiro 2.
+
+---
+
+## v47 — Gráfico do fluxo futuro e nomenclatura
+
+### Fluxo futuro, versão de relatório
+
+- **Números por extenso**, com separador de milhares e sem "k" nem "M".
+- Os valores saíram de dentro do gráfico para uma **tabela alinhada** por baixo
+  do eixo, com quatro linhas: Entradas, Saídas, **Fluxo do mês** e
+  **Saldo em caixa** acumulado. Deixa de haver rótulos a disputar espaço, e
+  lê-se cada número por inteiro.
+- A **largura da coluna é calculada a partir do maior número** que lá tem de
+  caber, em vez de fixada: números pequenos não desperdiçam largura, grandes
+  nunca se tocam.
+- Paleta sóbria: azul ardósia nas entradas, cinzento-azulado nas saídas (o
+  sinal já é dado pelo lado do eixo), linha do saldo a navio sólido. O
+  vermelho ficou reservado às duas linhas que exigem decisão — fluxo do mês e
+  saldo negativos.
+
+### Nomenclatura dos gráficos (`src/nomenclatura.js`)
+
+Uma função única, usada por todos os gráficos do Investor Relations, agrupa as
+rubricas pelo que são e não pelo nome que levaram no extrato:
+
+| No extrato | No gráfico |
+|---|---|
+| Aporte RC / Aporte SPV / Mútuo … / Sócios (HDG) / …-Aporte/Resgate | **Aporte sócios** |
+| Resgate RC / Resgate Investidores / Resgate SPV | **Resgate sócios** |
+| Funding · Financiamento → Inflow - Obra / Inflow - Terreno | **Funding banco** |
+| Financiamento → Outflow - Juros · Juros · Encargos Financeiros | Juros e encargos |
+| Financiamento → Outflow - Taxas e comissões | Encargos bancários |
+| Financiamento → Outlow - Repagamento | Amortização de dívida |
+| Ajuste · Ajuste Contábil · Movimento entre contas do mesmo grupo | *(fora do gráfico)* |
+
+O nome original fica intacto na base de dados e no extrato — isto é só a
+camada de apresentação.
+
+No plano HDG a categoria `Financiamento` cobre o desembolso **e** o seu custo;
+é a subcategoria que os distingue. Tratar tudo como funding poria os juros a
+aparecer como dinheiro a entrar, e é por isso que o mapa olha para a
+subcategoria e não só para a categoria.
+
+Os ajustes saem do gráfico, mas a cascata mostra no rodapé quantos movimentos
+foram excluídos e o seu valor líquido — senão deixava de fechar sem se
+perceber porquê.
+
+### Ferramenta de pré-visualização
+
+`previsualizar-grafico.mjs` + `previsualizar-foto.mjs` renderizam um gráfico
+para `/tmp/grafico.png`, para se poder olhar para o desenho sem publicar.
+Precisam de `npm i --no-save esbuild playwright`.
