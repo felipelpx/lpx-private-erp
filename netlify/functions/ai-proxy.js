@@ -16,7 +16,10 @@ exports.handler = async function (event) {
   if (event.httpMethod === "OPTIONS") return { statusCode: 200, headers: CORS, body: "" };
   if (event.httpMethod !== "POST") return { statusCode: 405, headers: CORS, body: "Method Not Allowed" };
 
-  const chave = process.env.ANTHROPIC_API_KEY;
+  // .trim() porque uma quebra de linha ou um espaço colados por engano no
+  // painel do Netlify fazem a Anthropic devolver 401 — e o valor parece bem
+  // escrito a olho nu, o que torna a causa difícil de encontrar.
+  const chave = (process.env.ANTHROPIC_API_KEY || "").trim();
 
   // Diagnóstico claro em vez de deixar a Anthropic devolver um 401 críptico
   if (!chave) {
@@ -26,7 +29,7 @@ exports.handler = async function (event) {
       body: JSON.stringify({
         error: {
           type: "config_error",
-          message: "Falta a chave da API. Define ANTHROPIC_API_KEY em Netlify → Site configuration → Environment variables e faz um novo deploy.",
+          message: "Falta a chave da API. Cria uma em platform.claude.com → Settings → API keys, define ANTHROPIC_API_KEY em Netlify → Site configuration → Environment variables e faz um novo deploy.",
         },
       }),
     };
@@ -66,7 +69,36 @@ exports.handler = async function (event) {
         body: JSON.stringify({
           error: {
             type: "authentication_error",
-            message: "A chave da API foi rejeitada. Foi revogada ou está incompleta — gera uma nova em console.anthropic.com e atualiza a variável no Netlify.",
+            message: "A chave da API foi rejeitada: expirou, foi revogada ou está incompleta. "
+              + "As chaves da Anthropic podem ter prazo (3 horas a 30 dias, ou sem prazo) e, depois de expirarem, não se reativam. "
+              + "Cria uma nova em platform.claude.com → Settings → API keys (escolhe \"Never\" na expiração), "
+              + "atualiza ANTHROPIC_API_KEY em Netlify → Site configuration → Environment variables, e faz um novo deploy.",
+          },
+        }),
+      };
+    }
+    if (response.status === 404) {
+      return {
+        statusCode: 404,
+        headers: { "Content-Type": "application/json", ...CORS },
+        body: JSON.stringify({
+          error: {
+            type: "modelo_invalido",
+            message: "A chave funciona, mas o modelo pedido não existe ou já não está disponível. "
+              + "Atualiza MODELO_IA em src/ia.js com um identificador válido (platform.claude.com → Docs → Models).",
+          },
+        }),
+      };
+    }
+    if (response.status === 403) {
+      return {
+        statusCode: 403,
+        headers: { "Content-Type": "application/json", ...CORS },
+        body: JSON.stringify({
+          error: {
+            type: "permission_error",
+            message: "A chave é válida mas não tem permissão para este pedido. "
+              + "Confirma em platform.claude.com a que workspace a chave está associada.",
           },
         }),
       };
@@ -80,12 +112,12 @@ exports.handler = async function (event) {
         }),
       };
     }
-    if (response.status === 400 && text.includes("credit balance")) {
+    if (response.status === 402 || (response.status === 400 && /credit balance|billing/i.test(text))) {
       return {
         statusCode: 402,
         headers: { "Content-Type": "application/json", ...CORS },
         body: JSON.stringify({
-          error: { type: "sem_saldo", message: "A conta da Anthropic não tem saldo. Adiciona créditos em console.anthropic.com → Billing." },
+          error: { type: "sem_saldo", message: "A conta da Anthropic não tem saldo ou atingiu o limite de gastos. Vê em platform.claude.com → Billing." },
         }),
       };
     }

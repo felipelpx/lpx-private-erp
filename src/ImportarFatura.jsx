@@ -2,6 +2,7 @@ import { useState, useRef } from "react";
 import { CATEGORIAS_FATURA as CATEGORIAS } from "./categorias.js";
 import { EMPRESAS_SIMPLE } from "./empresas.js";
 import { fmtEUR, fmtTamanho } from "./formato.js";
+import { MODELO_IA } from "./ia.js";
 
 // Lista de empresas — ver src/empresas.js
 const EMPRESAS_LIST = EMPRESAS_SIMPLE;
@@ -94,7 +95,7 @@ Responde APENAS o objeto JSON. Sem \`\`\`json, sem prefácio, sem sufixo.`;
       method:"POST",
       headers:{"Content-Type":"application/json"},
       body: JSON.stringify({
-        model:"claude-sonnet-5",
+        model: MODELO_IA,
         max_tokens:2000,
         system: systemPrompt,
         messages:[{ role:"user", content }]

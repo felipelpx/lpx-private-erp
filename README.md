@@ -386,3 +386,49 @@ perceber porquê.
 `previsualizar-grafico.mjs` + `previsualizar-foto.mjs` renderizam um gráfico
 para `/tmp/grafico.png`, para se poder olhar para o desenho sem publicar.
 Precisam de `npm i --no-save esbuild playwright`.
+
+---
+
+## v48 — Mensagens de erro da chave da API
+
+A consola da Anthropic mudou de `console.anthropic.com` para
+`platform.claude.com`, e as chaves passaram a poder ter **prazo de validade**
+(3 horas a 30 dias, ou «Never»). Uma chave expirada devolve `401` e **não se
+reativa** — tem de se criar outra.
+
+As mensagens do `netlify/functions/ai-proxy.js` foram atualizadas em
+conformidade, passaram a mencionar a expiração como causa provável do 401, e
+acrescentou-se o tratamento do `403 permission_error` (chave válida mas noutra
+workspace) e do `402 billing_error`.
+
+---
+
+## v49 — Diagnóstico da ligação à IA
+
+Três causas distintas estavam a dar o mesmo erro no importador de faturas:
+
+1. **O identificador do modelo estava errado.** O código pedia
+   `claude-sonnet-5`, que não existe — o Sonnet é `claude-sonnet-5-5`. Passou
+   para `src/ia.js` (`MODELO_IA`), num sítio só, porque estes identificadores
+   mudam com o tempo e, quando mudam, a API responde 404.
+2. **A chave não era limpa.** Um espaço ou uma quebra de linha colados no
+   painel do Netlify fazem a Anthropic devolver 401, e o valor parece bem
+   escrito a olho nu. O proxy passa a fazer `.trim()`.
+3. **Não havia forma de ver o que a Anthropic respondia.** Criou-se a função
+   `netlify/functions/diagnostico-ia.js`.
+
+### Como diagnosticar
+
+Abrir no browser:
+
+```
+https://<o-site>/.netlify/functions/diagnostico-ia
+```
+
+Responde em JSON com o veredicto em português, o estado HTTP, a resposta da
+Anthropic e — sem revelar a chave — o seu comprimento, os últimos 4 caracteres
+e se tem espaços. Os «últimos 4» servem para confirmar que o deploy já está a
+usar a chave nova: se não baterem com a que foi colada, falta publicar.
+
+É um ficheiro solto, sem dependências; pode apagar-se quando deixar de ser
+preciso.
