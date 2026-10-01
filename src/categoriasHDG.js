@@ -117,12 +117,44 @@ export const CAT_SUB_HDG = {
 
 export const CATEGORIAS_HDG = Object.keys(CAT_SUB_HDG);
 
-// Subcategorias de uma categoria. Categoria desconhecida devolve lista vazia —
-// o campo fica inerte em vez de bloquear o movimento.
-export const subcategoriasHDG = (cat) => CAT_SUB_HDG[cat] || [];
+// Todas as subcategorias, sem repetições — a rede de segurança de quem está a
+// classificar um movimento cuja categoria o plano ainda não conhece.
+export const TODAS_SUBCATEGORIAS_HDG = [...new Set(Object.values(CAT_SUB_HDG).flat())].sort(
+  (a, b) => a.localeCompare(b, "pt"));
 
-// A mesma subcategoria aparece em várias categorias ("Fiscalização",
+// A mesma categoria aparece escrita de duas maneiras nos dados: "Soft Costs"
+// (menu) e "Soft_Costs" (business plan), e há sempre o espaço a mais vindo de
+// um Excel. Comparar texto em cru deixava a célula da subcategoria morta sem
+// explicação nenhuma, por isso a procura é feita sobre uma forma normalizada.
+const chave = (t) => String(t || "").trim()
+  .normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+  .replace(/[_\s]+/g, " ").toLowerCase();
+
+const POR_CHAVE = {};
+Object.keys(CAT_SUB_HDG).forEach(c => { POR_CHAVE[chave(c)] = c; });
+
+// Nome canónico da categoria, ou null se não pertencer de todo ao plano HDG.
+export const categoriaCanonicaHDG = (cat) => POR_CHAVE[chave(cat)] || null;
+
+// Pertence ao plano, escrita como estiver?
+export const categoriaNoPlanoHDG = (cat) => categoriaCanonicaHDG(cat) !== null;
+
+// Subcategorias de uma categoria. Categoria desconhecida devolve a lista toda,
+// em vez de uma lista vazia: é preferível oferecer opções a mais do que deixar
+// alguém sem conseguir classificar o movimento.
+export function subcategoriasHDG(cat) {
+  const canonica = categoriaCanonicaHDG(cat);
+  if (!canonica) return TODAS_SUBCATEGORIAS_HDG;
+  const subs = CAT_SUB_HDG[canonica];
+  return subs.length ? subs : TODAS_SUBCATEGORIAS_HDG;
+}
+
+// A mesma subcategoria existe em várias categorias ("Fiscalização",
 // "Outros - Diversos"), por isso a validação é sempre dentro da categoria.
-export const subcategoriaValida = (cat, sub) =>
-  !sub || subcategoriasHDG(cat).includes(sub);
-
+export const subcategoriaValida = (cat, sub) => {
+  if (!sub) return true;
+  const canonica = categoriaCanonicaHDG(cat);
+  if (!canonica) return true;                 // categoria fora do plano: não bloqueia
+  const subs = CAT_SUB_HDG[canonica];
+  return subs.length === 0 || subs.some(x => chave(x) === chave(sub));
+};

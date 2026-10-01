@@ -432,3 +432,25 @@ usar a chave nova: se não baterem com a que foi colada, falta publicar.
 
 É um ficheiro solto, sem dependências; pode apagar-se quando deixar de ser
 preciso.
+
+---
+
+## v50 — Subcategoria editável em todo o lado
+
+Nos projetos HDG a subcategoria não deixava escolher nada em várias linhas. A
+causa era a procura das subcategorias fazer correspondência **exata** com o
+nome da categoria, quando os dados têm duas grafias para a mesma coisa —
+`Soft Costs` (folha Menu1) e `Soft_Costs` (business plan) — e qualquer espaço
+a mais vindo de um Excel chegava para a célula ficar morta, sem explicação.
+
+- A procura passa a ser feita sobre uma forma normalizada: ignora
+  maiúsculas, acentos, underscores e espaços repetidos.
+- Uma categoria que o plano não conheça deixa de bloquear: oferece **todas**
+  as subcategorias, em vez de uma lista vazia. É preferível opções a mais do
+  que ninguém conseguir classificar o movimento.
+- O rótulo **(fora do plano)** passa a aparecer só quando a categoria é mesmo
+  desconhecida, e não por causa de um espaço.
+
+`supabase/ver-categorias-hdg.sql` mostra o que está gravado com os valores
+entre parênteses retos e o número de caracteres, para apanhar o espaço
+escondido quando houver dúvida.

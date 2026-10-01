@@ -4,7 +4,7 @@ import { supabase } from "./supabase.js";
 import { CATEGORIAS } from "./categorias.js";
 import { fmtEUR, fmtNum, fmtInt, fmtPctSinal, fmtDataHora, fmtData as fmtDataCfg } from "./formato.js";
 import { agruparPorGrupo, GRUPOS_INFO, EMPRESAS as EMPRESAS_TODAS } from "./empresas.js";
-import { CATEGORIAS_HDG, subcategoriasHDG, subcategoriaValida } from "./categoriasHDG.js";
+import { CATEGORIAS_HDG, subcategoriasHDG, subcategoriaValida, categoriaNoPlanoHDG } from "./categoriasHDG.js";
 import { ModalQuestionar } from "./Questoes.jsx";
 
 const BANCO_COLORS = {"Millennium":"#e84393","BNI":"#0057b7","BB Americas":"#c8a500","Eurobic":"#e74c3c","Revolut":"#6772e5","CGD":"#00a859","NovoBanco":"#ff6200","Banco Invest":"#1e3a6e","BAE":"#6c3483","BCP":"#002fa7","Miami":"#0891b2","Cartao 7449":"#f59e0b","Caixa Livre":"#8b5cf6"};
@@ -24,7 +24,7 @@ function StatusBadge({ status }) {
 }
 
 // Select editável: salva imediatamente onChange, mostra estado
-function EditableCategoria({ initialValue, movId, onSave, disabled, opcoes = CATEGORIAS, extraPatch }) {
+function EditableCategoria({ initialValue, movId, onSave, disabled, opcoes = CATEGORIAS, extraPatch, noPlano }) {
   const [val, setVal] = useState(initialValue || "");
   const [status, setStatus] = useState(null);
   // Sincroniza só quando o id muda OU quando o valor inicial muda E o utilizador não está a editar
@@ -73,7 +73,9 @@ function EditableCategoria({ initialValue, movId, onSave, disabled, opcoes = CAT
         <option value="">-- sem categoria --</option>
         {/* O valor que já está gravado aparece mesmo que não pertença a esta
             lista: mudar de plano de contas não pode apagar classificações. */}
-        {val && !opcoes.includes(val) && <option value={val}>{val} (fora do plano)</option>}
+        {val && !opcoes.includes(val) && (
+          <option value={val}>{val}{noPlano && noPlano(val) ? "" : " (fora do plano)"}</option>
+        )}
         {opcoes.map(c => (
           <option key={c} value={c}>{c}</option>
         ))}
@@ -125,11 +127,6 @@ function EditableSubcategoria({ initialValue, categoria, movId, onSave, disabled
     setStatus("saved");
     setTimeout(() => setStatus(s => s === "saved" ? null : s), 1500);
   };
-
-  if (!opcoes.length && !val) {
-    return <span style={{ color: "#ddd", fontSize: 10, fontFamily: "monospace" }}
-      title={categoria ? `"${categoria}" não tem subcategorias no plano HDG` : "Escolhe primeiro a categoria"}>—</span>;
-  }
 
   return (
     <span style={{ display: "inline-flex", alignItems: "center" }}>
@@ -2404,6 +2401,7 @@ export default function ExtratosView({ EMPRESAS, extrato, caixaUnico, setCaixaUn
                             movId={m.id}
                             onSave={sbUpdate}
                             opcoes={ehHDG ? CATEGORIAS_HDG : CATEGORIAS}
+                            noPlano={ehHDG ? categoriaNoPlanoHDG : undefined}
                             extraPatch={ehHDG
                               ? (nova) => (subcategoriaValida(nova, m.subcategoria) ? {} : { subcategoria: "" })
                               : undefined}

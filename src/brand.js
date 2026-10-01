@@ -5,7 +5,7 @@
 
 // Marca a versão publicada. Serve para confirmar, no próprio ecrã, se o
 // deploy chegou — aparece ao lado do nome do utilizador na barra de cima.
-export const VERSAO = "v49";
+export const VERSAO = "v50";
 
 export const BRAND = {
   nome: "LPX Private",

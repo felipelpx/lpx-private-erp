@@ -13,6 +13,10 @@ const dir = mkdtempSync(join(process.cwd(), "node_modules", ".lpx-dom-"));
 
 const MOVS = [
   { id: "m1", conta_id: "adseq_bcp", empresa_id: "adseq", banco: "BCP", data: "2026-09-01", movimento: "TRF PRESTADOR X", valor: -12500, saldo: 40000, categoria: "Obras", detalhes: "" },
+  { id: "m3", conta_id: "adseq_bcp", empresa_id: "adseq", banco: "BCP", data: "2026-10-01", movimento: "IMPOSTO SELO ART 17.1.4", valor: -0.12, saldo: 51.99, categoria: "Financiamento", subcategoria: "", detalhes: "Outflow - Taxas e comissões" },
+  { id: "m4", conta_id: "adseq_bcp", empresa_id: "adseq", banco: "BCP", data: "2026-10-01", movimento: "COM COM ESPACO", valor: -5, saldo: 46.99, categoria: " Financiamento ", subcategoria: "", detalhes: "" },
+  { id: "m5", conta_id: "adseq_bcp", empresa_id: "adseq", banco: "BCP", data: "2026-10-01", movimento: "TAXA GESTAO", valor: -100, saldo: -53, categoria: "Soft_Costs", subcategoria: "", detalhes: "" },
+  { id: "m6", conta_id: "adseq_bcp", empresa_id: "adseq", banco: "BCP", data: "2026-10-01", movimento: "SEM PLANO", valor: -7, saldo: -60, categoria: "Categoria Esquisita", subcategoria: "", detalhes: "" },
   { id: "m2", conta_id: "adseq_bcp", empresa_id: "adseq", banco: "BCP", data: "2026-09-12", movimento: "ENTRADA SOCIO", valor: 50000, saldo: 90000, categoria: "Aportes", detalhes: "" },
 ];
 
@@ -249,6 +253,48 @@ async function abreExtrato(props) {
   const opcoes = [...host.querySelectorAll("select")].map(s => [...s.options].map(o => o.value));
   ok(opcoes.some(o => o.includes("Ticket Refeição")), "LPX mantém o seu plano de contas");
   ok(!opcoes.some(o => o.includes("Soft_Costs")), "LPX não recebe o plano HDG");
+}
+
+// ── Subcategoria editável em todas as situações do ecrã real ───────────────
+{
+  const host = await abreExtrato({
+    EMPRESAS: emp, extrato: [], caixaUnico: {}, setCaixaUnico: ()=>{},
+    currentUser: gestor, movCounts: {}, faturas: [], pagamentosExtras: [],
+    questionamentos: [], addQuestionamento: async()=>({error:null}), onVerQuestoes: ()=>{},
+  });
+  const linhas = [...host.querySelectorAll("tbody tr")];
+  const porMov = (txtMov) => linhas.find(tr => txt(tr).indexOf(txtMov) >= 0);
+
+  const subSelect = (tr) => {
+    const sels = [...tr.querySelectorAll("select")];
+    return sels.length >= 2 ? sels[1] : null;   // 0 = categoria, 1 = subcategoria
+  };
+  const opcoesDe = (sel) => sel ? [...sel.options].map(o => o.value) : [];
+
+  const casos = [
+    ["IMPOSTO SELO",     "Inflow - Obra",   "Financiamento tem as suas 5 subcategorias"],
+    ["COM COM ESPACO",   "Inflow - Obra",   "Financiamento com espaço à volta também"],
+    ["TAXA GESTAO",      "Taxa de Gestão",  "Soft_Costs (underscore) encontra as suas"],
+    ["SEM PLANO",        "IMT",             "categoria fora do plano oferece a lista toda"],
+  ];
+  for (const [mov, esperada, msg] of casos) {
+    const tr = porMov(mov);
+    const sel = tr && subSelect(tr);
+    const ops = opcoesDe(sel);
+    ok(!!sel && !sel.disabled, mov + ": a subcategoria é um campo editável");
+    ok(ops.indexOf(esperada) >= 0, msg + " (" + ops.length + " opções)");
+  }
+
+  // "(fora do plano)" não aparece só por causa de um espaço
+  const trEspaco = porMov("COM COM ESPACO");
+  const catSel = trEspaco && trEspaco.querySelector("select");
+  const marcada = [...(catSel ? catSel.options : [])].some(o => /fora do plano/.test(o.textContent));
+  ok(!marcada, "categoria com espaço a mais não é marcada como fora do plano");
+
+  const trEsquisita = porMov("SEM PLANO");
+  const catSel2 = trEsquisita && trEsquisita.querySelector("select");
+  const marcada2 = [...(catSel2 ? catSel2.options : [])].some(o => /fora do plano/.test(o.textContent));
+  ok(marcada2, "categoria genuinamente fora do plano continua assinalada");
 }
 
 // ── Separador Questões: responder e marcar como lida ───────────────────────
