@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect } from "react";
-import { useVendas, useSaldosAtuais } from "./hooks.js";
+import { useVendas, useSaldosAtuais, useRecebiveis } from "./hooks.js";
 import { CATEGORIAS } from "./categorias.js";
 import { faturaPaga, faturaAtrasada, statusFatura } from "./status.js";
 import { fmtEUR as fmtEuro } from "./formato.js";
@@ -99,6 +99,11 @@ export default function FluxoFuturo({ faturas: faturasTodas, faturasLoading, pag
   const pagamentosExtras = (pagamentosTodos || []).filter(pertence);
 
   const { vendas, loading: vendasLoading, updateVenda } = useVendas();
+  // Contas a Receber: faturas emitidas a clientes e entradas previstas. Até
+  // aqui o Fluxo Futuro não as via, e o dinheiro a entrar por esta via não
+  // aparecia na projeção de tesouraria.
+  const { recebiveis: recebiveisTodos } = useRecebiveis();
+  const recebiveis = (recebiveisTodos || []).filter(pertence);
   // Editar, marcar como pago e eliminar: admin e gestor (opção da LPX).
   const isAdmin = currentUser?.role === "admin" || currentUser?.role === "gestor";
   const stillLoading = !!(pagamentosLoading || faturasLoading || vendasLoading);
@@ -553,6 +558,35 @@ export default function FluxoFuturo({ faturas: faturasTodas, faturasLoading, pag
         }
       }
     }
+  });
+
+  // Add recebíveis (faturas emitidas a clientes e entradas previstas)
+  // Só o que ainda está por receber: o que já entrou está no extrato.
+  (recebiveis || []).forEach(r => {
+    if (empresa !== "all" && r.empresa !== empresa) return;
+    if (["Recebido", "Cancelado", "Anulada"].includes(r.status)) return;
+    const data = r.data_prevista || r.data_fatura;
+    if (!data) return;
+    const valor = Math.abs(parseFloat(r.valor) || 0);
+    if (!valor) return;
+    const ehFatura = !!(r.numero_fatura && r.data_fatura);
+    const base = {
+      desc: ehFatura
+        ? `${r.numero_fatura} — ${r.cliente || r.descricao || "cliente"}`
+        : (r.descricao || r.cliente || "Entrada prevista"),
+      valor,
+      cat: ehFatura ? "Faturação" : "Vendas",
+      origem: ehFatura ? "Fatura emitida" : "Contas a Receber",
+      natureza: ehFatura ? "real" : "previsto",
+      recebivel: r,
+    };
+    if (data < hojeISO) {
+      vencidas.entradas += valor;
+      vencidas.items.push({ ...base, tipo: "entrada", vencimento: data });
+      return;
+    }
+    const m = meses.find(m => m.key === getMesKey(data));
+    if (m) { m.entradas += valor; m.items.push({ ...base, tipo: "entrada" }); }
   });
 
   // Add pagamentos extras manuais

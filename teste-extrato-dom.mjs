@@ -100,7 +100,7 @@ async function abreExtrato(props) {
   ok(linhas.length >= 2, \`tabela do extrato desenhada (\${linhas.length} linhas)\`);
 
   const botoes = [...host.querySelectorAll("button")].filter(b => txt(b) === "?");
-  ok(botoes.length === 2, \`botão "?" em cada linha (\${botoes.length})\`);
+  ok(botoes.length === linhas.length, \`um botão "?" por linha (\${botoes.length} de \${linhas.length})\`);
 
   await act(async () => { botoes[0].dispatchEvent(new window.MouseEvent("click", { bubbles: true })); });
   const caixa = host.querySelector("textarea") || document.querySelector("textarea");
@@ -228,11 +228,13 @@ async function abreExtrato(props) {
   ok(cabec.includes("Observações"), "HDG chama Observações ao campo de texto");
   ok(!cabec.includes("Detalhes"), "HDG não mostra Detalhes");
 
-  const selects = [...host.querySelectorAll("select")];
+  // Só os seletores dentro das linhas: o filtro de categorias do topo também
+  // lista as categorias em uso e dava um falso positivo.
+  const selects = [...host.querySelectorAll("tbody tr select")];
   const opcoes = selects.map(s => [...s.options].map(o => o.value));
-  const catHDG = opcoes.find(o => o.includes("Soft_Costs"));
+  const catHDG = opcoes.find(o => o.includes("Soft_Costs") && o.includes("Obras"));
   ok(!!catHDG, "a categoria oferece o plano HDG (Soft_Costs)");
-  ok(catHDG && catHDG.includes("Sócios"), "inclui as categorias em uso fora do Menu1 (Sócios)");
+  if (!catHDG || !catHDG.includes("Sócios")) console.log("    DEBUG catHDG:", JSON.stringify((catHDG||[]).slice(0,8)));\n  ok(catHDG && catHDG.includes("Sócios"), "inclui as categorias em uso fora do Menu1 (Sócios)");
   ok(catHDG && !catHDG.includes("Ticket Refeição"), "não oferece o plano da LPX");
 }
 
@@ -250,9 +252,12 @@ async function abreExtrato(props) {
   const cabec = [...host.querySelectorAll("thead th")].map(txt);
   ok(!cabec.includes("Subcategoria"), "LPX continua sem coluna Subcategoria");
   ok(cabec.includes("Detalhes"), "LPX continua com Detalhes");
-  const opcoes = [...host.querySelectorAll("select")].map(s => [...s.options].map(o => o.value));
+  const opcoes = [...host.querySelectorAll("tbody tr select")].map(s => [...s.options].map(o => o.value));
   ok(opcoes.some(o => o.includes("Ticket Refeição")), "LPX mantém o seu plano de contas");
-  ok(!opcoes.some(o => o.includes("Soft_Costs")), "LPX não recebe o plano HDG");
+  // "Soft_Costs" aparece como valor preservado da linha que o tem gravado
+  // (é o comportamento certo), por isso a prova é uma categoria HDG que
+  // nenhuma linha usa: essa não pode ser OFERECIDA.
+  ok(!opcoes.some(o => o.includes("Aquisição_de_Terreno")), "LPX não recebe o plano HDG");
 }
 
 // ── Subcategoria editável em todas as situações do ecrã real ───────────────

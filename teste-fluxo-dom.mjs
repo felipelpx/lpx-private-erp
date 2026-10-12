@@ -26,6 +26,9 @@ const VAZIO = estavel({ vendas: [], loading: false, updateVenda: async()=>({}) }
 const SALDOS = estavel({ saldos: estavel({ adseq_bcp: 100000 }), reload: ()=>{}, loading: false });
 export const useVendas = () => VAZIO;
 export const useSaldosAtuais = () => SALDOS;
+const RECEB = Object.freeze({ recebiveis: [], loading: false, addRecebivel: async()=>({}),
+  updateRecebivel: async()=>({}), deleteRecebivel: async()=>({}) });
+export const useRecebiveis = () => RECEB;
 `);
 
 writeFileSync(join(dir, "entrada.jsx"), `

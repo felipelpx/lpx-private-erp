@@ -588,3 +588,59 @@ export function useQuestionamentos() {
     addQuestionamento, updateQuestionamento, deleteQuestionamento, marcarLida,
   }
 }
+
+// ─── APURAMENTO DE IVA ───────────────────────────────────────────────────────
+// Lê a view `vw_iva_documentos` (migração v14), que junta num só sítio as
+// faturas de fornecedores e as faturas emitidas a clientes, já com o mês e o
+// trimestre da data de EMISSÃO calculados. A view herda o RLS das tabelas de
+// origem, por isso um investidor continua a ver só o que já via.
+//
+// A subscrição é às duas tabelas de base, não à view: é delas que vêm os
+// eventos de realtime, e é por isso que o ecrã se atualiza sozinho quando uma
+// fatura entra, é corrigida ou apagada — venha do ERP, de um script ou de
+// outro utilizador.
+export function useIvaDocumentos() {
+  const [data, setData] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState(null)
+
+  const load = useCallback(async () => {
+    const { data: r, error: e } = await supabase.from('vw_iva_documentos')
+      .select('*').order('data_fatura', { ascending: false })
+    if (e) { console.error('useIvaDocumentos:', e); setError(e.message || String(e)) }
+    else { setError(null); setData(r || []) }
+    setLoading(false)
+  }, [])
+
+  useEffect(() => {
+    const timeout = setTimeout(() => setLoading(false), 8000)
+    load().finally(() => clearTimeout(timeout))
+    const sufixo = Math.random().toString(36).slice(2, 10)
+    const ch = supabase.channel(`realtime-iva-${sufixo}`)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'faturas' }, load)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'recebiveis' }, load)
+      .subscribe()
+    return () => { supabase.removeChannel(ch); clearTimeout(timeout) }
+  }, [load])
+
+  return { documentos: data, loading, error, reload: load }
+}
+
+export function useIvaPagamentos() {
+  const { data, loading, error, reload } = useRealtimeTable('iva_pagamentos',
+    () => supabase.from('iva_pagamentos').select('*'))
+  const marcarPago = async (p) => {
+    const id = `iva_${p.empresa}_${p.ano}_${p.trimestre}`
+    const { data, error } = await supabase.from('iva_pagamentos')
+      .upsert([{ ...p, id }], { onConflict: 'empresa,ano,trimestre' }).select()
+    if (error) console.error('marcarPago:', error)
+    return { data, error }
+  }
+  const anularPagamento = async (empresa, ano, trimestre) => {
+    const { error } = await supabase.from('iva_pagamentos').delete()
+      .eq('empresa', empresa).eq('ano', ano).eq('trimestre', trimestre)
+    if (error) console.error('anularPagamento:', error)
+    return { error }
+  }
+  return { pagamentos: data, loading, error, reload, marcarPago, anularPagamento }
+}

@@ -333,7 +333,12 @@ export default function ImportarFatura({ onSave }) {
       fornecedor_nome: fornNome, fornecedor_nif: fornNif,
       fornecedor_email: fornEmail, fornecedor_iban: fornIban,
       fornecedor_morada: fornMorada,
-      valor_base: 0, valor_iva: 0,
+      // Uma fatura parcelada continua a ser UMA fatura para o IVA: o valor
+      // base e o IVA ficam na primeira parcela, que é a que representa o
+      // documento. Repeti-los em cada parcela multiplicaria o IVA pelo número
+      // de prestações.
+      valor_base: i === 0 ? (parseFloat(valorBase) || 0) : 0,
+      valor_iva:  i === 0 ? (parseFloat(valorIva)  || 0) : 0,
       valor_total: Math.round((parseFloat(p.valor) || 0) * 100) / 100,
       descricao_servico: descServico
         ? `${descServico} — Parcela ${i+1}/${n}${p.obs ? ` · ${p.obs}` : ""}`

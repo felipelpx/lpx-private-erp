@@ -86,6 +86,18 @@ export const useFracoes = () => ({ fracoes: FRACOES, loading: false, upsertFraca
 export const useVendas = () => ({ vendas: [], loading: false, addVenda: async()=>({}), updateVenda: async()=>({}), deleteVenda: async()=>({}) });
 export const useRecebiveis = () => ({ recebiveis: [], loading: false, addRecebivel: async()=>({}), updateRecebivel: async()=>({}), deleteRecebivel: async()=>({}) });
 export const useFotos = () => ({ fotos: [], loading: false });
+const IVA_DOCS = [
+  { tipo:"fornecedor", id:"f1", empresa:"adseq", documento:"FT 2026/1", entidade:"Construtora",
+    data_fatura:"2026-09-28", valor_base:1000, valor_iva:230, taxa_iva:23, iva_estimado:false, estado:"Pendente em dia" },
+  { tipo:"cliente", id:"r1", empresa:"adseq", documento:"FR 2026/1", entidade:"Cliente A",
+    data_fatura:"2026-09-20", valor_base:3000, valor_iva:690, taxa_iva:23, iva_estimado:false, estado:"Previsto" },
+  { tipo:"fornecedor", id:"f2", empresa:"adseq", documento:"FT 2026/9", entidade:"Antiga",
+    data_fatura:"2026-05-10", valor_base:813.01, valor_iva:186.99, taxa_iva:23, iva_estimado:true, estado:"Pago" },
+];
+export const useIvaDocumentos = () => ({ documentos: IVA_DOCS, loading: false, error: null, reload: ()=>{} });
+export const useIvaPagamentos = () => ({ pagamentos: [], loading: false, error: null, reload: ()=>{},
+  marcarPago: async()=>({error:null}), anularPagamento: async()=>({error:null}) });
+export const IVA_DOCS_TESTE = IVA_DOCS;
 export const useQuestionamentos = () => ({ questionamentos: QUESTOES, loading: false, error: null, reload: ()=>{},
   addQuestionamento: async()=>({ error: null }), updateQuestionamento: async()=>({ error: null }),
   deleteQuestionamento: async()=>({ error: null }), marcarLida: async()=>{} });
@@ -98,6 +110,7 @@ writeFileSync(join(dir, "entrada.jsx"), `
 import React from "react";
 import { renderToString } from "react-dom/server";
 import IRView, { agregarSaldo } from "SRC/IRView.jsx";
+import IVAView from "SRC/IVAView.jsx";
 import ExtratosView from "SRC/ExtratosView.jsx";
 import Questoes, { ModalQuestionar, porLer } from "SRC/Questoes.jsx";
 import ContasReceber from "SRC/ContasReceber.jsx";
@@ -131,6 +144,7 @@ const casos = [
   ["Contas a Receber",      <ContasReceber currentUser={gestor} empresasVisiveis={emp} />],
   ["Comercial",             <ComercialView currentUser={gestor} onAddFatura={async()=>({})} empresasVisiveis={emp} />],
   ["Real x Orçado",         <RealOrcado empresasAtivas={emp} />],
+  ["IVA (gestor)",          <IVAView currentUser={gestor} empresasVisiveis={emp} />],
 ];
 
 let mau = 0;

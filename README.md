@@ -454,3 +454,82 @@ a mais vindo de um Excel chegava para a célula ficar morta, sem explicação.
 `supabase/ver-categorias-hdg.sql` mostra o que está gravado com os valores
 entre parênteses retos e o número de caracteres, para apanhar o espaço
 escondido quando houver dúvida.
+
+---
+
+## v51 — Apuramento trimestral de IVA
+
+Nova aba **IVA**, de leitura: não tem lançamentos próprios nem valores
+escritos à mão. Tudo vem das faturas que já estão no ERP, e atualiza-se
+sozinho — por realtime — quando uma fatura entra, é corrigida ou apagada,
+venha do ERP, de uma importação ou de um script.
+
+### O que foi preciso mudar antes
+
+Duas coisas faltavam, e sem elas o módulo não tinha de onde tirar os números:
+
+1. **O ERP deitava fora o IVA que já lia.** O leitor de faturas por IA extrai
+   o valor base, o IVA, a taxa e a data de emissão, mas o mapeamento em
+   `App.jsx` não os passava para a base de dados. Passam agora. Numa fatura
+   parcelada, o valor base e o IVA ficam na primeira parcela: fiscalmente é um
+   documento só, e repeti-los multiplicaria o IVA pelo número de prestações.
+2. **Não havia faturas emitidas a clientes.** `vendas` são escrituras de
+   frações e `recebiveis` eram previsões de entrada. Um recebível passa a
+   poder levar **nº de fatura, data de emissão, NIF, base, taxa e IVA** — e é
+   só com esses campos preenchidos que conta como documento fiscal. As
+   previsões continuam a ser previsões.
+
+Os recebíveis passaram também a entrar no **Fluxo Futuro** como entradas
+previstas, o que até aqui não acontecia.
+
+### Regra de cálculo
+
+- **IVA a abater** — faturas de fornecedores (Contas a Pagar).
+- **IVA a pagar** — faturas emitidas a clientes (Contas a Receber).
+- **Saldo** = a pagar − a abater. Positivo entrega-se ao Estado; negativo é
+  crédito a favor da empresa.
+
+O que conta é a **data de emissão**, nunca a do pagamento: uma fatura emitida
+a 28/09 e paga a 15/10 é IVA de setembro, do 3T. Marcar uma fatura como paga
+não altera coisa nenhuma no apuramento — há um teste só para isso.
+
+O IVA é o que está na fatura. Só quando falta o montante, mas há base e taxa,
+é calculado — e fica assinalado como **calculado**, para se distinguir o que é
+documento do que é dedução nossa.
+
+Datas-limite: dia 25 do segundo mês após o fim do trimestre (1T → 25 de maio,
+2T → 25 de agosto, 3T → 25 de novembro, 4T → 25 de fevereiro do ano seguinte).
+A regra está em `REGRA_DATA_LIMITE`, em `src/iva.js`, e em mais lado nenhum.
+
+### Histórico
+
+As faturas que já estavam no ERP não tinham IVA registado. A migração deduz
+`base = total ÷ 1,23` e marca-as como calculadas. **Onde a taxa real não for
+23% — isento, 6%, 13% — o valor está errado**; é para isso que serve a marca,
+e o ecrã mostra um aviso com a contagem. Corrigir na fatura limpa a marca, e
+correr a migração de novo não estraga o que já foi corrigido.
+
+### Ficheiros
+
+| Ficheiro | O que é |
+|---|---|
+| `supabase/migracao-v14-iva.sql` | colunas de IVA, backfill a 23%, tabela `iva_pagamentos`, view `vw_iva_documentos` |
+| `src/iva.js` | trimestres, datas-limite, estados e agregação — sem React, testável |
+| `src/IVAView.jsx` | a aba |
+| `src/ivaExcel.js` | exportação (resumo trimestral, detalhe mensal, detalhe por fatura) |
+
+O cálculo está garantido na base de dados: a view `vw_iva_documentos` junta os
+dois lados já com mês e trimestre, e herda o RLS das tabelas de origem — um
+investidor continua a ver só o que já via.
+
+### Testes
+
+```
+node teste-iva.mjs       # 70 asserções: trimestres, datas-limite, agregação
+node teste-iva-dom.mjs   # 37 asserções: o ecrã em DOM real
+```
+
+Os dez pontos de validação do enunciado estão cobertos, incluindo o exemplo
+(fornecedor com 230 € e cliente com 690 €, ambos de setembro → 460 € a pagar
+no 3T) e a prova de que o estado de pagamento não mexe no resultado. A própria
+migração foi validada em Postgres contra os mesmos dez pontos.

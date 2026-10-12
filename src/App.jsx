@@ -14,6 +14,7 @@ import FotosView from "./FotosView.jsx";
 import IRView from "./IRView.jsx";
 import ContasReceber from "./ContasReceber.jsx";
 import Questoes, { porLer } from "./Questoes.jsx";
+import IVAView from "./IVAView.jsx";
 import { STATUS_FATURA, STATUS_STYLES, statusFatura, faturaPaga, faturaAtrasada } from "./status.js";
 import { temFunding, pctFunding, valorFunding, ERRO_SEM_COLUNAS, faltamColunas } from "./funding.js";
 
@@ -1147,6 +1148,15 @@ function ImportarView({faturas, setFaturas, caixaUnico, setCaixaUnico, setTab, a
               obs: fat.descricao_servico || fat.notas || "",
               anexo_nome: fat.anexo_nome || "",
               anexo_b64: fat.anexo_b64 || "",
+              // Dados de IVA: o leitor por IA já os extraía da fatura, mas eram
+              // deitados fora aqui. São eles que alimentam o apuramento.
+              // A data da fatura é a de EMISSÃO — não confundir com vencimento.
+              data_fatura: fat.data_fatura || fat.data_vencimento || null,
+              valor_base: fat.valor_base != null ? parseFloat(fat.valor_base) || 0 : null,
+              valor_iva:  fat.valor_iva  != null ? parseFloat(fat.valor_iva)  || 0 : null,
+              taxa_iva:   fat.taxa_iva   !== "" && fat.taxa_iva != null ? parseFloat(fat.taxa_iva) || 0 : null,
+              iva_estimado: false,            // veio da fatura, não foi deduzido
+              fornecedor_nif: fat.fornecedor_nif || null,
             }));
             const { data, error } = await (addFaturas
               ? addFaturas(rows)
@@ -1184,6 +1194,7 @@ const TABS_CONFIG = [
   {id:"fluxo",     label:"Fluxo Futuro",       roles:["admin","gestor","viewer"]},
   {id:"receber",   label:"Contas a Receber",  roles:["admin","gestor","viewer","investidor"]},
   {id:"pagar",     label:"Contas a Pagar",     roles:["admin","gestor","viewer","investidor"]},
+  {id:"iva",       label:"IVA",               roles:["admin","gestor","viewer"]},
   {id:"pagamentos",label:"Pagamentos",         roles:["admin","gestor","viewer"]},
   {id:"questoes",  label:"Questões",           roles:["admin","gestor","investidor"]},
   {id:"importar",  label:"Importar",           roles:["admin","gestor"]},
@@ -1469,6 +1480,7 @@ export default function App() {
           {tab==="receber"   && <ContasReceber currentUser={currentUser} empresasVisiveis={empresasVisiveis}/>}
           {tab==="pagar"     && <ContasPagar canEdit={canEdit && !isInvestidor} EMPRESAS={empresasVisiveis} faturas={faturas} setFaturas={handleSetFaturas} addFatura={addFatura} updateFatura={updateFatura} deleteFatura={deleteFatura}/>}
           {tab==="pagamentos"&& <PagamentosView faturas={faturas.filter(f=>empresasVisiveis.some(e=>e.id===f.empresa)||!f.empresa)} pagamentosExtras={pagamentosExtras.filter(p=>empresasVisiveis.some(e=>e.id===p.empresa)||!p.empresa)} currentUser={currentUser} profiles={profiles}/>}
+          {tab==="iva"       && <IVAView currentUser={currentUser} empresasVisiveis={empresasVisiveis}/>}
           {tab==="questoes"  && <Questoes currentUser={currentUser} questionamentos={questionamentos} loading={questoesLoading} error={questoesErro} updateQuestionamento={updateQuestionamento} deleteQuestionamento={deleteQuestionamento} marcarLida={marcarLida} empresasVisiveis={empresasVisiveis}/>}
           {tab==="users"     && <Utilizadores currentUser={currentUser}/>}
           {tab==="importar"  && <ImportarView

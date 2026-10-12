@@ -16,7 +16,16 @@ const ESTILO = {
   "Cancelado": { bg: "#f5f5f5", cor: "#999",    borda: "#e0e0e0" },
 };
 
-const VAZIO = { descricao: "", cliente: "", fracao: "", valor: "", data_prevista: "", status: "Previsto", obs: "" };
+const VAZIO = { descricao: "", cliente: "", fracao: "", valor: "", data_prevista: "",
+                status: "Previsto", obs: "",
+                // Fatura emitida: preenchidos, a linha passa a ser documento
+                // fiscal e entra no apuramento de IVA (aba IVA).
+                numero_fatura: "", data_fatura: "", nif: "",
+                valor_base: "", taxa_iva: "", valor_iva: "" };
+
+// Um recebível é uma previsão de entrada. Quando leva número e data de fatura,
+// é também a fatura emitida ao cliente — e é só essa que conta para o IVA.
+export const ehFaturaEmitida = (r) => !!(r && r.numero_fatura && r.data_fatura);
 
 export default function ContasReceber({ currentUser, empresasVisiveis }) {
   const empresas = Array.isArray(empresasVisiveis) ? empresasVisiveis : EMPRESAS;
@@ -69,6 +78,14 @@ export default function ContasReceber({ currentUser, empresasVisiveis }) {
   const guardar = async () => {
     if (!form.empresa) { alert("Escolhe o projeto."); return; }
     if (!form.data_prevista) { alert("Indica a data prevista."); return; }
+    if (form.numero_fatura && !form.data_fatura) {
+      alert("Uma fatura emitida precisa da data de emissão — é ela que define o trimestre de IVA.");
+      return;
+    }
+    if (form.data_fatura && !form.numero_fatura) {
+      alert("Indica o número da fatura, ou apaga a data de emissão se isto for só uma previsão.");
+      return;
+    }
     const linha = {
       empresa: form.empresa,
       projeto: empresas.find(e => e.id === form.empresa)?.nome || "",
@@ -79,6 +96,13 @@ export default function ContasReceber({ currentUser, empresasVisiveis }) {
       data_prevista: form.data_prevista,
       status: form.status || "Previsto",
       obs: form.obs || "",
+      numero_fatura: form.numero_fatura || null,
+      data_fatura: form.data_fatura || null,
+      nif: form.nif || null,
+      valor_base: form.valor_base !== "" ? parseNumero(form.valor_base) : null,
+      taxa_iva:   form.taxa_iva   !== "" ? parseNumero(form.taxa_iva)   : null,
+      valor_iva:  form.valor_iva  !== "" ? parseNumero(form.valor_iva)  : null,
+      iva_estimado: false,
     };
     const res = form.id
       ? await updateRecebivel(form.id, linha)
@@ -172,7 +196,16 @@ export default function ContasReceber({ currentUser, empresasVisiveis }) {
                 return (
                   <tr key={r.id} style={{ borderBottom: "1px solid #fafafa" }}>
                     <td style={{ padding: "10px 12px", color: "#888", fontSize: 11 }}>{nomeEmp(r.empresa)}</td>
-                    <td style={{ padding: "10px 12px", color: "#1a1a2e" }}>{r.descricao || "—"}</td>
+                    <td style={{ padding: "10px 12px", color: "#1a1a2e" }}>
+                      {ehFaturaEmitida(r) && (
+                        <span title={`Fatura ${r.numero_fatura}, emitida a ${fmtData(r.data_fatura)} — entra no apuramento de IVA`}
+                          style={{ background: "#eef2ff", color: "#4338ca", fontSize: 9, fontFamily: "monospace",
+                                   fontWeight: 700, padding: "1px 6px", borderRadius: 3, marginRight: 6 }}>
+                          {r.numero_fatura}
+                        </span>
+                      )}
+                      {r.descricao || "—"}
+                    </td>
                     <td style={{ padding: "10px 12px", textAlign: "center" }}>
                       <span title={r._origem === "fluxo" ? "Entrada prevista no Fluxo Futuro" : "Registada na carteira de Contas a Receber"}
                         style={{ background: r._origem === "fluxo" ? "#fef3c7" : "#eef1f5",
@@ -250,6 +283,47 @@ export default function ContasReceber({ currentUser, empresasVisiveis }) {
               <select value={form.status || "Previsto"} onChange={e => setForm(f => ({ ...f, status: e.target.value }))} style={inputEstilo}>
                 {STATUS.map(s => <option key={s}>{s}</option>)}
               </select>
+            </div>
+
+            {/* ── Fatura emitida ─────────────────────────────────────────────
+                Opcional: sem isto a linha é só uma previsão de entrada. Com o
+                número e a data de emissão preenchidos passa a ser documento
+                fiscal e entra no apuramento de IVA, no trimestre da EMISSÃO —
+                independentemente de quando o dinheiro entrar. */}
+            <div style={{ borderTop: "1px solid #f0f0f0", paddingTop: 12, marginTop: 4 }}>
+              <div style={{ fontSize: 12, fontWeight: 700, color: "#1a1a2e" }}>Fatura emitida ao cliente</div>
+              <div style={{ fontSize: 10.5, color: "#aaa", marginTop: 3, lineHeight: 1.5 }}>
+                Preenche só se já emitiste fatura. O IVA conta no trimestre da data de
+                emissão, mesmo que o recebimento seja noutro.
+              </div>
+            </div>
+
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+              {[["N.º da fatura", "numero_fatura", "text"], ["Data de emissão", "data_fatura", "date"],
+                ["NIF do cliente", "nif", "text"], ["Valor sem IVA (€)", "valor_base", "text"],
+                ["Taxa de IVA (%)", "taxa_iva", "text"], ["IVA (€)", "valor_iva", "text"]].map(([rot, campo, tipo]) => (
+                <div key={campo}>
+                  <div style={{ fontSize: 9, color: "#aaa", textTransform: "uppercase", fontFamily: "monospace", marginBottom: 4 }}>{rot}</div>
+                  <input type={tipo} value={form[campo] ?? ""}
+                    onChange={e => {
+                      const v = e.target.value;
+                      setForm(f => {
+                        const n = { ...f, [campo]: v };
+                        // Base e taxa preenchidas calculam o IVA, desde que
+                        // ninguém o tenha escrito à mão: o que vem na fatura
+                        // manda sempre sobre o que nós deduzimos.
+                        if ((campo === "valor_base" || campo === "taxa_iva") && !f._ivaManual) {
+                          const b = parseNumero(campo === "valor_base" ? v : f.valor_base);
+                          const t = parseNumero(campo === "taxa_iva" ? v : f.taxa_iva);
+                          if (b && t) n.valor_iva = String(Math.round(b * t) / 100);
+                        }
+                        if (campo === "valor_iva") n._ivaManual = v !== "";
+                        return n;
+                      });
+                    }}
+                    style={inputEstilo} />
+                </div>
+              ))}
             </div>
 
             <div style={{ display: "flex", gap: 8, marginTop: 6, justifyContent: "flex-end" }}>
