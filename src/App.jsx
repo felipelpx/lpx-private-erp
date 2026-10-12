@@ -17,6 +17,7 @@ import Questoes, { porLer } from "./Questoes.jsx";
 import IVAView from "./IVAView.jsx";
 import { STATUS_FATURA, STATUS_STYLES, statusFatura, faturaPaga, faturaAtrasada } from "./status.js";
 import { temFunding, pctFunding, valorFunding, ERRO_SEM_COLUNAS, faltamColunas } from "./funding.js";
+import { TAXAS_IVA, decomporPorTaxa } from "./iva.js";
 
 // Filtros do Contas a Pagar: "Pendente atrasado" e "Pendente em dia" juntam-se
 // num só botão "Pendente". Cada linha continua a mostrar se está em atraso.
@@ -396,7 +397,7 @@ function ContasPagar({canEdit, faturas: faturasTodas, setFaturas, addFatura, upd
     const blob=new Blob(["﻿"+csv],{type:"text/csv;charset=utf-8"});
     const a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download="mapa_pagamentos.csv";a.click();
   };
-  const [form,setForm]=useState({empresa:"",projeto:"",fatura:"",fornecedor:"",categoria:"",tipo_projeto:"",valor:"",vencimento:"",previsao_pagamento:"",status:"Pendente em dia",obs:"",anexo_nome:"",anexo_b64:""});
+  const [form,setForm]=useState({empresa:"",projeto:"",fatura:"",fornecedor:"",categoria:"",tipo_projeto:"",valor:"",vencimento:"",previsao_pagamento:"",status:"Pendente em dia",obs:"",anexo_nome:"",anexo_b64:"",data_fatura:"",taxa_iva:23,iva_dedutivel:true});
 
   const hoje=new Date().toISOString().split("T")[0];
   const filtered=faturas.filter(f=>
@@ -422,11 +423,38 @@ function ContasPagar({canEdit, faturas: faturasTodas, setFaturas, addFatura, upd
     paga: filtered.filter(f=>faturaPaga(f)).reduce((s,f)=>s+(f.valor||0),0),
   };
 
-  const reset=()=>{setForm({empresa:"",projeto:"",fatura:"",fornecedor:"",categoria:"",tipo_projeto:"",valor:"",vencimento:"",previsao_pagamento:"",status:"Pendente em dia",obs:"",anexo_nome:"",anexo_b64:""});setEditId(null);};
+  const reset=()=>{setForm({empresa:"",projeto:"",fatura:"",fornecedor:"",categoria:"",tipo_projeto:"",valor:"",vencimento:"",previsao_pagamento:"",status:"Pendente em dia",obs:"",anexo_nome:"",anexo_b64:"",data_fatura:"",taxa_iva:23,iva_dedutivel:true});setEditId(null);};
   const save = async () => {
-    const fat = { ...form, id: editId || "f" + Date.now(), valor: parseFloat(form.valor) || 0 };
+    const total = parseFloat(form.valor) || 0;
+    // O IVA sai do total e da taxa escolhida — é a mesma conta que a aba IVA
+    // faz, para que uma fatura lançada à mão e uma importada deem o mesmo.
+    const deduz = form.iva_dedutivel !== false;
+    const { base, iva } = decomporPorTaxa(total, deduz ? form.taxa_iva : 0);
+    const fat = {
+      ...form, id: editId || "f" + Date.now(), valor: total,
+      data_fatura: form.data_fatura || form.vencimento || null,
+      taxa_iva: deduz ? (Number(form.taxa_iva) || 0) : null,
+      valor_base: base, valor_iva: deduz ? iva : 0,
+      iva_dedutivel: deduz, iva_estimado: false,
+    };
+    // Se a migração do IVA ainda não foi corrida, a base de dados não conhece
+    // estas colunas. Em vez de a fatura se perder, grava-se sem elas e avisa-se.
+    const semColunasIva = (err) =>
+      /iva_dedutivel|valor_base|valor_iva|taxa_iva|data_fatura|iva_estimado/.test(
+        `${err?.message || ""} ${err?.details || ""} ${err?.hint || ""}`);
+    const semIva = () => {
+      const { data_fatura, taxa_iva, valor_base, valor_iva, iva_dedutivel, iva_estimado, ...resto } = fat;
+      return resto;
+    };
+    const AVISO_IVA = "A fatura foi guardada, mas sem os dados de IVA: faltam as colunas na base de dados."
+      + "\n\nCorre no Supabase os ficheiros iva-1 a iva-8 e volta a gravar esta fatura.";
+
     if (editId) {
-      const res = await updateFatura?.(editId, fat);
+      let res = await updateFatura?.(editId, fat);
+      if (res?.error && semColunasIva(res.error)) {
+        res = await updateFatura?.(editId, semIva());
+        if (!res?.error) alert(AVISO_IVA);
+      }
       if (res?.error) {
         alert("Erro ao guardar:\n\n" + (res.error.message || res.error));
         return;
@@ -436,7 +464,11 @@ function ContasPagar({canEdit, faturas: faturasTodas, setFaturas, addFatura, upd
         return;
       }
     } else {
-      const res = await addFatura?.(fat);
+      let res = await addFatura?.(fat);
+      if (res?.error && semColunasIva(res.error)) {
+        res = await addFatura?.(semIva());
+        if (!res?.error) alert(AVISO_IVA);
+      }
       if (res?.error) {
         alert("Erro ao criar fatura:\n\n" + (res.error.message || res.error));
         return;
@@ -570,6 +602,50 @@ function ContasPagar({canEdit, faturas: faturasTodas, setFaturas, addFatura, upd
               <div style={{display:"flex",flexDirection:"column",gap:4}}><label style={{fontSize:10,color:"#aaa",fontFamily:"monospace",textTransform:"uppercase"}}>Vencimento</label><input type="date" value={form.vencimento||""} onChange={e=>setForm(f=>({...f,vencimento:e.target.value}))} style={{background:"#f8f8f8",border:"1px solid #e8e8e8",borderRadius:8,padding:"9px 12px",fontSize:13,outline:"none"}}/></div>
               <div style={{display:"flex",flexDirection:"column",gap:4}}><label style={{fontSize:10,color:"#aaa",fontFamily:"monospace",textTransform:"uppercase"}}>Previsão de pagamento</label><input type="date" value={form.previsao_pagamento||""} onChange={e=>setForm(f=>({...f,previsao_pagamento:e.target.value}))} title="Quando tencionamos pagar — é esta data que conta no Fluxo Futuro" style={{background:"#f8f8f8",border:"1px solid #e8e8e8",borderRadius:8,padding:"9px 12px",fontSize:13,outline:"none"}}/></div>
               <div style={{display:"flex",flexDirection:"column",gap:4}}><label style={{fontSize:10,color:"#aaa",fontFamily:"monospace",textTransform:"uppercase"}}>Status</label><select value={(form.status||"").startsWith("Pendente")||!form.status?"Pendente em dia":form.status} onChange={e=>setForm(f=>({...f,status:e.target.value}))} title="O atraso é calculado sozinho a partir da data" style={{background:"#f8f8f8",border:"1px solid #e8e8e8",borderRadius:8,padding:"9px 12px",fontSize:13,outline:"none"}}>{STATUS_FILTRO.map(o=><option key={o} value={o==="Pendente"?"Pendente em dia":o}>{o}</option>)}</select></div>
+              <div style={{display:"flex",flexDirection:"column",gap:4}}><label style={{fontSize:10,color:"#aaa",fontFamily:"monospace",textTransform:"uppercase"}}>Data da fatura (emissão)</label><input type="date" value={form.data_fatura||""} onChange={e=>setForm(f=>({...f,data_fatura:e.target.value}))} title="A data de EMISSÃO — é esta que manda no apuramento do IVA, não o vencimento nem o pagamento" style={{background:"#f8f8f8",border:"1px solid #e8e8e8",borderRadius:8,padding:"9px 12px",fontSize:13,outline:"none"}}/></div>
+
+              {/* ── IVA ─────────────────────────────────────────────────────── */}
+              <div style={{gridColumn:"1/-1",border:"1px solid #f0f0f0",borderRadius:10,padding:"14px 16px",display:"flex",flexDirection:"column",gap:10}}>
+                <label style={{display:"flex",alignItems:"center",gap:9,cursor:"pointer",userSelect:"none"}}>
+                  <input type="checkbox" checked={form.iva_dedutivel!==false}
+                    onChange={e=>setForm(f=>({...f,iva_dedutivel:e.target.checked}))}
+                    style={{width:16,height:16,cursor:"pointer",accentColor:"#1a1a2e"}}/>
+                  <span style={{fontSize:13,fontWeight:600,color:"#1a1a2e"}}>Este pagamento deduz IVA</span>
+                </label>
+                {form.iva_dedutivel!==false ? (
+                  <>
+                    <div style={{display:"flex",gap:6}}>
+                      {TAXAS_IVA.map(t=>{
+                        const sel = Number(form.taxa_iva)===t.taxa;
+                        return (
+                          <button key={t.taxa} type="button" title={t.nota}
+                            onClick={()=>setForm(f=>({...f,taxa_iva:t.taxa}))}
+                            style={{flex:1,background:sel?"#1a1a2e":"#f8f8f8",color:sel?"#fff":"#555",
+                                    border:"1px solid "+(sel?"#1a1a2e":"#e8e8e8"),borderRadius:8,
+                                    padding:"8px 4px",cursor:"pointer",fontWeight:700,fontSize:13}}>
+                            {t.rotulo}
+                            <div style={{fontSize:9,fontWeight:400,marginTop:2,color:sel?"#b9bfca":"#aaa"}}>{t.nota}</div>
+                          </button>
+                        );
+                      })}
+                    </div>
+                    {(parseFloat(form.valor)>0) && (()=>{
+                      const d = decomporPorTaxa(parseFloat(form.valor), form.taxa_iva);
+                      return (
+                        <div style={{fontSize:11,color:"#888",fontFamily:"monospace"}}>
+                          De {fmtEUR(parseFloat(form.valor))}: base {fmtEUR(d.base)} · IVA <strong style={{color:"#4a6fa5"}}>{fmtEUR(d.iva)}</strong>
+                        </div>
+                      );
+                    })()}
+                  </>
+                ) : (
+                  <div style={{fontSize:11,color:"#999",lineHeight:1.5,marginLeft:25}}>
+                    Fica no Contas a Pagar, mas fora do apuramento do IVA — impostos e taxas da AT,
+                    seguros, portagens, capital de empréstimos.
+                  </div>
+                )}
+              </div>
+
               <div style={{gridColumn:"1/-1",display:"flex",flexDirection:"column",gap:4}}>
                 <label style={{fontSize:10,color:"#aaa",fontFamily:"monospace",textTransform:"uppercase"}}>Observações</label>
                 <textarea value={form.obs} onChange={e=>setForm(f=>({...f,obs:e.target.value}))} rows={3} style={{background:"#f8f8f8",border:"1px solid #e8e8e8",borderRadius:8,padding:"9px 12px",fontSize:13,outline:"none",resize:"vertical",fontFamily:"inherit",width:"100%",boxSizing:"border-box"}}/>
@@ -1156,12 +1232,25 @@ function ImportarView({faturas, setFaturas, caixaUnico, setCaixaUnico, setTab, a
               valor_iva:  fat.valor_iva  != null ? parseFloat(fat.valor_iva)  || 0 : null,
               taxa_iva:   fat.taxa_iva   !== "" && fat.taxa_iva != null ? parseFloat(fat.taxa_iva) || 0 : null,
               iva_estimado: false,            // veio da fatura, não foi deduzido
+              // Quem lançou a fatura disse se o pagamento deduz IVA ou não.
+              iva_dedutivel: fat.iva_dedutivel !== false,
               fornecedor_nif: fat.fornecedor_nif || null,
             }));
-            const { data, error } = await (addFaturas
+            let { data, error } = await (addFaturas
               ? addFaturas(rows)
               : Promise.resolve({ data: null, error: new Error("addFaturas não disponível") })
             );
+            // Migração do IVA ainda por correr: grava sem esses campos em vez
+            // de perder a fatura, e diz-se porquê.
+            if (error && /iva_dedutivel|valor_base|valor_iva|taxa_iva|data_fatura|iva_estimado|fornecedor_nif/
+                  .test(`${error.message || ""} ${error.details || ""} ${error.hint || ""}`)) {
+              const simples = rows.map(({ data_fatura, valor_base, valor_iva, taxa_iva,
+                                          iva_estimado, iva_dedutivel, fornecedor_nif, ...r }) => r);
+              ({ data, error } = await addFaturas(simples));
+              if (!error) alert(
+                "A fatura foi guardada, mas sem os dados de IVA: faltam as colunas na base de dados."
+                + "\n\nCorre no Supabase os ficheiros iva-1 a iva-8.");
+            }
             if (error) {
               const msg = `${error.message || 'insert falhou'}${error.details ? ' · ' + error.details : ''}${error.hint ? ' · ' + error.hint : ''}${error.code ? ' ['+error.code+']' : ''}`;
               return { ok: false, inserted: 0, error: msg };

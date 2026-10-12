@@ -1,5 +1,5 @@
--- ═══════════════════════════════════════════════════════════════════════════
--- LPX PRIVATE — ERP · Migração v14
+-- ----------------------------------------------------------
+-- LPX PRIVATE — ERP - Migração v14
 --   Apuramento trimestral de IVA
 --
 --   O ERP já lia o valor base, o IVA e a taxa de cada fatura (o leitor por IA
@@ -7,19 +7,31 @@
 --   sítio, e cria a view que o ecrã do IVA consome.
 --
 --   Dois lados, de duas tabelas:
---     · IVA a abater  — faturas de fornecedores  (tabela `faturas`)
---     · IVA a pagar   — faturas emitidas a clientes (tabela `recebiveis`,
+--     - IVA a abater  — faturas de fornecedores  (tabela `faturas`)
+--     - IVA a pagar   — faturas emitidas a clientes (tabela `recebiveis`,
 --                        as linhas que têm número e data de fatura)
 --
 --   O que conta é a DATA DE EMISSÃO, não o pagamento. Uma fatura entra no
 --   apuramento assim que está registada, paga ou não.
 --
--- Correr no SQL Editor do Supabase. É idempotente.
--- ═══════════════════════════════════════════════════════════════════════════
-
--- ───────────────────────────────────────────────────────────────────────────
--- 1 · Faturas de fornecedores
--- ───────────────────────────────────────────────────────────────────────────
+-- ----------------------------------------------------------
+-- COMO CORRER  (importante — não corras o ficheiro todo de uma vez)
+--
+-- O editor SQL do Supabase pode executar comandos em ligações diferentes. Com
+-- um ficheiro grande, um comando que altera a tabela `faturas` e outro que cria
+-- a view que a lê acabam à espera um do outro: é o "deadlock detected".
+--
+-- Por isso: SELECIONA UM PASSO DE CADA VEZ e carrega em Run. Com texto
+-- selecionado, o Supabase corre só a seleção.
+--
+-- Fecha também os separadores do ERP que tenhas abertos — cada um mantém uma
+-- ligação à base de dados que disputa as mesmas tabelas.
+--
+-- Todos os passos são repetíveis: correr duas vezes dá o mesmo resultado.
+-- ----------------------------------------------------------
+-- ----------------------------------------------------------
+-- PASSO 1 - Colunas de IVA nas faturas de fornecedores
+-- ----------------------------------------------------------
 -- data_fatura é a data de emissão. Até aqui só existia `vencimento`, que é
 -- outra coisa: uma fatura emitida a 28/09 e a vencer a 15/10 é IVA de setembro.
 ALTER TABLE faturas ADD COLUMN IF NOT EXISTS data_fatura   date;
@@ -31,9 +43,9 @@ ALTER TABLE faturas ADD COLUMN IF NOT EXISTS taxa_iva      numeric;
 ALTER TABLE faturas ADD COLUMN IF NOT EXISTS iva_estimado  boolean NOT NULL DEFAULT false;
 ALTER TABLE faturas ADD COLUMN IF NOT EXISTS fornecedor_nif text;
 
--- ───────────────────────────────────────────────────────────────────────────
--- 2 · Faturas emitidas a clientes (dentro do Contas a Receber)
--- ───────────────────────────────────────────────────────────────────────────
+-- ----------------------------------------------------------
+-- PASSO 2 - Colunas de fatura emitida nos recebíveis
+-- ----------------------------------------------------------
 -- Um recebível é uma PREVISÃO de entrada. Passa a poder ser também uma fatura
 -- emitida: é o que tem numero_fatura e data_fatura preenchidos — e só essas
 -- contam para o IVA. As previsões continuam a ser só previsões.
@@ -49,9 +61,9 @@ CREATE INDEX IF NOT EXISTS idx_faturas_data_fatura ON faturas(data_fatura);
 CREATE INDEX IF NOT EXISTS idx_receb_data_fatura   ON recebiveis(data_fatura)
   WHERE data_fatura IS NOT NULL;
 
--- ───────────────────────────────────────────────────────────────────────────
--- 3 · Histórico: deduzir o IVA a 23% do valor total
--- ───────────────────────────────────────────────────────────────────────────
+-- ----------------------------------------------------------
+-- PASSO 3 - Histórico: deduzir o IVA a 23% do valor total
+-- ----------------------------------------------------------
 -- As faturas que já estavam no ERP não trazem IVA nenhum, porque o campo não
 -- existia. Deduz-se de trás para a frente a partir do total, à taxa normal:
 --     base = total / 1,23      IVA = total − base
@@ -75,9 +87,9 @@ UPDATE faturas
 UPDATE faturas SET data_fatura = vencimento
  WHERE data_fatura IS NULL AND vencimento IS NOT NULL;
 
--- ───────────────────────────────────────────────────────────────────────────
--- 4 · Pagamentos do IVA ao Estado
--- ───────────────────────────────────────────────────────────────────────────
+-- ----------------------------------------------------------
+-- PASSO 4 - Pagamentos do IVA ao Estado
+-- ----------------------------------------------------------
 CREATE TABLE IF NOT EXISTS iva_pagamentos (
   id             text PRIMARY KEY,
   empresa        text NOT NULL,
@@ -106,16 +118,17 @@ CREATE POLICY "editar_iva_pagamentos" ON iva_pagamentos FOR ALL TO authenticated
   USING (public.meu_role() IN ('admin','gestor'))
   WITH CHECK (public.meu_role() IN ('admin','gestor'));
 
--- ───────────────────────────────────────────────────────────────────────────
--- 5 · View de apuramento
--- ───────────────────────────────────────────────────────────────────────────
+-- ----------------------------------------------------------
+-- PASSO 5 - View de apuramento
+-- ----------------------------------------------------------
 -- Uma linha por documento, dos dois lados, já com mês e trimestre calculados.
 -- É esta a fonte do ecrã: qualquer fatura que entre por importação, por script
 -- ou à mão aparece aqui sem mais nada ser preciso.
 --
 -- Fora do apuramento: documentos anulados, e recebíveis que são só previsão
 -- (sem número nem data de fatura não há documento fiscal nenhum).
-CREATE OR REPLACE VIEW vw_iva_documentos AS
+DROP VIEW IF EXISTS vw_iva_documentos;
+CREATE VIEW vw_iva_documentos AS
 WITH base AS (
   SELECT
     'fornecedor'::text                         AS tipo,
@@ -174,9 +187,9 @@ DO $$ BEGIN
 EXCEPTION WHEN OTHERS THEN NULL;   -- Postgres < 15 não tem a opção
 END $$;
 
--- ═══════════════════════════════════════════════════════════════════════════
--- CONFERÊNCIA
--- ═══════════════════════════════════════════════════════════════════════════
+-- ----------------------------------------------------------
+-- PASSO 6 - CONFERÊNCIA
+-- ----------------------------------------------------------
 SELECT tipo, count(*) AS documentos,
        round(sum(valor_base)::numeric, 2) AS base,
        round(sum(valor_iva)::numeric, 2)  AS iva,

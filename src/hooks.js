@@ -623,7 +623,24 @@ export function useIvaDocumentos() {
     return () => { supabase.removeChannel(ch); clearTimeout(timeout) }
   }, [load])
 
-  return { documentos: data, loading, error, reload: load }
+  // Gravar uma correcção de IVA feita no ecrã do apuramento. A view é só de
+  // leitura: escreve-se na tabela de origem, que o `tipo` identifica.
+  //
+  // O realtime acima apanha a alteração e recarrega sozinho — não é preciso
+  // chamar reload() a seguir.
+  const guardarDocumento = async (doc, campos) => {
+    const tabela = doc?.tipo === 'cliente' ? 'recebiveis' : 'faturas'
+    const { data: r, error: e } = await supabase.from(tabela)
+      .update(campos).eq('id', doc.id).select()
+    if (e) console.error('guardarDocumento:', e)
+    else if (!r || r.length === 0) {
+      return { data: r, error: { message:
+        `Nada foi alterado em ${tabela}. Falta política UPDATE no RLS, ou a linha já não existe.` } }
+    }
+    return { data: r, error: e }
+  }
+
+  return { documentos: data, loading, error, reload: load, guardarDocumento }
 }
 
 export function useIvaPagamentos() {

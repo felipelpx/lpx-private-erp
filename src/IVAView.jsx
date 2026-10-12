@@ -5,6 +5,7 @@ import { fmtEUR, fmtData, fmtNum } from "./formato.js";
 import {
   apurar, porMes, dataLimite, estadoTrimestre, ESTADOS_TRIMESTRE,
   proximoVencimento, rotuloTrimestre, TRIMESTRES, NOMES_MES, hojeISO, arred2,
+  TAXAS_IVA, decomporPorTaxa,
 } from "./iva.js";
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -63,8 +64,58 @@ const Estado = ({ chave }) => {
 
 const nomeEmpresa = (id) => EMPRESAS.find(e => e.id === id)?.nome || id || "—";
 
+// ─── Marcas e acções de uma linha ────────────────────────────────────────────
+const SelosIVA = ({ d }) => (
+  <>
+    {d.naoDeduz && (
+      <span title={d.tipo === "cliente"
+          ? "Fatura sem IVA liquidado: continua no Contas a Receber, mas não entra no IVA a pagar."
+          : "Marcada como não dedutível: fica no Contas a Pagar, mas entra no apuramento com IVA zero."}
+        style={{ marginLeft: 6, background: "#f1f5f9", color: "#64748b", fontSize: 8.5,
+                 fontFamily: "monospace", fontWeight: 700, padding: "1px 5px", borderRadius: 3 }}>
+        {d.tipo === "cliente" ? "sem IVA" : "não deduz"}</span>
+    )}
+    {d.estimado && !d.naoDeduz && (
+      <span title="O IVA não foi lido da fatura: foi deduzido do total à taxa normal. Confirma a taxa aqui."
+        style={{ marginLeft: 6, background: "#fef3c7", color: "#b45309", fontSize: 8.5,
+                 fontFamily: "monospace", fontWeight: 700, padding: "1px 5px", borderRadius: 3 }}>calculado</span>
+    )}
+  </>
+);
+
+const botaoAccao = (cor, fundo) => ({
+  background: fundo, border: "none", color: cor, padding: "3px 8px",
+  borderRadius: 5, fontSize: 10, cursor: "pointer", fontWeight: 600,
+  whiteSpace: "nowrap", marginLeft: 4,
+});
+
+// Duas acções por fatura: corrigir a taxa, e tirar/repor no apuramento.
+// "Tirar do apuramento" não apaga a fatura — essa vive no Contas a Pagar e
+// apaga-se lá, onde se vê o que mais depende dela.
+function AccoesIVA({ d, onTaxa, onDeducao }) {
+  const cliente = d.tipo === "cliente";
+  return (
+    <span style={{ whiteSpace: "nowrap" }}>
+      <button onClick={(e) => { e.stopPropagation(); onTaxa(d); }}
+        title="Corrigir a taxa de IVA deste documento"
+        style={botaoAccao("#4a6fa5", "#eff6ff")}>taxa</button>
+      {d.naoDeduz ? (
+        <button onClick={(e) => { e.stopPropagation(); onDeducao(d, true); }}
+          title="Voltar a contar esta fatura no apuramento"
+          style={botaoAccao("#15803d", "#dcfce7")}>repor</button>
+      ) : (
+        <button onClick={(e) => { e.stopPropagation(); onDeducao(d, false); }}
+          title={cliente
+            ? "Tirar do apuramento: a fatura mantém-se, mas deixa de liquidar IVA"
+            : "Tirar do apuramento: a fatura mantém-se, mas deixa de deduzir IVA"}
+          style={botaoAccao("#b91c1c", "#fee2e2")}>{cliente ? "sem IVA" : "não deduz"}</button>
+      )}
+    </span>
+  );
+}
+
 // ─── Lista de faturas de um mês ──────────────────────────────────────────────
-function BlocoFaturas({ docs, tipo, titulo, cor, mostrarEmpresa }) {
+function BlocoFaturas({ docs, tipo, titulo, cor, mostrarEmpresa, accoes }) {
   const linhas = docs.filter(d => d.tipo === tipo);
   const soma = arred2(linhas.reduce((s, d) => s + d.iva, 0));
   if (!linhas.length) {
@@ -82,16 +133,19 @@ function BlocoFaturas({ docs, tipo, titulo, cor, mostrarEmpresa }) {
         <thead>
           <tr>
             {["Data", ...(mostrarEmpresa ? ["Empresa"] : []),
-              tipo === "cliente" ? "Cliente" : "Fornecedor", "N.º", "Sem IVA", "IVA", "Estado"]
+              tipo === "cliente" ? "Cliente" : "Fornecedor", "N.º", "Sem IVA", "IVA", "Estado",
+              ...(accoes ? [""] : [])]
               .map((h, i) => (
-                <th key={h} style={{ ...th, textAlign: i >= (mostrarEmpresa ? 4 : 3) && i <= (mostrarEmpresa ? 5 : 4) ? "right" : "left",
+                <th key={h + i} style={{ ...th, textAlign: i >= (mostrarEmpresa ? 4 : 3) && i <= (mostrarEmpresa ? 5 : 4) ? "right" : "left",
                                      fontSize: 9, padding: "6px 10px" }}>{h}</th>
               ))}
           </tr>
         </thead>
         <tbody>
           {linhas.map(d => (
-            <tr key={d.id} style={{ borderBottom: "1px solid #fafafa" }}>
+            <tr key={d.id} style={{ borderBottom: "1px solid #fafafa",
+                                    background: d.naoDeduz ? "#fbfbfc" : "#fff",
+                                    color: d.naoDeduz ? "#aaa" : undefined }}>
               <td style={{ ...td, fontFamily: "monospace", fontSize: 11, color: "#888", padding: "7px 10px" }}>{fmtData(d.data_fatura)}</td>
               {mostrarEmpresa && <td style={{ ...td, fontSize: 11, padding: "7px 10px" }}>{nomeEmpresa(d.empresa)}</td>}
               <td style={{ ...td, padding: "7px 10px", maxWidth: 220, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
@@ -100,14 +154,11 @@ function BlocoFaturas({ docs, tipo, titulo, cor, mostrarEmpresa }) {
               <td style={{ ...tdNum, padding: "7px 10px" }}>{fmtEUR(d.valor_base)}</td>
               <td style={{ ...tdNum, padding: "7px 10px", fontWeight: 700 }}>
                 <Euro v={d.iva} forte />
-                {d.estimado && (
-                  <span title="O IVA não foi lido da fatura: foi deduzido a partir do total, à taxa normal. Confere e corrige na fatura."
-                    style={{ marginLeft: 6, background: "#fef3c7", color: "#b45309", fontSize: 8.5,
-                             fontFamily: "monospace", fontWeight: 700, padding: "1px 5px", borderRadius: 3 }}>calculado</span>
-                )}
+                <SelosIVA d={d} />
               </td>
               <td style={{ ...td, fontSize: 10.5, color: "#aaa", padding: "7px 10px" }}
                   title="Informativo: o estado de pagamento não entra no apuramento">{d.estado || "—"}</td>
+              {accoes && <td style={{ ...td, padding: "7px 10px", textAlign: "right" }}>{accoes(d)}</td>}
             </tr>
           ))}
           <tr style={{ background: "#fafbfc" }}>
@@ -115,7 +166,7 @@ function BlocoFaturas({ docs, tipo, titulo, cor, mostrarEmpresa }) {
               Soma
             </td>
             <td style={{ ...tdNum, padding: "7px 10px", fontWeight: 800 }}><Euro v={soma} forte zeroTraco={false} /></td>
-            <td />
+            <td colSpan={accoes ? 2 : 1} />
           </tr>
         </tbody>
       </table>
@@ -124,7 +175,7 @@ function BlocoFaturas({ docs, tipo, titulo, cor, mostrarEmpresa }) {
 }
 
 // ─── Um mês, expansível até às faturas ───────────────────────────────────────
-function LinhaMes({ m, aberto, onAlternar, mostrarEmpresa, recuo = 28 }) {
+function LinhaMes({ m, aberto, onAlternar, mostrarEmpresa, accoes, recuo = 28 }) {
   return (
     <>
       <tr onClick={m.semFaturas ? undefined : onAlternar}
@@ -144,9 +195,9 @@ function LinhaMes({ m, aberto, onAlternar, mostrarEmpresa, recuo = 28 }) {
         <tr>
           <td colSpan={7} style={{ padding: "4px 20px 10px", background: "#fcfcfd" }}>
             <BlocoFaturas docs={m.docs} tipo="cliente" titulo="Faturas emitidas a clientes (IVA a pagar)"
-                          cor={COR.pagar} mostrarEmpresa={mostrarEmpresa} />
+                          cor={COR.pagar} mostrarEmpresa={mostrarEmpresa} accoes={accoes} />
             <BlocoFaturas docs={m.docs} tipo="fornecedor" titulo="Faturas de fornecedores (IVA a abater)"
-                          cor={COR.abater} mostrarEmpresa={mostrarEmpresa} />
+                          cor={COR.abater} mostrarEmpresa={mostrarEmpresa} accoes={accoes} />
           </td>
         </tr>
       )}
@@ -156,7 +207,7 @@ function LinhaMes({ m, aberto, onAlternar, mostrarEmpresa, recuo = 28 }) {
 
 // ─── Ecrã ────────────────────────────────────────────────────────────────────
 export default function IVAView({ currentUser, empresasVisiveis = [], onCriarPrevisao }) {
-  const { documentos, loading, error } = useIvaDocumentos();
+  const { documentos, loading, error, guardarDocumento } = useIvaDocumentos();
   const { pagamentos, marcarPago, anularPagamento } = useIvaPagamentos();
 
   const empresas = empresasVisiveis.length ? empresasVisiveis : EMPRESAS;
@@ -179,6 +230,7 @@ export default function IVAView({ currentUser, empresasVisiveis = [], onCriarPre
   const [triDetalhe, setTriDetalhe] = useState(null);    // filtro vindo do resumo
   const [aPagar, setAPagar] = useState(null);            // trimestre a marcar como pago
   const [exportando, setExportando] = useState(false);
+  const [aEditarTaxa, setAEditarTaxa] = useState(null);  // documento em correcção de taxa
 
   const visiveis = useMemo(() => {
     const ids = empresas.map(e => e.id);
@@ -209,6 +261,43 @@ export default function IVAView({ currentUser, empresasVisiveis = [], onCriarPre
     [apuramento, pagamentos]);
 
   const alternar = (chave) => setAbertos(a => ({ ...a, [chave]: !a[chave] }));
+
+  // ── Correcções feitas a partir deste ecrã ─────────────────────────────────
+  const avisarErro = (res) => {
+    if (!res?.error) return false;
+    alert(/iva_dedutivel|column .* does not exist|schema cache/i.test(res.error.message || "")
+      ? "Falta a coluna iva_dedutivel.\n\nCorre iva-7-coluna-nao-deduz.sql e iva-8-view-v2.sql no Supabase."
+      : "Não foi possível guardar:\n\n" + (res.error.message || res.error));
+    return true;
+  };
+
+  const alternarDeducao = async (d, passaADeduzir) => {
+    const quem = `${d.entidade} · ${d.documento}`;
+    const onde = d.tipo === "cliente" ? "Contas a Receber" : "Contas a Pagar";
+    const verbo = d.tipo === "cliente" ? "liquidar" : "deduzir";
+    if (!passaADeduzir && !confirm(
+      `Tirar esta fatura do apuramento de IVA?\n\n${quem}\n\n` +
+      `A fatura mantém-se no ${onde} — só deixa de ${verbo} ${fmtEUR(d.iva)} de IVA. ` +
+      `Podes repor a qualquer momento.`)) return;
+    avisarErro(await guardarDocumento(d, { iva_dedutivel: passaADeduzir }));
+  };
+
+  // Mudar a taxa recalcula base e IVA a partir do TOTAL do documento, que é o
+  // único valor de que temos a certeza. Deixa de ser estimativa: foi uma
+  // pessoa que confirmou a taxa, por isso a marca "calculado" cai.
+  const guardarTaxa = async (d, taxa) => {
+    const total = Number(d.valor_total) || arred2((Number(d.valor_base) || 0) + (Number(d.valor_iva) || 0));
+    const { base, iva } = decomporPorTaxa(total, taxa);
+    const res = await guardarDocumento(d, {
+      taxa_iva: taxa, valor_base: base, valor_iva: iva, iva_estimado: false,
+    });
+    if (avisarErro(res)) return;
+    setAEditarTaxa(null);
+  };
+
+  const accoesLinha = podeEditar
+    ? (d) => <AccoesIVA d={d} onTaxa={setAEditarTaxa} onDeducao={alternarDeducao} />
+    : null;
 
   const semTabela = /vw_iva_documentos|does not exist|schema cache/i.test(error || "");
   if (semTabela) return (
@@ -418,7 +507,7 @@ export default function IVAView({ currentUser, empresasVisiveis = [], onCriarPre
                           <LinhaMes key={`${chave}-${m.mes}`} m={m}
                             aberto={!!abertos[`${chave}-${m.mes}`]}
                             onAlternar={() => alternar(`${chave}-${m.mes}`)}
-                            mostrarEmpresa={mostrarEmpresa} />
+                            mostrarEmpresa={mostrarEmpresa} accoes={accoesLinha} />
                         ))}
                         {abertos[chave] && (
                           <tr style={{ background: "#f4f5f7" }}>
@@ -437,7 +526,7 @@ export default function IVAView({ currentUser, empresasVisiveis = [], onCriarPre
                     <LinhaMes key={`m${m.mes}`} m={m}
                       aberto={!!abertos[`m${m.mes}`]}
                       onAlternar={() => alternar(`m${m.mes}`)}
-                      mostrarEmpresa={mostrarEmpresa} recuo={12} />
+                      mostrarEmpresa={mostrarEmpresa} accoes={accoesLinha} recuo={12} />
                   ))}
 
                   <tr style={{ background: "#1a1a2e" }}>
@@ -489,15 +578,18 @@ export default function IVAView({ currentUser, empresasVisiveis = [], onCriarPre
                 <thead style={{ position: "sticky", top: 0, background: "#fafbfc", zIndex: 1 }}>
                   <tr>
                     {["Tipo", "Data", ...(mostrarEmpresa ? ["Empresa"] : []), "Cliente / Fornecedor",
-                      "N.º", "Sem IVA", "Taxa", "IVA", "Mês", "Trim."].map((h, i) => (
-                      <th key={h} style={{ ...th, textAlign: /Sem IVA|Taxa|IVA/.test(h) ? "right" : "left" }}>{h}</th>
+                      "N.º", "Sem IVA", "Taxa", "IVA", "Mês", "Trim.",
+                      ...(accoesLinha ? [""] : [])].map((h, i) => (
+                      <th key={h + i} style={{ ...th, textAlign: /Sem IVA|Taxa|IVA/.test(h) ? "right" : "left" }}>{h}</th>
                     ))}
                   </tr>
                 </thead>
                 <tbody>
                   {detalhe.map(d => (
                     <tr key={d.id} style={{ borderBottom: "1px solid #fafafa",
-                                            background: d.estimado ? "#fffdf5" : "#fff" }}>
+                                            background: d.naoDeduz ? "#fbfbfc"
+                                                      : d.estimado ? "#fffdf5" : "#fff",
+                                            color: d.naoDeduz ? "#aaa" : undefined }}>
                       <td style={td}>
                         <span style={{ background: d.tipo === "cliente" ? "#fef3c7" : "#eff6ff",
                                        color: d.tipo === "cliente" ? "#b45309" : "#1d4ed8",
@@ -517,16 +609,13 @@ export default function IVAView({ currentUser, empresasVisiveis = [], onCriarPre
                       </td>
                       <td style={{ ...tdNum, fontWeight: 700 }}>
                         <Euro v={d.iva} forte />
-                        {d.estimado && (
-                          <span title="IVA deduzido do total à taxa normal, não lido da fatura"
-                            style={{ marginLeft: 6, background: "#fef3c7", color: "#b45309", fontSize: 8.5,
-                                     fontFamily: "monospace", fontWeight: 700, padding: "1px 5px", borderRadius: 3 }}>calc.</span>
-                        )}
+                        <SelosIVA d={d} />
                       </td>
                       <td style={{ ...td, fontSize: 11, color: "#888" }}>{NOMES_MES[d.mes - 1]}</td>
                       <td style={{ ...td, fontFamily: "monospace", fontSize: 11, color: "#888" }}>
                         {rotuloTrimestre(d.ano, d.trimestre)}
                       </td>
+                      {accoesLinha && <td style={{ ...td, textAlign: "right" }}>{accoesLinha(d)}</td>}
                     </tr>
                   ))}
                 </tbody>
@@ -534,17 +623,39 @@ export default function IVAView({ currentUser, empresasVisiveis = [], onCriarPre
             </div>
           </div>
 
-          {apuramento.linhas.some(d => d.estimado) && (
+          {apuramento.linhas.some(d => d.estimado && !d.naoDeduz) && (
             <div style={{ background: "#fffbeb", border: "1px solid #fde68a", borderRadius: 12,
                           padding: "12px 16px", fontSize: 11.5, color: "#92400e", lineHeight: 1.6 }}>
               {(() => {
-                const n = apuramento.linhas.filter(d => d.estimado).length;
+                const n = apuramento.linhas.filter(d => d.estimado && !d.naoDeduz).length;
                 return (
                   <>
                     <strong>{n === 1 ? "1 documento com IVA calculado." : `${n} documentos com IVA calculado.`}</strong>{" "}
                     {n === 1 ? "É uma fatura que entrou" : "São faturas que entraram"} no ERP antes de haver campo
                     de IVA: o valor foi deduzido do total à taxa normal (23%). Onde a taxa real for outra —
-                    isento, 6% ou 13% — o número está errado. Corrige na própria fatura e a marca desaparece.
+                    isento, 6% ou 13% — o número está errado.{" "}
+                    {podeEditar
+                      ? <>Corrige com o botão <strong>taxa</strong> na linha, ou tira do apuramento com
+                         <strong> não deduz</strong> se for um pagamento sem direito a dedução.</>
+                      : <>Um gestor pode corrigir a taxa linha a linha.</>}
+                  </>
+                );
+              })()}
+            </div>
+          )}
+
+          {apuramento.linhas.some(d => d.naoDeduz) && (
+            <div style={{ background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: 12,
+                          padding: "12px 16px", fontSize: 11.5, color: "#475569", lineHeight: 1.6 }}>
+              {(() => {
+                const fora = apuramento.linhas.filter(d => d.naoDeduz);
+                const perdido = arred2(fora.reduce((s, d) =>
+                  s + (Number(d.valor_iva) || 0), 0));
+                return (
+                  <>
+                    <strong>{fora.length === 1 ? "1 documento fora do apuramento" : `${fora.length} documentos fora do apuramento`}</strong>
+                    {" "}({fmtEUR(perdido)} de IVA não deduzido). Continuam no Contas a Pagar — só não contam
+                    para o IVA. O botão <strong>repor</strong> na linha desfaz.
                   </>
                 );
               })()}
@@ -568,6 +679,91 @@ export default function IVAView({ currentUser, empresasVisiveis = [], onCriarPre
             setAPagar(null);
           }} />
       )}
+
+      {/* ── Corrigir a taxa de um documento ────────────────────────────────── */}
+      {aEditarTaxa && (
+        <ModalTaxa doc={aEditarTaxa}
+          onFechar={() => setAEditarTaxa(null)}
+          onGuardar={(taxa) => guardarTaxa(aEditarTaxa, taxa)} />
+      )}
+    </div>
+  );
+}
+
+// ─── Corrigir a taxa de IVA de um documento ──────────────────────────────────
+// Só se escolhe a TAXA. A base e o IVA saem do total do documento, que é o
+// número de que temos a certeza — é o que está no Contas a Pagar e o que foi
+// efetivamente pago. Deixar mexer na base abriria a porta a um documento cuja
+// base mais IVA não dá o total.
+function ModalTaxa({ doc, onFechar, onGuardar }) {
+  const totalDoc = Number(doc.valor_total)
+    || arred2((Number(doc.valor_base) || 0) + (Number(doc.valor_iva) || 0));
+  const [taxa, setTaxa] = useState(() => {
+    const t = Number(doc.taxa_iva);
+    return Number.isFinite(t) && TAXAS_IVA.some(x => x.taxa === t) ? t : 23;
+  });
+  const [aGuardar, setAGuardar] = useState(false);
+  const previsto = decomporPorTaxa(totalDoc, taxa);
+
+  return (
+    <div onClick={e => { if (e.target === e.currentTarget) onFechar(); }}
+      style={{ position: "fixed", inset: 0, background: "rgba(10,10,15,0.55)", display: "flex",
+               alignItems: "center", justifyContent: "center", zIndex: 300, padding: 20 }}>
+      <div style={{ background: "#fff", borderRadius: 14, padding: 24, width: "100%", maxWidth: 430 }}>
+        <div style={{ fontSize: 16, fontWeight: 700, color: COR.tinta, fontFamily: "Georgia,serif" }}>
+          Taxa de IVA
+        </div>
+        <div style={{ fontSize: 11.5, color: "#888", marginTop: 6, lineHeight: 1.6 }}>
+          {doc.entidade} · {doc.documento}<br />
+          {fmtData(doc.data_fatura)} · total do documento <strong style={{ color: COR.tinta }}>{fmtEUR(totalDoc)}</strong>
+        </div>
+
+        <div style={{ marginTop: 16 }}>
+          <Rotulo>Taxa aplicada</Rotulo>
+          <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+            {TAXAS_IVA.map(t => (
+              <button key={t.taxa} onClick={() => setTaxa(t.taxa)}
+                title={t.nota}
+                style={{ flex: 1, minWidth: 74, background: taxa === t.taxa ? COR.tinta : "#f4f5f7",
+                         color: taxa === t.taxa ? "#fff" : "#555", border: "none", borderRadius: 9,
+                         padding: "10px 6px", cursor: "pointer", fontWeight: 700, fontSize: 13 }}>
+                {t.rotulo}
+                <div style={{ fontSize: 9, fontWeight: 400, marginTop: 2,
+                              color: taxa === t.taxa ? "#b9bfca" : "#999" }}>{t.nota}</div>
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div style={{ marginTop: 16, background: "#f8f9fc", borderRadius: 10, padding: "12px 14px",
+                      display: "flex", justifyContent: "space-between", fontSize: 12.5 }}>
+          <div>
+            <div style={{ fontSize: 10, color: "#aaa", fontFamily: "monospace" }}>SEM IVA</div>
+            <div style={{ fontFamily: "monospace", fontWeight: 700, color: COR.tinta }}>{fmtEUR(previsto.base)}</div>
+          </div>
+          <div style={{ textAlign: "right" }}>
+            <div style={{ fontSize: 10, color: "#aaa", fontFamily: "monospace" }}>IVA</div>
+            <div style={{ fontFamily: "monospace", fontWeight: 700, color: COR.abater }}>{fmtEUR(previsto.iva)}</div>
+          </div>
+        </div>
+        <div style={{ fontSize: 10.5, color: "#aaa", marginTop: 8, lineHeight: 1.5 }}>
+          A base e o IVA são recalculados a partir do total. Se o total estiver errado,
+          corrige-o primeiro na fatura, no Contas a Pagar.
+        </div>
+
+        <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", marginTop: 18 }}>
+          <button onClick={onFechar}
+            style={{ background: "none", border: "1px solid #e8e8e8", borderRadius: 8, padding: "8px 16px",
+                     fontSize: 12, color: "#777", cursor: "pointer" }}>Cancelar</button>
+          <button disabled={aGuardar}
+            onClick={async () => { setAGuardar(true); await onGuardar(taxa); setAGuardar(false); }}
+            style={{ background: aGuardar ? "#c9cdd4" : "#1a1a2e", color: "#fff", border: "none",
+                     borderRadius: 8, padding: "8px 20px", fontSize: 12, fontWeight: 600,
+                     cursor: aGuardar ? "default" : "pointer" }}>
+            {aGuardar ? "A guardar..." : "Guardar taxa"}
+          </button>
+        </div>
+      </div>
     </div>
   );
 }

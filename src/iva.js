@@ -93,19 +93,47 @@ export function hojeISO() {
 // ─── Valores ────────────────────────────────────────────────────────────────
 export const arred2 = (v) => Math.round(((Number(v) || 0) + Number.EPSILON) * 100) / 100;
 
+// As taxas em vigor em Portugal continental. "Isento" é taxa 0 com IVA 0 —
+// continua a ser um documento do apuramento, só não tem imposto.
+export const TAXAS_IVA = [
+  { taxa: 23, rotulo: "23%", nota: "Normal" },
+  { taxa: 13, rotulo: "13%", nota: "Intermédia" },
+  { taxa: 6,  rotulo: "6%",  nota: "Reduzida" },
+  { taxa: 0,  rotulo: "0%",  nota: "Isento" },
+];
+
+// Decompõe um total COM IVA numa base e num imposto, à taxa dada.
+//   base = total / (1 + taxa/100)      IVA = total - base
+// É esta a conta a fazer quando só se conhece o total do documento — e é a
+// mesma que o histórico usou a 23%.
+export function decomporPorTaxa(total, taxa) {
+  const t = Number(total) || 0;
+  const r = Number(taxa);
+  if (!Number.isFinite(r) || r <= 0) return { base: arred2(t), iva: 0 };
+  const base = arred2(t / (1 + r / 100));
+  return { base, iva: arred2(t - base) };
+}
+
 // O IVA de um documento. Devolve também de onde veio o número, porque a
 // diferença entre "li na fatura" e "deduzi" tem de chegar ao ecrã.
+//
+// Uma fatura marcada como não dedutível (iva_dedutivel = false) continua a
+// existir e a aparecer na lista, mas entra no apuramento com IVA zero. É
+// assim que se tira do apuramento um pagamento que não dá direito a dedução
+// — impostos, taxas, seguros — sem apagar a fatura do Contas a Pagar.
 export function ivaDoDocumento(doc) {
+  if (doc?.iva_dedutivel === false) return { iva: 0, estimado: false, naoDeduz: true };
+
   const lido = Number(doc?.valor_iva);
   if (Number.isFinite(lido) && lido !== 0) {
-    return { iva: arred2(lido), estimado: !!doc?.iva_estimado };
+    return { iva: arred2(lido), estimado: !!doc?.iva_estimado, naoDeduz: false };
   }
   const base = Number(doc?.valor_base);
   const taxa = Number(doc?.taxa_iva);
   if (Number.isFinite(base) && base !== 0 && Number.isFinite(taxa) && taxa > 0) {
-    return { iva: arred2(base * taxa / 100), estimado: true };
+    return { iva: arred2(base * taxa / 100), estimado: true, naoDeduz: false };
   }
-  return { iva: 0, estimado: !!doc?.iva_estimado };
+  return { iva: 0, estimado: !!doc?.iva_estimado, naoDeduz: false };
 }
 
 // ─── Agregação ──────────────────────────────────────────────────────────────
@@ -118,9 +146,9 @@ export function apurar(docs, { empresa = "todas", ano = null, trimestre = "todos
     .filter(d => d && d.data_fatura)
     .filter(d => empresa === "todas" || d.empresa === empresa)
     .map(d => {
-      const { iva, estimado } = ivaDoDocumento(d);
+      const { iva, estimado, naoDeduz } = ivaDoDocumento(d);
       const a = anoDe(d.data_fatura), m = mesDe(d.data_fatura);
-      return { ...d, iva, estimado, ano: a, mes: m, trimestre: trimestreDe(d.data_fatura) };
+      return { ...d, iva, estimado, naoDeduz, ano: a, mes: m, trimestre: trimestreDe(d.data_fatura) };
     })
     .filter(d => d.ano && d.mes)
     .filter(d => ano == null || d.ano === ano)

@@ -4,6 +4,7 @@
 import {
   trimestreDe, rotuloTrimestre, dataLimite, fimDoTrimestre, estadoTrimestre,
   ivaDoDocumento, apurar, porMes, proximoVencimento, arred2, mesesDoTrimestre,
+  decomporPorTaxa, TAXAS_IVA,
 } from "./src/iva.js";
 
 let mau = 0;
@@ -148,6 +149,70 @@ ok(apurar([doc({ valor_iva: 100, data_fatura: "2026-12-31" })]).trimestres[0].ro
    "31 de dezembro é 4T, não 1T do ano seguinte");
 ok(apurar([doc({ valor_iva: 100, data_fatura: "2026-01-01" })]).trimestres[0].dataLimite === "2026-05-25",
    "1 de janeiro paga-se a 25 de maio");
+
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Taxas e decomposição (v15)
+// ─────────────────────────────────────────────────────────────────────────────
+console.log("\nDecompor um total pela taxa:");
+{
+  const d23 = decomporPorTaxa(2460, 23);
+  ok(perto(d23.base, 2000) && perto(d23.iva, 460), "2 460 € a 23% → 2 000 + 460");
+  const d6 = decomporPorTaxa(106, 6);
+  ok(perto(d6.base, 100) && perto(d6.iva, 6), "106 € a 6% → 100 + 6");
+  const d13 = decomporPorTaxa(113, 13);
+  ok(perto(d13.base, 100) && perto(d13.iva, 13), "113 € a 13% → 100 + 13");
+  const d0 = decomporPorTaxa(500, 0);
+  ok(perto(d0.base, 500) && d0.iva === 0, "isento: a base é o total e o IVA é zero");
+  ok(decomporPorTaxa(0, 23).iva === 0, "total zero não rebenta");
+  ok(decomporPorTaxa(null, 23).iva === 0, "total nulo não rebenta");
+  ok(decomporPorTaxa(100, null).iva === 0, "taxa nula trata-se como isento");
+  // A conta tem de fechar ao cêntimo em valores feios
+  [137.41, 999.99, 1.23, 48215.07].forEach(t =>
+    TAXAS_IVA.forEach(({ taxa }) => {
+      const d = decomporPorTaxa(t, taxa);
+      ok(perto(d.base + d.iva, t), `${t} € a ${taxa}%: base + IVA fecha o total`);
+    }));
+}
+
+console.log("\nFaturas que não deduzem IVA:");
+{
+  const base = [
+    doc({ id: "a", valor_iva: 230, data_fatura: "2026-08-10" }),
+    doc({ id: "b", valor_iva: 100, data_fatura: "2026-08-20" }),
+    doc({ id: "c", tipo: "cliente", valor_iva: 690, data_fatura: "2026-09-05" }),
+  ];
+  const antes = apurar(base);
+  ok(perto(antes.total.aAbater, 330), "antes: abate 330");
+  ok(perto(antes.total.saldo, 360), "antes: saldo 360");
+
+  const depois = apurar(base.map(d => d.id === "b" ? { ...d, iva_dedutivel: false } : d));
+  ok(perto(depois.total.aAbater, 230), "a fatura marcada deixa de abater");
+  ok(perto(depois.total.saldo, 460), "o saldo sobe exatamente o IVA retirado");
+  ok(depois.linhas.length === 3, "a fatura continua na lista — não desaparece");
+  ok(depois.linhas.find(d => d.id === "b").naoDeduz === true, "fica marcada como não dedutível");
+  ok(depois.linhas.find(d => d.id === "b").iva === 0, "entra com IVA zero");
+  ok(depois.linhas.find(d => d.id === "a").naoDeduz === false, "as outras não são afetadas");
+
+  // Também do lado do cliente
+  const semCliente = apurar(base.map(d => d.id === "c" ? { ...d, iva_dedutivel: false } : d));
+  ok(perto(semCliente.total.aPagar, 0), "uma fatura emitida isenta não liquida IVA");
+
+  // Uma fatura não dedutível nunca é contada como "calculado"
+  const est = apurar([doc({ valor_iva: 50, iva_estimado: true, iva_dedutivel: false, data_fatura: "2026-08-01" })]);
+  ok(est.linhas[0].estimado === false, "não dedutível não entra no aviso de IVA calculado");
+
+  // E o valor original fica lá, para se poder repor
+  ok(depois.linhas.find(d => d.id === "b").valor_iva === 100, "o IVA original é preservado para repor");
+}
+
+console.log("\nMarcar e desmarcar é reversível:");
+{
+  const d = doc({ valor_iva: 230, data_fatura: "2026-08-10" });
+  ok(perto(apurar([{ ...d, iva_dedutivel: false }]).total.aAbater, 0), "marcada: 0");
+  ok(perto(apurar([{ ...d, iva_dedutivel: true }]).total.aAbater, 230), "reposta: 230");
+  ok(perto(apurar([d]).total.aAbater, 230), "sem a coluna (ERP antigo): continua a abater");
+}
 
 console.log(mau === 0 ? "\n✅ Apuramento de IVA OK" : `\n❌ ${mau} falha(s)`);
 process.exit(mau ? 1 : 0);

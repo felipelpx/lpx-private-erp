@@ -102,7 +102,8 @@ export async function exportarIvaExcel({ apuramento, meses12, ano, empresaNome, 
   {
     const cab = [["DETALHE POR FATURA"], ["Empresa", empresaNome], [],
                  ["Tipo", "Empresa", "Data da fatura", "Cliente / Fornecedor", "N.º",
-                  "Valor sem IVA", "Taxa %", "IVA", "IVA calculado", "Mês", "Trimestre"]];
+                  "Valor sem IVA", "Taxa %", "IVA", "IVA calculado", "Deduz IVA",
+                  "Mês", "Trimestre"]];
     const linhas = [...apuramento.linhas]
       .sort((a, b) => a.ano - b.ano || a.trimestre - b.trimestre || String(a.data_fatura).localeCompare(String(b.data_fatura)))
       .map(d => [
@@ -110,13 +111,15 @@ export async function exportarIvaExcel({ apuramento, meses12, ano, empresaNome, 
         nomeEmpresa ? nomeEmpresa(d.empresa) : d.empresa,
         isoParaData(d.data_fatura), d.entidade, d.documento,
         Number(d.valor_base) || 0, d.taxa_iva != null ? Number(d.taxa_iva) : "",
-        d.iva, d.estimado ? "sim" : "", NOMES_MES[d.mes - 1], rotuloTrimestre(d.ano, d.trimestre),
+        d.iva, d.estimado ? "sim" : "", d.naoDeduz ? "NÃO" : "sim",
+        NOMES_MES[d.mes - 1], rotuloTrimestre(d.ano, d.trimestre),
       ]);
     const totalIva = arred2(apuramento.linhas.reduce((s, d) => s + (d.tipo === "cliente" ? d.iva : -d.iva), 0));
     const ws = XLSX.utils.aoa_to_sheet(
       [...cab, ...linhas, [], ["", "", "", "", "SALDO", "", "", totalIva]], { cellDates: true });
     ws["!cols"] = [{ wch: 12 }, { wch: 26 }, { wch: 15 }, { wch: 34 }, { wch: 18 },
-                   { wch: 15 }, { wch: 9 }, { wch: 14 }, { wch: 14 }, { wch: 12 }, { wch: 11 }];
+                   { wch: 15 }, { wch: 9 }, { wch: 14 }, { wch: 14 }, { wch: 11 },
+                   { wch: 12 }, { wch: 11 }];
     aplicar(ws, linhas, [5, 7], [2], cab.length);
     XLSX.utils.book_append_sheet(wb, ws, "Detalhe por fatura");
   }

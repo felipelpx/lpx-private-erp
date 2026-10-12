@@ -3,6 +3,7 @@ import { CATEGORIAS_FATURA as CATEGORIAS } from "./categorias.js";
 import { EMPRESAS_SIMPLE } from "./empresas.js";
 import { fmtEUR, fmtTamanho } from "./formato.js";
 import { MODELO_IA } from "./ia.js";
+import { TAXAS_IVA, decomporPorTaxa } from "./iva.js";
 
 // Lista de empresas — ver src/empresas.js
 const EMPRESAS_LIST = EMPRESAS_SIMPLE;
@@ -198,7 +199,11 @@ export default function ImportarFatura({ onSave }) {
   const [nFatura, setNFatura] = useState("");
   const [dataFatura, setDataFatura] = useState("");
   const [dataVenc, setDataVenc] = useState("");
-  const [taxaIva, setTaxaIva] = useState("");
+  const [taxaIva, setTaxaIva] = useState("23");
+  // Nem todo o pagamento dá direito a deduzir IVA: impostos e taxas da AT,
+  // seguros, portagens, capital de empréstimos. Quem lança a fatura é quem
+  // sabe — por isso é uma escolha explícita e não uma adivinha.
+  const [deduzIva, setDeduzIva] = useState(true);
   const [fornNome, setFornNome] = useState("");
   const [fornNif, setFornNif] = useState("");
   const [fornEmail, setFornEmail] = useState("");
@@ -308,7 +313,7 @@ export default function ImportarFatura({ onSave }) {
         id: baseId,
         empresa, categoria, projeto, status,
         numero_fatura: nFatura, data_fatura: dataFatura,
-        data_vencimento: venc0, taxa_iva: taxaIva,
+        data_vencimento: venc0, taxa_iva: taxaIva, iva_dedutivel: deduzIva,
         fornecedor_nome: fornNome, fornecedor_nif: fornNif,
         fornecedor_email: fornEmail, fornecedor_iban: fornIban,
         fornecedor_morada: fornMorada,
@@ -329,7 +334,7 @@ export default function ImportarFatura({ onSave }) {
       numero_fatura: nFatura ? `${nFatura} (${i+1}/${n})` : "",
       data_fatura: dataFatura,
       data_vencimento: p.data,
-      taxa_iva: taxaIva,
+      taxa_iva: taxaIva, iva_dedutivel: deduzIva,
       fornecedor_nome: fornNome, fornecedor_nif: fornNif,
       fornecedor_email: fornEmail, fornecedor_iban: fornIban,
       fornecedor_morada: fornMorada,
@@ -376,7 +381,7 @@ export default function ImportarFatura({ onSave }) {
   const reset = () => {
     setStep(0); setFile(null); setFileDataURL(""); setErro("");
     setEmpresa(""); setCategoria(""); setProjeto(""); setStatus("Pendente");
-    setNFatura(""); setDataFatura(""); setDataVenc(""); setTaxaIva("");
+    setNFatura(""); setDataFatura(""); setDataVenc(""); setTaxaIva("23"); setDeduzIva(true);
     setFornNome(""); setFornNif(""); setFornEmail(""); setFornIban(""); setFornMorada("");
     setValorBase(""); setValorIva(""); setValorTotal("");
     setDescServico(""); setNotas("");
@@ -515,10 +520,50 @@ export default function ImportarFatura({ onSave }) {
               <label style={labelStyle}>Data de Vencimento</label>
               <input type="date" value={dataVenc} onChange={e=>setDataVenc(e.target.value)} style={inputStyle}/>
             </div>
-            <div style={fieldWrap}>
-              <label style={labelStyle}>Taxa IVA (%)</label>
-              <input type="number" value={taxaIva} onChange={e=>setTaxaIva(e.target.value)} style={inputStyle}/>
+          </div>
+
+          {/* IVA: deduz ou não, e a que taxa. É isto que alimenta a aba IVA. */}
+          <div style={{borderTop:"1px solid #f0f0f0",paddingTop:14,display:"flex",flexDirection:"column",gap:10}}>
+            <label style={{display:"flex",alignItems:"center",gap:9,cursor:"pointer",userSelect:"none"}}>
+              <input type="checkbox" checked={deduzIva} onChange={e=>setDeduzIva(e.target.checked)}
+                style={{width:16,height:16,cursor:"pointer",accentColor:"#1a1a2e"}}/>
+              <span style={{fontSize:13,fontWeight:600,color:"#1a1a2e"}}>Este pagamento deduz IVA</span>
+            </label>
+            <div style={{fontSize:11,color:"#999",lineHeight:1.5,marginTop:-4,marginLeft:25}}>
+              {deduzIva
+                ? "O IVA desta fatura entra no apuramento trimestral, a abater."
+                : "Impostos e taxas da AT, seguros, portagens, capital de empréstimos — a fatura entra no Contas a Pagar, mas fica fora do apuramento do IVA."}
             </div>
+
+            {deduzIva && (
+              <div>
+                <label style={{...labelStyle,marginBottom:6,display:"block"}}>Taxa de IVA</label>
+                <div style={{display:"flex",gap:6}}>
+                  {TAXAS_IVA.map(t=>(
+                    <button key={t.taxa} type="button" title={t.nota}
+                      onClick={()=>{
+                        setTaxaIva(String(t.taxa));
+                        // Recalcula base e IVA a partir do total: é o número
+                        // de que temos a certeza. Sem total, não mexe.
+                        const tot = parseFloat(valorTotal);
+                        if (tot > 0) {
+                          const d = decomporPorTaxa(tot, t.taxa);
+                          setValorBase(String(d.base));
+                          setValorIva(String(d.iva));
+                        }
+                      }}
+                      style={{flex:1,background:String(taxaIva)===String(t.taxa)?"#1a1a2e":"#f8f8f8",
+                              color:String(taxaIva)===String(t.taxa)?"#fff":"#555",
+                              border:"1px solid "+(String(taxaIva)===String(t.taxa)?"#1a1a2e":"#e8e8e8"),
+                              borderRadius:8,padding:"9px 4px",cursor:"pointer",fontWeight:700,fontSize:13}}>
+                      {t.rotulo}
+                      <div style={{fontSize:9,fontWeight:400,marginTop:2,
+                                   color:String(taxaIva)===String(t.taxa)?"#b9bfca":"#aaa"}}>{t.nota}</div>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
         </div>
 
@@ -557,17 +602,45 @@ export default function ImportarFatura({ onSave }) {
           <div style={{display:"flex",flexDirection:"column",gap:10}}>
             <div style={fieldWrap}>
               <label style={labelStyle}>Valor Base (sem IVA)</label>
-              <input type="number" value={valorBase} onChange={e=>setValorBase(e.target.value)} style={inputStyle}/>
+              <input type="number" value={valorBase} onChange={e=>setValorBase(e.target.value)}
+                disabled={!deduzIva} style={{...inputStyle,...(deduzIva?{}:{color:"#bbb",background:"#fafafa"})}}/>
             </div>
             <div style={fieldWrap}>
               <label style={labelStyle}>IVA</label>
-              <input type="number" value={valorIva} onChange={e=>setValorIva(e.target.value)} style={inputStyle}/>
+              <input type="number" value={valorIva} onChange={e=>setValorIva(e.target.value)}
+                disabled={!deduzIva} style={{...inputStyle,...(deduzIva?{}:{color:"#bbb",background:"#fafafa"})}}/>
             </div>
             <div style={{height:1,background:"#f0f0f0",margin:"4px 0"}}/>
             <div style={fieldWrap}>
               <label style={{...labelStyle,color:"#1a1a2e",fontWeight:700}}>Total a Pagar *</label>
-              <input type="number" value={valorTotal} onChange={e=>setValorTotal(e.target.value)} style={{...inputStyle,fontWeight:700,fontSize:15}}/>
+              <input type="number" value={valorTotal} style={{...inputStyle,fontWeight:700,fontSize:15}}
+                onChange={e=>{
+                  const v = e.target.value;
+                  setValorTotal(v);
+                  // O total manda: se há taxa escolhida, base e IVA seguem-no.
+                  const tot = parseFloat(v), tx = parseFloat(taxaIva);
+                  if (deduzIva && tot > 0 && Number.isFinite(tx)) {
+                    const d = decomporPorTaxa(tot, tx);
+                    setValorBase(String(d.base));
+                    setValorIva(String(d.iva));
+                  }
+                }}/>
             </div>
+            {deduzIva && (() => {
+              // Base + IVA tem de dar o total. Quando não dá, quase sempre é a
+              // IA a ler mal uma das três — vale a pena dizer antes de gravar.
+              const b = parseFloat(valorBase), i = parseFloat(valorIva), t = parseFloat(valorTotal);
+              if (!(t > 0) || !Number.isFinite(b) || !Number.isFinite(i)) return null;
+              const dif = Math.round((b + i - t) * 100) / 100;
+              if (Math.abs(dif) <= 0.02) return null;
+              return (
+                <div style={{background:"#fffbeb",border:"1px solid #fde68a",borderRadius:9,
+                             padding:"9px 12px",fontSize:11,color:"#92400e",lineHeight:1.5}}>
+                  Base + IVA dá {fmt(b+i)}, mas o total é {fmt(t)} ({dif>0?"+":""}{fmt(dif)}).
+                  Confere os três valores — ou carrega outra vez na taxa para os recalcular a partir do total.
+                </div>
+              );
+            })()}
             {valorTotal&&(
               <div style={{background:"#f8f9fc",borderRadius:10,padding:"10px 14px",textAlign:"center"}}>
                 <div style={{fontSize:10,color:"#aaa",fontFamily:"monospace",marginBottom:3}}>TOTAL</div>

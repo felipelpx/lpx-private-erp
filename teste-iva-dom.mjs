@@ -21,15 +21,22 @@ export default supabase;
 writeFileSync(join(dir, "stub-hooks.js"), `
 const DOCS = [
   { tipo:"fornecedor", id:"f1", empresa:"adseq", documento:"FT 2026/1", entidade:"Construtora Alfa",
-    data_fatura:"2026-09-28", valor_base:1000, valor_iva:230, taxa_iva:23, iva_estimado:false, estado:"Pendente em dia" },
+    data_fatura:"2026-09-28", valor_base:1000, valor_iva:230, valor_total:1230, taxa_iva:23, iva_estimado:false, iva_dedutivel:true, estado:"Pendente em dia" },
   { tipo:"cliente", id:"r1", empresa:"adseq", documento:"FR 2026/1", entidade:"Cliente Beta",
-    data_fatura:"2026-09-20", valor_base:3000, valor_iva:690, taxa_iva:23, iva_estimado:false, estado:"Previsto" },
+    data_fatura:"2026-09-20", valor_base:3000, valor_iva:690, valor_total:3690, taxa_iva:23, iva_estimado:false, iva_dedutivel:true, estado:"Previsto" },
   { tipo:"fornecedor", id:"f2", empresa:"adseq", documento:"FT 2026/7", entidade:"Velha SA",
-    data_fatura:"2026-05-10", valor_base:813.01, valor_iva:186.99, taxa_iva:23, iva_estimado:true, estado:"Pago" },
+    data_fatura:"2026-05-10", valor_base:813.01, valor_iva:186.99, valor_total:1000, taxa_iva:23, iva_estimado:true, iva_dedutivel:true, estado:"Pago" },
+  { tipo:"fornecedor", id:"f3", empresa:"adseq", documento:"IMI 2026", entidade:"Autoridade Tributaria",
+    data_fatura:"2026-09-11", valor_base:81.30, valor_iva:18.70, valor_total:100, taxa_iva:23, iva_estimado:true, iva_dedutivel:false, estado:"Pago" },
   { tipo:"fornecedor", id:"f9", empresa:"infinite", documento:"FT 2026/88", entidade:"Outra Empresa",
-    data_fatura:"2026-09-15", valor_base:5000, valor_iva:1150, taxa_iva:23, iva_estimado:false, estado:"Pago" },
+    data_fatura:"2026-09-15", valor_base:5000, valor_iva:1150, valor_total:6150, taxa_iva:23, iva_estimado:false, iva_dedutivel:true, estado:"Pago" },
 ];
-const RES = Object.freeze({ documentos: DOCS, loading:false, error:null, reload:()=>{} });
+globalThis.__gravados = [];
+const RES = Object.freeze({ documentos: DOCS, loading:false, error:null, reload:()=>{},
+  guardarDocumento: async (doc, campos) => {
+    globalThis.__gravados.push({ id: doc.id, tipo: doc.tipo, campos });
+    return { data: [{}], error: null };
+  } });
 const PAG = Object.freeze({ pagamentos: [], loading:false, error:null, reload:()=>{},
   marcarPago: async()=>({error:null}), anularPagamento: async()=>({error:null}) });
 export const useIvaDocumentos = () => RES;
@@ -166,7 +173,7 @@ const base = { currentUser: gestor, empresasVisiveis: emp };
   const tabelas = [...host.querySelectorAll("table")];
   const ultima = tabelas[tabelas.length - 1];
   const linhas = [...ultima.querySelectorAll("tbody tr")].map(txt);
-  ok(linhas.length === 3, \`só as 3 faturas de fornecedor (\${linhas.length})\`);
+  ok(linhas.length === 4, \`as 4 faturas de fornecedor, a não dedutível incluída (\${linhas.length})\`);
   ok(!linhas.some(l => /Cliente Beta/.test(l)), "nenhuma fatura a cliente");
 }
 
@@ -185,6 +192,94 @@ const base = { currentUser: gestor, empresasVisiveis: emp };
   const campos = modal ? [...modal.querySelectorAll("input")] : [];
   ok(campos.length >= 2, "com valor e data");
   ok(campos[0] && numero(campos[0].value) > 0, "o valor vem preenchido com o apurado");
+}
+
+// ── Faturas que não deduzem IVA ────────────────────────────────────────────
+{
+  const host = await monta(base);
+  const t = txt(host);
+  // A fatura da AT (18,70 € de IVA) está na lista mas NÃO entra no abater:
+  // 230 + 186,99 + 1 150 = 1 566,99, sem os 18,70.
+  ok(/1\.566,99/.test(t), "a fatura não dedutível não entra no IVA a abater");
+  ok(/Autoridade Tributaria/.test(t), "mas continua visível na lista");
+  ok(/não deduz/.test(t), "com a marca 'não deduz'");
+  ok(/fora do apuramento/.test(t), "e um aviso a dizer quanto IVA ficou de fora");
+  ok(/18,70/.test(t), "com o valor do IVA não deduzido");
+
+  // O aviso de IVA calculado conta a f2 estimada, mas não a não dedutível
+  ok(/1 documento com IVA calculado/.test(t),
+     "o aviso de IVA calculado ignora as não dedutíveis");
+
+  const repor = [...host.querySelectorAll("button")].filter(b => txt(b) === "repor");
+  ok(repor.length >= 1, "a linha não dedutível oferece 'repor'");
+  globalThis.__gravados.length = 0;
+  await clica(repor[0]);
+  ok(globalThis.__gravados.length === 1, "repor grava uma alteração");
+  ok(globalThis.__gravados[0].id === "f3", "na fatura certa");
+  ok(globalThis.__gravados[0].campos.iva_dedutivel === true, "a repor a dedução");
+}
+
+// ── Tirar uma fatura do apuramento ─────────────────────────────────────────
+{
+  const host = await monta(base);
+  const bts = [...host.querySelectorAll("button")].filter(b => txt(b) === "não deduz");
+  ok(bts.length >= 3, "as faturas de fornecedor oferecem 'não deduz'");\n  const semIva = [...host.querySelectorAll("button")].filter(b => txt(b) === "sem IVA");\n  ok(semIva.length >= 1, "a fatura a cliente diz 'sem IVA', não 'não deduz'");
+  globalThis.__gravados.length = 0;
+  await clica(bts[0]);
+  ok(globalThis.__gravados.length === 1, "grava uma alteração");
+  ok(globalThis.__gravados[0].campos.iva_dedutivel === false, "a tirar do apuramento");
+  ok(!("valor_iva" in globalThis.__gravados[0].campos),
+     "sem mexer no IVA da fatura — para se poder repor");
+}
+
+// ── Corrigir a taxa ────────────────────────────────────────────────────────
+{
+  const host = await monta(base);
+  const bts = [...host.querySelectorAll("button")].filter(b => txt(b) === "taxa");
+  ok(bts.length >= 4, "todas as linhas oferecem corrigir a taxa");
+
+  // A f2 (Velha SA) tem total 1 000 e IVA estimado a 23%
+  const detalhe = [...host.querySelectorAll("tr")].find(tr => /Velha SA/.test(txt(tr)));
+  const btTaxa = detalhe ? [...detalhe.querySelectorAll("button")].find(b => txt(b) === "taxa") : null;
+  ok(!!btTaxa, "encontra o botão na linha da Velha SA");
+  await clica(btTaxa);
+
+  const modal = [...document.querySelectorAll("div")].find(d => /Taxa de IVA/.test(txt(d)));
+  ok(!!modal, "abre a caixa da taxa");
+  const tm = txt(modal);
+  ok(/1\.000,00/.test(tm), "mostra o total do documento (1 000 €)");
+  ok(/23%/.test(tm) && /13%/.test(tm) && /6%/.test(tm) && /0%/.test(tm), "oferece as quatro taxas");
+  ok(/813,01/.test(tm) && /186,99/.test(tm), "pré-visualiza a decomposição à taxa atual");
+
+  const b6 = [...modal.querySelectorAll("button")].find(b => /^6%/.test(txt(b)));
+  ok(!!b6, "tem o botão dos 6%");
+  await clica(b6);
+  const tm6 = txt([...document.querySelectorAll("div")].find(d => /Taxa de IVA/.test(txt(d))));
+  ok(/943,40/.test(tm6), "a 6%, a base passa a 943,40 €");
+  ok(/56,60/.test(tm6), "e o IVA a 56,60 €");
+
+  globalThis.__gravados.length = 0;
+  const guardar = [...document.querySelectorAll("button")].find(b => /Guardar taxa/.test(txt(b)));
+  ok(!!guardar, "tem botão de guardar");
+  await clica(guardar);
+  const g = globalThis.__gravados[0];
+  ok(globalThis.__gravados.length === 1, "grava uma vez");
+  ok(g && g.id === "f2", "na fatura certa");
+  ok(g && g.campos.taxa_iva === 6, "com a taxa escolhida");
+  ok(g && Math.abs(g.campos.valor_base - 943.40) < 0.005, "base recalculada do total");
+  ok(g && Math.abs(g.campos.valor_iva - 56.60) < 0.005, "IVA recalculado do total");
+  ok(g && g.campos.iva_estimado === false, "deixa de ser estimativa: alguém confirmou");
+  ok(Math.abs(g.campos.valor_base + g.campos.valor_iva - 1000) < 0.005,
+     "base + IVA continua a dar o total do documento");
+}
+
+// ── O viewer não corrige nada ──────────────────────────────────────────────
+{
+  const host = await monta({ ...base, currentUser: viewer });
+  const bts = [...host.querySelectorAll("button")].map(txt);
+  ok(!bts.includes("taxa"), "o viewer não pode corrigir a taxa");
+  ok(!bts.includes("não deduz"), "nem tirar faturas do apuramento");
+  ok(/Autoridade Tributaria/.test(txt(host)), "mas vê a lista toda à mesma");
 }
 
 // ── Um viewer não regista pagamentos ───────────────────────────────────────
