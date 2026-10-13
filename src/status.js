@@ -20,11 +20,11 @@ const LEGADO = {
 };
 
 export const STATUS_STYLES = {
-  "Pagamento bloqueado": { bg: "#fdf4ff", text: "#9333ea", border: "#e9d5ff" },
-  "Pendente atrasado":   { bg: "#fef2f2", text: "#dc2626", border: "#fecaca" },
-  "Pendente em dia":     { bg: "#fffbeb", text: "#d97706", border: "#fde68a" },
-  "Lançado no banco":    { bg: "#eff6ff", text: "#2563eb", border: "#bfdbfe" },
-  "Pago":                { bg: "#f0fdf4", text: "#16a34a", border: "#bbf7d0" },
+  "Pagamento bloqueado": { bg: "#fdf4ff", text: "#5A4A7A", border: "#e9d5ff" },
+  "Pendente atrasado":   { bg: "#FBEDEB", text: "#A93226", border: "#EFCFC9" },
+  "Pendente em dia":     { bg: "#FBF6EC", text: "#A8762F", border: "#E3CE9F" },
+  "Lançado no banco":    { bg: "#EDF1F5", text: "#1F3A52", border: "#CBDAE5" },
+  "Pago":                { bg: "#EFF5F1", text: "#1F7A54", border: "#C9E3D5" },
 };
 
 const hojeISO = () => {

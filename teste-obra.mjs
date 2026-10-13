@@ -6,6 +6,7 @@ import {
   planearObra, mesesEntre, somarMeses, diferencaMeses, gastoEmObra,
   compararPrazos, categoriasDoMotor, classificacaoDe, temObra, rotuloMes,
   sugerirAvenca, planoDesatualizado, planearAplicacao, repartir,
+  obraRealizada, fundingLibertado,
 } from "./src/obra.js";
 
 let mau = 0;
@@ -50,7 +51,7 @@ console.log("\nObra: o que falta, espalhado pelos meses que faltam");
 const base = {
   empresa: "favcloset", data_inicio: "2026-06-01", data_fim: "2027-03-31",
   budget_obra: 1000000, taxa_iva_obra: 23,
-  fiscalizacao_mensal: 1476, cso_mensal: 500, comissao_avaliacao: 300,
+  fiscalizacao_mensal: 1476, cso_mensal: 500, taxa_iva_servicos: 23, comissao_avaliacao: 300,
   euribor: 2.5, spread: 2.0, funding_pct: 70, divida_inicial: 400000,
   recuperar_iva: true,
 };
@@ -82,9 +83,9 @@ console.log("\nAvenças: fixas por mês, tantos meses quanto a obra durar");
 {
   const { linhas } = planearObra(base, opts);
   ok(linhas.filter(l => l.plano_tipo === "fiscalizacao").length === 6, "6 meses de fiscalização");
-  ok(perto(soma(linhas, "fiscalizacao"), 6 * 1476), "1 476 €/mês × 6");
+  ok(perto(soma(linhas, "fiscalizacao"), 6 * 1476 * 1.23), "1 476 €/mês + IVA × 6");
   ok(linhas.filter(l => l.plano_tipo === "cso").length === 6, "6 meses de CSO");
-  ok(perto(soma(linhas, "cso"), 3000), "500 €/mês × 6");
+  ok(perto(soma(linhas, "cso"), 6 * 500 * 1.23), "500 €/mês + IVA × 6");
   ok(linhas.filter(l => l.plano_tipo === "fiscalizacao").every(l => l.funding === false),
      "as avenças não são financiadas pelo banco");
 }
@@ -181,8 +182,8 @@ console.log("\nEsticar o prazo piora o projeto (o ponto todo do exercício):");
   ok(c.mesesAMais === 3, "três meses a mais");
   ok(perto(c.diferencas.obra, 0), "a obra total NÃO muda: o mesmo budget, mais diluído");
   ok(perto(c.diferencas.iva_obra, 0, 0.05), "nem o IVA, que é 23% da mesma base");
-  ok(perto(c.diferencas.fiscalizacao, 3 * 1476), "mas paga-se fiscalização mais 3 meses");
-  ok(perto(c.diferencas.cso, 1500), "e CSO mais 3 meses");
+  ok(perto(c.diferencas.fiscalizacao, 3 * 1476 * 1.23), "mas paga-se fiscalização mais 3 meses, com IVA");
+  ok(perto(c.diferencas.cso, 3 * 500 * 1.23), "e CSO mais 3 meses, com IVA");
   ok(perto(c.diferencas.comissao, 900), "e mais 3 avaliações");
   ok(c.diferencas.juros > 0, "e mais juros");
   ok(c.custoAMais > 0, `o projeto fica ${Math.round(c.custoAMais)} € pior`);
@@ -401,6 +402,99 @@ console.log("\nRepartir sem perder cêntimos:");
       ok(Math.abs(soma(r.linhas, "obra") - 600000) < 0.005,
          `${r.resumo.meses} meses: a obra soma 600 000,00 € ao cêntimo`);
   });
+}
+
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Avenças com IVA
+// ─────────────────────────────────────────────────────────────────────────────
+console.log("\nFiscalização e CSO levam IVA (não há inversão nestes serviços):");
+{
+  const { linhas } = planearObra(base, opts);
+  const fisc = linhas.filter(l => l.plano_tipo === "fiscalizacao");
+  const cso  = linhas.filter(l => l.plano_tipo === "cso");
+  ok(perto(fisc[0].valor, 1476 * 1.23), `1 476 € + 23% = 1 815,48 € (deu ${fisc[0].valor})`);
+  ok(perto(fisc[0].base, 1476), "a avença fica registada como base");
+  ok(perto(fisc[0].iva, 339.48), "e o IVA à parte, na mesma linha");
+  ok(perto(cso[0].valor, 500 * 1.23), "o CSO também: 500 € + 23% = 615 €");
+  ok(perto(soma(linhas, "fiscalizacao"), 6 * 1815.48), "seis meses de fiscalização com IVA");
+
+  const a6 = planearObra({ ...base, taxa_iva_servicos: 6 }, opts);
+  ok(perto(a6.linhas.find(l => l.plano_tipo === "fiscalizacao").valor, 1476 * 1.06),
+     "a taxa dos serviços é independente da taxa da obra");
+  const sem = planearObra({ ...base, taxa_iva_servicos: 0 }, opts);
+  ok(perto(sem.linhas.find(l => l.plano_tipo === "fiscalizacao").valor, 1476),
+     "a 0% volta a ser a avença limpa");
+  // O IVA dos serviços NÃO entra no apuramento trimestral: é pago com a fatura
+  ok(perto(soma(linhas, "iva_obra"), 0.23 * soma(linhas, "obra")),
+     "o IVA do dia 25 continua a ser só o da empreitada");
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// O que o ERP já sabe de uma obra a decorrer
+// ─────────────────────────────────────────────────────────────────────────────
+console.log("\nObra já iniciada: o sistema vai buscar em vez de perguntar");
+{
+  const faturas = [
+    { empresa:"favcloset", categoria:"Obra", valor_base:100000, valor:123000, status:"Paga",     data_fatura:"2026-07-15" },
+    { empresa:"favcloset", categoria:"obra", valor_base:150000, valor:184500, status:"Paga",     data_fatura:"2026-08-15" },
+    { empresa:"favcloset", categoria:"Obra", valor_base: 80000, valor: 98400, status:"Pendente", data_fatura:"2026-09-15" },
+    { empresa:"favcloset", categoria:"Obra", valor_base: 50000, valor: 61500, status:"Anulada",  data_fatura:"2026-09-20" },
+    { empresa:"favcloset", categoria:"Salários", valor_base:9000, valor:9000, status:"Paga",     data_fatura:"2026-07-01" },
+    { empresa:"simplify",  categoria:"Obra", valor_base:999999, valor:999999, status:"Paga",     data_fatura:"2026-06-01" },
+  ];
+  const movimentos = [
+    { data:"2026-07-20", categoria:"Obra",          valor:-123000 },
+    { data:"2026-08-20", categoria:"obra",          valor:-184500 },
+    { data:"2026-07-05", categoria:"Funding banco", valor: 250000 },
+    { data:"2026-08-05", categoria:"Funding banco", valor: 150000 },
+    { data:"2026-08-07", categoria:"Funding banco", valor: -5000 },   // devolução: não é libertação
+    { data:"2026-09-01", categoria:"Aporte SPV",    valor: 80000 },   // não é funding
+  ];
+  const r = obraRealizada(movimentos, faturas, { empresa:"favcloset", categorias:["Obra"], taxaIva:23 });
+  ok(perto(r.faturado, 330000), `incorrido = 100k + 150k + 80k = 330 000 € (deu ${r.faturado})`);
+  ok(perto(r.faturadoPago, 250000), "já pago em faturas = 250 000 €");
+  ok(perto(r.porPagar, 80000), "por pagar = 80 000 €");
+  ok(perto(r.pagoExtrato, 307500), "saiu da conta 307 500 € (com IVA, como no extrato)");
+  ok(r.primeiroGasto === "2026-07-15", "o primeiro gasto de obra é de 15/07/2026");
+  ok(r.nFaturas === 3, "três faturas de obra válidas");
+  ok(r.jaIncorrido === r.faturado, "o budget é consumido pelo incorrido, não pelo pago");
+
+  // categoria alheia e outra empresa ficam de fora
+  ok(!perto(r.faturado, 339000), "Salários não conta");
+  ok(r.faturado < 999999, "e a obra da simplify não entra aqui");
+
+  const f = fundingLibertado(movimentos, { categorias:["Funding banco"] });
+  ok(perto(f.total, 400000), `o banco já libertou 400 000 € (deu ${f.total})`);
+  ok(f.n === 2, "duas libertações");
+  ok(f.ultimo === "2026-08-05", "a última a 05/08/2026");
+
+  // Sem extrato nenhum continua a funcionar pelas faturas
+  const semExtrato = obraRealizada([], faturas, { empresa:"favcloset", categorias:["Obra"] });
+  ok(perto(semExtrato.faturado, 330000), "sem extrato, o incorrido sai à mesma das faturas");
+  ok(semExtrato.pagoExtrato === 0, "e o pago fica a zero");
+  ok(semExtrato.primeiroGasto === "2026-07-15", "a data de início também");
+  ok(fundingLibertado([], { categorias:["Funding banco"] }).total === 0, "sem extrato não há funding");
+  ok(obraRealizada(null, null, {}).faturado === 0, "nulos não rebentam");
+
+  // Uma obra já iniciada entra no plano com o budget certo
+  const plano = planearObra({ ...base, budget_obra: 1000000, data_inicio: r.primeiroGasto },
+                            { gastoObra: r.jaIncorrido, hoje:"2026-10-12", grupo:"LPX" });
+  ok(perto(plano.resumo.gasto, 330000), "o plano arranca com 330 000 € já incorridos");
+  ok(perto(plano.resumo.porGastar, 670000), "e 670 000 € por gastar");
+}
+
+console.log("\nHDG: o funding tem subcategoria própria");
+{
+  const movs = [
+    { data:"2026-07-05", categoria:"Financiamento", subcategoria:"Inflow - Obra",    valor: 200000 },
+    { data:"2026-07-06", categoria:"Financiamento", subcategoria:"Inflow - Terreno", valor: 500000 },
+    { data:"2026-07-07", categoria:"Financiamento", subcategoria:"Outflow - Juros",  valor: -1000 },
+  ];
+  const so = fundingLibertado(movs, { categorias:["Financiamento"], subcategorias:["Inflow - Obra"] });
+  ok(perto(so.total, 200000), "só o Inflow - Obra conta quando se filtra por subcategoria");
+  const tudo = fundingLibertado(movs, { categorias:["Financiamento"] });
+  ok(perto(tudo.total, 700000), "sem filtro de subcategoria, conta todo o financiamento entrado");
 }
 
 console.log(mau === 0 ? "\n✅ Plano de obra OK" : `\n❌ ${mau} falha(s)`);

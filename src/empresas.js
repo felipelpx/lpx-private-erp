@@ -37,8 +37,8 @@ const DEF = [
 // Cada empresa pertence a um grupo. Para acrescentar um grupo novo basta usar
 // outro valor em `grupo` acima e registá-lo em GRUPOS_INFO.
 export const GRUPOS_INFO = {
-  LPX: { nome: "LPX",  descricao: "Grupo LPX",             cor: "#1a1a2e" },
-  HDG: { nome: "HDG",  descricao: "Grupo HDG",             cor: "#4a6fa5" },
+  LPX: { nome: "LPX",  descricao: "Grupo LPX",             cor: "#091C2A" },
+  HDG: { nome: "HDG",  descricao: "Grupo HDG",             cor: "#2C4A63" },
 };
 
 // Lista de grupos existentes, pela ordem em que aparecem em DEF
@@ -50,7 +50,7 @@ export const nomeCompleto = (e) => e.projeto ? `${e.nome} (${e.projeto})` : e.no
 // Agrupa uma lista de empresas por grupo, preservando a ordem de GRUPOS.
 export const agruparPorGrupo = (empresas) =>
   GRUPOS
-    .map((g) => ({ grupo: g, info: GRUPOS_INFO[g] || { nome: g, cor: "#888" },
+    .map((g) => ({ grupo: g, info: GRUPOS_INFO[g] || { nome: g, cor: "#7E8388" },
                    empresas: empresas.filter((e) => e.grupo === g) }))
     .filter((bloco) => bloco.empresas.length > 0);
 

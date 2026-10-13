@@ -1,0 +1,147 @@
+/* ─────────────────────────────────────────────────────────────────────────────
+   LPX PRIVATE — base visual
+   Identidade: navy #091C2A · ouro #BAA685 · creme #FCF3EB · grafite #23292D
+   Títulos em Zalando Sans SemiExpanded, texto em Inter, ambos leves.
+   ───────────────────────────────────────────────────────────────────────────── */
+
+/* O Inter é carregado no index.html, com <link>: um @import aqui obrigaria
+   o browser a ler esta folha primeiro e só depois ir buscar a fonte. */
+
+/* Zalando Sans SemiExpanded — variável, 200 a 900 */
+@font-face {
+  font-family: "Zalando Sans SemiExpanded";
+  font-style: normal;
+  font-display: swap;
+  font-weight: 200 900;
+  src: url(https://cdn.jsdelivr.net/fontsource/fonts/zalando-sans-semiexpanded:vf@5.3.0/latin-wght-normal.woff2) format("woff2-variations");
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA,
+                 U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122,
+                 U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
+:root {
+  /* Tipos. Se o CDN não responder, a cascata segura a leitura. */
+  --fonte-titulo: "Zalando Sans SemiExpanded", "Inter", "Helvetica Neue", Arial, sans-serif;
+  --fonte-texto:  "Inter", "Helvetica Neue", Arial, sans-serif;
+  --fonte-numero: "Inter", "Helvetica Neue", Arial, sans-serif;
+
+  /* Paleta — espelha src/brand.js */
+  --navy: #091C2A;
+  --ouro: #BAA685;
+  --creme: #FCF3EB;
+  --grafite: #23292D;
+
+  --papel: #FFFFFF;
+  --fundo: #F6F0E8;
+  --linha: #E7DED2;
+
+  --texto: #23292D;
+  --texto-suave: #6E7378;
+  --texto-tenue: #9DA2A6;
+
+  color-scheme: light;
+}
+
+html { transition: background-color 0.2s; }
+
+body {
+  margin: 0;
+  background: var(--fundo);
+  color: var(--texto);
+  font-family: var(--fonte-texto);
+  font-weight: 400;
+  font-size: 14px;
+  line-height: 1.55;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+}
+
+/* Algarismos tabulares em toda a app: numa coluna de valores, os dígitos têm
+   de alinhar. É isto que faz uma tabela de números parecer um mapa financeiro
+   e não uma folha de texto. */
+body, input, select, textarea, button, table {
+  font-feature-settings: "tnum" 1, "cv05" 1;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Títulos: leves e com um pouco de ar entre as letras, como no manual. */
+h1, h2, h3, h4 {
+  font-family: var(--fonte-titulo);
+  font-weight: 300;
+  letter-spacing: -0.01em;
+  color: var(--navy);
+  margin: 0;
+}
+
+/* Os formulários herdam a fonte da app — por omissão o browser mete a sua. */
+input, select, textarea, button { font-family: inherit; font-size: inherit; }
+
+input, select, textarea {
+  color: var(--texto);
+  transition: border-color 0.12s, box-shadow 0.12s, background-color 0.12s;
+}
+input:focus, select:focus, textarea:focus {
+  outline: none;
+  border-color: var(--ouro) !important;
+  box-shadow: 0 0 0 3px rgba(186, 166, 133, 0.18);
+}
+input::placeholder, textarea::placeholder { color: var(--texto-tenue); }
+
+button { transition: filter 0.12s, background-color 0.12s, border-color 0.12s, color 0.12s; }
+button:not(:disabled):hover { filter: brightness(0.97); }
+button:not(:disabled):active { filter: brightness(0.94); }
+button:focus-visible {
+  outline: 2px solid var(--ouro);
+  outline-offset: 2px;
+}
+
+a { color: var(--navy); text-decoration-color: var(--ouro); text-underline-offset: 2px; }
+
+/* Barra de deslocamento discreta, em tom quente. */
+* { scrollbar-width: thin; scrollbar-color: #D8CCBB transparent; }
+*::-webkit-scrollbar { width: 10px; height: 10px; }
+*::-webkit-scrollbar-track { background: transparent; }
+*::-webkit-scrollbar-thumb {
+  background: #E0D5C6; border-radius: 999px; border: 3px solid transparent;
+  background-clip: content-box;
+}
+*::-webkit-scrollbar-thumb:hover { background: #CDBEA9; background-clip: content-box; }
+
+/* Seleção de texto no tom da marca. */
+::selection { background: rgba(186, 166, 133, 0.28); color: var(--navy); }
+
+/* Linhas de tabela: realce quente ao passar, sem sombras nem bordas grossas. */
+tbody tr { transition: background-color 0.1s; }
+
+/* ── Tema escuro ──────────────────────────────────────────────────────────── */
+html[data-theme="dark"] { color-scheme: dark; }
+html[data-theme="dark"] body { background: #071320 !important; }
+html[data-theme="dark"] #root { filter: invert(0.92) hue-rotate(180deg); }
+html[data-theme="dark"] #root img,
+html[data-theme="dark"] #root iframe,
+html[data-theme="dark"] #root video,
+html[data-theme="dark"] #root canvas,
+html[data-theme="dark"] #root svg image { filter: invert(1) hue-rotate(180deg); }
+#root { transition: filter 0.2s; }
+
+/* ── Mobile ───────────────────────────────────────────────────────────────── */
+@media (max-width: 768px) {
+  body { font-size: 13px; }
+  table { font-size: 11px !important; }
+  #root > div { padding: 10px !important; }
+  div[style*="grid-template-columns: repeat(5"],
+  div[style*="grid-template-columns: repeat(4"],
+  div[style*="grid-template-columns: repeat(3"] {
+    grid-template-columns: repeat(2, 1fr) !important;
+  }
+  nav, header { flex-wrap: wrap !important; }
+}
+
+.responsive-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+
+/* Impressão: tirar fundos, deixar o papel respirar. */
+@media print {
+  body { background: #fff; }
+  button, nav { display: none !important; }
+}

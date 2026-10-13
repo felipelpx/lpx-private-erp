@@ -72,10 +72,10 @@ export function fimDoTrimestre(ano, tri) {
 }
 
 export const ESTADOS_TRIMESTRE = {
-  curso:      { txt: "Em curso",  cor: "#64748b", fundo: "#f1f5f9" },
-  aberto:     { txt: "Em aberto", cor: "#b45309", fundo: "#fef3c7" },
-  vencido:    { txt: "Vencido",   cor: "#dc2626", fundo: "#fee2e2" },
-  pago:       { txt: "Pago",      cor: "#15803d", fundo: "#f0fdf4" },
+  curso:      { txt: "Em curso",  cor: "#6E7378", fundo: "#F2EDE5" },
+  aberto:     { txt: "Em aberto", cor: "#96702A", fundo: "#F6ECD6" },
+  vencido:    { txt: "Vencido",   cor: "#A93226", fundo: "#F6DED9" },
+  pago:       { txt: "Pago",      cor: "#1B6A49", fundo: "#EFF5F1" },
 };
 
 // Estado de um trimestre. `hoje` injetável para os testes não dependerem do dia.

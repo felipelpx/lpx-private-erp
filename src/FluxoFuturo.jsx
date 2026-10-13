@@ -52,8 +52,8 @@ function BotaoFunding({ fonte, onAlternar, onPct }) {
           onChange={e => setRascunho(e.target.value)}
           onBlur={confirma}
           onKeyDown={e => { if (e.key === "Enter") confirma(); if (e.key === "Escape") setAEditar(false); }}
-          style={{ width: 46, border: "1px solid #86efac", borderRadius: 5, padding: "2px 4px", fontSize: 10, fontFamily: "monospace" }} />
-        <span style={{ fontSize: 10, color: "#16a34a" }}>%</span>
+          style={{ width: 46, border: "1px solid #7FBE9C", borderRadius: 5, padding: "2px 4px", fontSize: 10, fontFamily: "var(--fonte-numero)" }} />
+        <span style={{ fontSize: 10, color: "#1F7A54" }}>%</span>
       </span>
     );
   }
@@ -65,9 +65,9 @@ function BotaoFunding({ fonte, onAlternar, onPct }) {
           ? "Despesa financiada pelo banco: o banco liberta o valor e a saída fica neutralizada no caixa. Clica para desligar."
           : "Marcar como financiada pelo banco — o fluxo passa a gerar a entrada correspondente"}
         style={{
-          background: ligado ? "#dcfce7" : "transparent",
-          border: ligado ? "none" : "1px solid #e8e8e8",
-          color: ligado ? "#15803d" : "#c0c4cc",
+          background: ligado ? "#E2EFE8" : "transparent",
+          border: ligado ? "none" : "1px solid #E3D9CC",
+          color: ligado ? "#1B6A49" : "#c0c4cc",
           padding: "3px 8px", borderRadius: ligado ? "5px 0 0 5px" : 5,
           fontSize: 10, cursor: "pointer", fontWeight: 700, marginLeft: 4, whiteSpace: "nowrap",
         }}>
@@ -76,8 +76,8 @@ function BotaoFunding({ fonte, onAlternar, onPct }) {
       {ligado && (
         <button onClick={(e) => { e.stopPropagation(); setRascunho(String(pct)); setAEditar(true); }}
           title="Percentagem financiada pelo banco"
-          style={{ background: "#bbf7d0", border: "none", color: "#15803d", padding: "3px 7px",
-                   borderRadius: "0 5px 5px 0", fontSize: 10, cursor: "pointer", fontWeight: 700, fontFamily: "monospace" }}>
+          style={{ background: "#C9E3D5", border: "none", color: "#1B6A49", padding: "3px 7px",
+                   borderRadius: "0 5px 5px 0", fontSize: 10, cursor: "pointer", fontWeight: 700, fontFamily: "var(--fonte-numero)" }}>
           {pct}%
         </button>
       )}
@@ -154,6 +154,15 @@ export default function FluxoFuturo({ faturas: faturasTodas, faturasLoading, pag
   const planoDaEmpresa = (obraPlanos || []).find(p => p.empresa === empresa) || null;
   const grupoDaEmpresa = EMPRESAS_TODAS.find(e => e.id === empresa)?.grupo || "LPX";
   const nomeDaEmpresa = EMPRESAS_TODAS.find(e => e.id === empresa)?.nome || empresa;
+  // As contas deste projeto: é pelo extrato delas que o plano descobre o que
+  // já foi pago em obra e o funding que o banco já libertou.
+  const contasDaEmpresa = useMemo(() => {
+    if (empresa === "all") return [];
+    const base = (EMPRESAS && EMPRESAS.length > 0 ? EMPRESAS : EMPRESAS_FALLBACK);
+    const e = base.find(x => x.id === empresa);
+    const contas = (caixaUnico && caixaUnico[empresa]) || e?.contas || [];
+    return contas.map(c => c.id || c.conta_id).filter(Boolean);
+  }, [empresa, EMPRESAS, caixaUnico]);
 
   // Aplicar: apaga o que foi dito que ia apagar e cria as linhas novas. A
   // ordem importa — apagar primeiro, senão os ids determinísticos chocam com
@@ -852,14 +861,14 @@ export default function FluxoFuturo({ faturas: faturasTodas, faturasLoading, pag
   const maxAbs = Math.max(...mesesComSaldo.map(m => Math.max(m.entradas, m.saidas)), 1);
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 20, fontFamily: "'DM Sans', sans-serif" }}>
+    <div style={{ display: "flex", flexDirection: "column", gap: 20, fontFamily: "var(--fonte-titulo)" }}>
 
       {/* Banner de loading global — mostra enquanto algum hook ainda não terminou. */}
       {stillLoading && (
-        <div style={{ background: "linear-gradient(90deg, #fef3c7 0%, #fde68a 50%, #fef3c7 100%)", backgroundSize: "200% 100%", animation: "rio-shimmer 1.4s linear infinite", border: "1px solid #fcd34d", borderRadius: 10, padding: "10px 16px", display: "flex", alignItems: "center", gap: 10, fontSize: 12, color: "#92400e", fontWeight: 600 }}>
-          <div style={{ width: 14, height: 14, border: "2px solid #92400e", borderTopColor: "transparent", borderRadius: "50%", animation: "rio-spin 0.8s linear infinite" }} />
+        <div style={{ background: "linear-gradient(90deg, #F6ECD6 0%, #E3CE9F 50%, #F6ECD6 100%)", backgroundSize: "200% 100%", animation: "rio-shimmer 1.4s linear infinite", border: "1px solid #fcd34d", borderRadius: 10, padding: "10px 16px", display: "flex", alignItems: "center", gap: 10, fontSize: 12, color: "#7A5A22", fontWeight: 600 }}>
+          <div style={{ width: 14, height: 14, border: "2px solid #7A5A22", borderTopColor: "transparent", borderRadius: "50%", animation: "rio-spin 0.8s linear infinite" }} />
           A carregar dados do Supabase…
-          <span style={{ color: "#a16207", fontWeight: 400 }}>
+          <span style={{ color: "#8A6727", fontWeight: 400 }}>
             ({[pagamentosLoading && "pagamentos", faturasLoading && "faturas", vendasLoading && "vendas"].filter(Boolean).join(", ")})
           </span>
           <style>{`
@@ -874,7 +883,7 @@ export default function FluxoFuturo({ faturas: faturasTodas, faturasLoading, pag
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
           {EMPRESAS_CAIXA.map(e => (
             <button key={e.id} onClick={() => setEmpresa(e.id)}
-              style={{ background: empresa === e.id ? "#1a1a2e" : "#fff", color: empresa === e.id ? "#fff" : "#666", border: `1px solid ${empresa === e.id ? "#1a1a2e" : "#eee"}`, padding: "7px 14px", borderRadius: 8, fontSize: 12, cursor: "pointer", fontWeight: empresa === e.id ? 700 : 400 }}>
+              style={{ background: empresa === e.id ? "#091C2A" : "#fff", color: empresa === e.id ? "#fff" : "#5C6166", border: `1px solid ${empresa === e.id ? "#091C2A" : "#EFE8DE"}`, padding: "7px 14px", borderRadius: 8, fontSize: 12, cursor: "pointer", fontWeight: empresa === e.id ? 700 : 400 }}>
               {e.nome}
             </button>
           ))}
@@ -882,14 +891,14 @@ export default function FluxoFuturo({ faturas: faturasTodas, faturasLoading, pag
         <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
           {["mensal", "anual"].map(v => (
             <button key={v} onClick={() => setView(v)}
-              style={{ background: view === v ? "#1a1a2e" : "#f0f0f0", color: view === v ? "#fff" : "#666", border: "none", padding: "7px 16px", borderRadius: 8, fontSize: 12, cursor: "pointer" }}>
+              style={{ background: view === v ? "#091C2A" : "#E7DED2", color: view === v ? "#fff" : "#5C6166", border: "none", padding: "7px 16px", borderRadius: 8, fontSize: 12, cursor: "pointer" }}>
               {v === "mensal" ? "Mensal" : "Anual"}
             </button>
           ))}
           {isAdmin && (
             <button onClick={() => setAproximar(true)}
               title="Procurar faturas que correspondam às despesas previstas"
-              style={{ background: "#fef3c7", border: "1px solid #fde68a", color: "#b45309", padding: "7px 14px", borderRadius: 8, fontSize: 12, cursor: "pointer", fontWeight: 700 }}>
+              style={{ background: "#F6ECD6", border: "1px solid #E3CE9F", color: "#96702A", padding: "7px 14px", borderRadius: 8, fontSize: 12, cursor: "pointer", fontWeight: 700 }}>
               ⇄ Aproximar previsões a faturas
             </button>
           )}
@@ -899,12 +908,12 @@ export default function FluxoFuturo({ faturas: faturasTodas, faturasLoading, pag
               onAbrir={() => setPlanoAberto(true)} />
           )}
           {/* Real (com fatura) vs Previsto (estimativa lançada à mão) */}
-          <div style={{ display: "flex", gap: 2, background: "#f0f0f0", borderRadius: 8, padding: 2, marginLeft: 4 }}>
+          <div style={{ display: "flex", gap: 2, background: "#E7DED2", borderRadius: 8, padding: 2, marginLeft: 4 }}>
             {[["todos", "Tudo"], ["real", "Custo real"], ["previsto", "Forecast"]].map(([v, lbl]) => (
               <button key={v} onClick={() => setNatureza(v)}
                 title={v === "real" ? "Faturas emitidas e recebíveis contratados"
                   : v === "previsto" ? "Previsões lançadas à mão, ainda sem fatura" : "Tudo"}
-                style={{ background: natureza === v ? "#fff" : "transparent", color: natureza === v ? "#1a1a2e" : "#888", border: "none", padding: "5px 12px", borderRadius: 6, fontSize: 11, cursor: "pointer", fontWeight: natureza === v ? 700 : 400, boxShadow: natureza === v ? "0 1px 3px rgba(0,0,0,0.12)" : "none" }}>
+                style={{ background: natureza === v ? "#fff" : "transparent", color: natureza === v ? "#091C2A" : "#7E8388", border: "none", padding: "5px 12px", borderRadius: 6, fontSize: 11, cursor: "pointer", fontWeight: natureza === v ? 700 : 400, boxShadow: natureza === v ? "0 1px 3px rgba(0,0,0,0.12)" : "none" }}>
                 {lbl}
               </button>
             ))}
@@ -912,25 +921,25 @@ export default function FluxoFuturo({ faturas: faturasTodas, faturasLoading, pag
           {view === "mensal" && (
             <>
               <label title="Por defeito só aparecem os meses com lançamentos"
-                style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 11, color: "#888", cursor: "pointer" }}>
+                style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 11, color: "#7E8388", cursor: "pointer" }}>
                 <input type="checkbox" checked={mostrarVazios} onChange={e => setMostrarVazios(e.target.checked)} />
                 meses vazios
               </label>
-              <span style={{ fontSize: 11, color: "#888", marginLeft: 8 }}>De:</span>
+              <span style={{ fontSize: 11, color: "#7E8388", marginLeft: 8 }}>De:</span>
               <input type="month" value={dataInicio} onChange={e => setDataInicio(e.target.value)}
-                style={{ background: "#f0f0f0", border: "none", padding: "6px 8px", borderRadius: 8, fontSize: 11, fontFamily: "monospace", color: "#1a1a2e" }} />
-              <span style={{ fontSize: 11, color: "#888" }}>Até:</span>
+                style={{ background: "#E7DED2", border: "none", padding: "6px 8px", borderRadius: 8, fontSize: 11, fontFamily: "var(--fonte-numero)", color: "#091C2A" }} />
+              <span style={{ fontSize: 11, color: "#7E8388" }}>Até:</span>
               <input type="month" value={dataFim} onChange={e => setDataFim(e.target.value)}
-                style={{ background: "#f0f0f0", border: "none", padding: "6px 8px", borderRadius: 8, fontSize: 11, fontFamily: "monospace", color: "#1a1a2e" }} />
+                style={{ background: "#E7DED2", border: "none", padding: "6px 8px", borderRadius: 8, fontSize: 11, fontFamily: "var(--fonte-numero)", color: "#091C2A" }} />
               {(dataInicio || dataFim) && (
                 <button onClick={() => { setDataInicio(""); setDataFim(""); }}
                   title="Limpar filtros de data"
-                  style={{ background: "#fee2e2", color: "#dc2626", border: "none", padding: "4px 8px", borderRadius: 6, fontSize: 10, cursor: "pointer", fontWeight: 600 }}>✕</button>
+                  style={{ background: "#F6DED9", color: "#A93226", border: "none", padding: "4px 8px", borderRadius: 6, fontSize: 10, cursor: "pointer", fontWeight: 600 }}>✕</button>
               )}
             </>
           )}
           <button onClick={() => setShowForm(true)}
-            style={{ background: "#16a34a", color: "#fff", border: "none", padding: "7px 18px", borderRadius: 8, fontSize: 12, cursor: "pointer", fontWeight: 700 }}>
+            style={{ background:"#091C2A", color: "#fff", border: "none", padding: "7px 18px", borderRadius: 8, fontSize: 12, cursor: "pointer", fontWeight: 700 }}>
             + Pagamento / Recebimento
           </button>
         </div>
@@ -952,18 +961,18 @@ export default function FluxoFuturo({ faturas: faturasTodas, faturasLoading, pag
         return (
           <div style={{ display: "grid", gridTemplateColumns: "repeat(6, 1fr)", gap: 12 }}>
             {[
-              { label: "Caixa Atual", value: fmt(saldoAtual), color: saldoAtual >= 0 ? "#16a34a" : "#dc2626" },
-              { label: `Vencidas (${vencidas.items.length})`, value: vencidas.saidas > 0 ? fmtK(-vencidas.saidas) : "—", color: vencidas.saidas > 0 ? "#dc2626" : "#aaa", warn: vencidas.saidas > 0 },
-              { label: "Caixa Líquido", value: fmt(saldoLiquido), color: saldoLiquido >= 0 ? "#16a34a" : "#dc2626" },
-              { label: `Total Saídas (${labelPeriodo})`, value: fmtK(totalSaidasFiltrado), color: "#dc2626" },
+              { label: "Caixa Atual", value: fmt(saldoAtual), color: saldoAtual >= 0 ? "#1F7A54" : "#A93226" },
+              { label: `Vencidas (${vencidas.items.length})`, value: vencidas.saidas > 0 ? fmtK(-vencidas.saidas) : "—", color: vencidas.saidas > 0 ? "#A93226" : "#9DA2A6", warn: vencidas.saidas > 0 },
+              { label: "Caixa Líquido", value: fmt(saldoLiquido), color: saldoLiquido >= 0 ? "#1F7A54" : "#A93226" },
+              { label: `Total Saídas (${labelPeriodo})`, value: fmtK(totalSaidasFiltrado), color: "#A93226" },
               { label: "Financiado (banco)", value: totalFunding > 0 ? fmtK(totalFunding) : "—",
-                color: totalFunding > 0 ? "#0e7490" : "#aaa",
+                color: totalFunding > 0 ? "#2C4A63" : "#9DA2A6",
                 dica: "Entradas do banco geradas pelas despesas marcadas com 🏦 — neutralizam a saída no caixa do projeto" },
-              { label: filtroAtivo ? `Saldo no fim do período` : "Saldo Projetado (3a)", value: fmtK(saldoProjetado), color: saldoProjetado >= 0 ? "#16a34a" : "#dc2626" },
+              { label: filtroAtivo ? `Saldo no fim do período` : "Saldo Projetado (3a)", value: fmtK(saldoProjetado), color: saldoProjetado >= 0 ? "#1F7A54" : "#A93226" },
             ].map((k, i) => (
-              <div key={i} title={k.dica} style={{ background: "#fff", border: "1px solid #f0f0f0", borderRadius: 12, padding: "14px 18px", borderTop: `3px solid ${k.color}` }}>
-                <div style={{ fontSize: 10, color: "#aaa", textTransform: "uppercase", fontFamily: "monospace", letterSpacing: "0.07em", marginBottom: 5 }}>{k.label}</div>
-                <div style={{ fontSize: 17, fontWeight: 700, color: k.color, fontFamily: "monospace" }}>{k.value}</div>
+              <div key={i} title={k.dica} style={{ background: "#fff", border: "1px solid #E7DED2", borderRadius: 12, padding: "14px 18px", borderTop: `3px solid ${k.color}` }}>
+                <div style={{ fontSize: 10, color: "#9DA2A6", textTransform: "uppercase", fontFamily: "var(--fonte-numero)", letterSpacing: "0.07em", marginBottom: 5 }}>{k.label}</div>
+                <div style={{ fontSize: 17, fontWeight: 700, color: k.color, fontFamily: "var(--fonte-numero)" }}>{k.value}</div>
               </div>
             ))}
           </div>
@@ -976,20 +985,20 @@ export default function FluxoFuturo({ faturas: faturasTodas, faturasLoading, pag
           onClick={e => { if (e.target === e.currentTarget) setShowForm(false); }}>
           <div style={{ background: "#fff", borderRadius: 16, padding: 28, width: 820, maxWidth: "95vw", maxHeight: "92vh", overflowY: "auto", boxShadow: "0 20px 60px rgba(0,0,0,0.25)" }}>
             <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 16 }}>
-              <h2 style={{ margin: 0, fontSize: 18, fontFamily: "Georgia,serif", color: "#1a1a2e" }}>
+              <h2 style={{ margin: 0, fontSize: 18, fontFamily: "var(--fonte-titulo)", color: "#091C2A" }}>
                 {form.tipo === "entrada" ? "Recebimento Futuro" : "Pagamento Futuro"}
               </h2>
-              <button onClick={() => setShowForm(false)} style={{ background: "none", border: "none", fontSize: 20, cursor: "pointer", color: "#aaa" }}>✕</button>
+              <button onClick={() => setShowForm(false)} style={{ background: "none", border: "none", fontSize: 20, cursor: "pointer", color: "#9DA2A6" }}>✕</button>
             </div>
 
             {/* Toggle tipo (Saída / Entrada) */}
-            <div style={{ display: "flex", gap: 0, marginBottom: 16, background: "#f0f0f0", borderRadius: 10, padding: 4, width: "fit-content" }}>
+            <div style={{ display: "flex", gap: 0, marginBottom: 16, background: "#E7DED2", borderRadius: 10, padding: 4, width: "fit-content" }}>
               <button onClick={() => setForm(f => ({ ...f, tipo: "saida" }))}
-                style={{ background: form.tipo === "saida" ? "#dc2626" : "transparent", color: form.tipo === "saida" ? "#fff" : "#888", border: "none", padding: "8px 18px", borderRadius: 7, fontSize: 12, fontWeight: 700, cursor: "pointer" }}>
+                style={{ background: form.tipo === "saida" ? "#A93226" : "transparent", color: form.tipo === "saida" ? "#fff" : "#7E8388", border: "none", padding: "8px 18px", borderRadius: 7, fontSize: 12, fontWeight: 700, cursor: "pointer" }}>
                 ↗ Saída (Pagamento)
               </button>
               <button onClick={() => setForm(f => ({ ...f, tipo: "entrada" }))}
-                style={{ background: form.tipo === "entrada" ? "#16a34a" : "transparent", color: form.tipo === "entrada" ? "#fff" : "#888", border: "none", padding: "8px 18px", borderRadius: 7, fontSize: 12, fontWeight: 700, cursor: "pointer" }}>
+                style={{ background: form.tipo === "entrada" ? "#1F7A54" : "transparent", color: form.tipo === "entrada" ? "#fff" : "#7E8388", border: "none", padding: "8px 18px", borderRadius: 7, fontSize: 12, fontWeight: 700, cursor: "pointer" }}>
                 ↙ Entrada (Recebimento)
               </button>
             </div>
@@ -997,60 +1006,60 @@ export default function FluxoFuturo({ faturas: faturasTodas, faturasLoading, pag
             {/* Identificação */}
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12, marginBottom: 16 }}>
               <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-                <label style={{ fontSize: 10, color: "#aaa", fontFamily: "monospace", textTransform: "uppercase" }}>Descrição *</label>
+                <label style={{ fontSize: 10, color: "#9DA2A6", fontFamily: "var(--fonte-numero)", textTransform: "uppercase" }}>Descrição *</label>
                 <input type="text" value={form.descricao}
                   onChange={e => setForm(f => ({ ...f, descricao: e.target.value }))}
                   placeholder="ex: Empreitada cofragens"
-                  style={{ background: "#f8f8f8", border: "1px solid #eee", borderRadius: 8, padding: "9px 12px", fontSize: 13, outline: "none" }} />
+                  style={{ background: "#F9F5EF", border: "1px solid #EFE8DE", borderRadius: 8, padding: "9px 12px", fontSize: 13, outline: "none" }} />
               </div>
               <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-                <label style={{ fontSize: 10, color: "#aaa", fontFamily: "monospace", textTransform: "uppercase" }}>Empresa</label>
+                <label style={{ fontSize: 10, color: "#9DA2A6", fontFamily: "var(--fonte-numero)", textTransform: "uppercase" }}>Empresa</label>
                 <select value={form.empresa} onChange={e => setForm(f => ({ ...f, empresa: e.target.value }))}
-                  style={{ background: "#f8f8f8", border: "1px solid #eee", borderRadius: 8, padding: "9px 12px", fontSize: 13, outline: "none" }}>
+                  style={{ background: "#F9F5EF", border: "1px solid #EFE8DE", borderRadius: 8, padding: "9px 12px", fontSize: 13, outline: "none" }}>
                   {EMPRESAS_CAIXA.filter(e => e.id !== "all").map(e => <option key={e.id} value={e.id}>{e.nome}</option>)}
                 </select>
               </div>
               <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-                <label style={{ fontSize: 10, color: "#aaa", fontFamily: "monospace", textTransform: "uppercase" }}>Categoria</label>
+                <label style={{ fontSize: 10, color: "#9DA2A6", fontFamily: "var(--fonte-numero)", textTransform: "uppercase" }}>Categoria</label>
                 <select value={form.categoria} onChange={e => setForm(f => ({ ...f, categoria: e.target.value }))}
-                  style={{ background: "#f8f8f8", border: "1px solid #eee", borderRadius: 8, padding: "9px 12px", fontSize: 13, outline: "none" }}>
+                  style={{ background: "#F9F5EF", border: "1px solid #EFE8DE", borderRadius: 8, padding: "9px 12px", fontSize: 13, outline: "none" }}>
                   {CATEGORIAS.map(v => <option key={v}>{v}</option>)}
                 </select>
               </div>
               <div style={{ gridColumn: "1/-1", display: "flex", flexDirection: "column", gap: 4 }}>
-                <label style={{ fontSize: 10, color: "#aaa", fontFamily: "monospace", textTransform: "uppercase" }}>Observação geral (opcional)</label>
+                <label style={{ fontSize: 10, color: "#9DA2A6", fontFamily: "var(--fonte-numero)", textTransform: "uppercase" }}>Observação geral (opcional)</label>
                 <input type="text" value={form.obs}
                   onChange={e => setForm(f => ({ ...f, obs: e.target.value }))}
                   placeholder="Contexto deste pagamento (aplicado ao todo)"
-                  style={{ background: "#f8f8f8", border: "1px solid #eee", borderRadius: 8, padding: "9px 12px", fontSize: 13, outline: "none" }} />
+                  style={{ background: "#F9F5EF", border: "1px solid #EFE8DE", borderRadius: 8, padding: "9px 12px", fontSize: 13, outline: "none" }} />
               </div>
             </div>
 
             {/* Gerador automático */}
-            <div style={{ background: "#f8f9fc", borderRadius: 10, padding: 14, marginBottom: 14 }}>
-              <div style={{ fontSize: 11, color: "#666", fontFamily: "monospace", marginBottom: 10 }}>
+            <div style={{ background: "#FAF6F0", borderRadius: 10, padding: 14, marginBottom: 14 }}>
+              <div style={{ fontSize: 11, color: "#5C6166", fontFamily: "var(--fonte-numero)", marginBottom: 10 }}>
                 🪄 GERAR AUTOMATICAMENTE (depois edita cada linha à mão)
               </div>
               <div style={{ display: "flex", flexWrap: "wrap", alignItems: "flex-end", gap: 10 }}>
                 <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-                  <label style={{ fontSize: 10, color: "#aaa", fontFamily: "monospace" }}>Valor total (€)</label>
+                  <label style={{ fontSize: 10, color: "#9DA2A6", fontFamily: "var(--fonte-numero)" }}>Valor total (€)</label>
                   <input type="number" step="0.01" value={genValor} onChange={e => setGenValor(e.target.value)}
-                    style={{ background: "#fff", border: "1px solid #e8e8e8", borderRadius: 8, padding: "8px 10px", fontSize: 13, outline: "none", width: 140 }} />
+                    style={{ background: "#fff", border: "1px solid #E3D9CC", borderRadius: 8, padding: "8px 10px", fontSize: 13, outline: "none", width: 140 }} />
                 </div>
                 <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-                  <label style={{ fontSize: 10, color: "#aaa", fontFamily: "monospace" }}>1ª data</label>
+                  <label style={{ fontSize: 10, color: "#9DA2A6", fontFamily: "var(--fonte-numero)" }}>1ª data</label>
                   <input type="date" value={genData} onChange={e => setGenData(e.target.value)}
-                    style={{ background: "#fff", border: "1px solid #e8e8e8", borderRadius: 8, padding: "8px 10px", fontSize: 13, outline: "none" }} />
+                    style={{ background: "#fff", border: "1px solid #E3D9CC", borderRadius: 8, padding: "8px 10px", fontSize: 13, outline: "none" }} />
                 </div>
                 <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-                  <label style={{ fontSize: 10, color: "#aaa", fontFamily: "monospace" }}>Nº parcelas</label>
+                  <label style={{ fontSize: 10, color: "#9DA2A6", fontFamily: "var(--fonte-numero)" }}>Nº parcelas</label>
                   <input type="number" min={1} max={120} value={genN} onChange={e => setGenN(parseInt(e.target.value) || 1)}
-                    style={{ background: "#fff", border: "1px solid #e8e8e8", borderRadius: 8, padding: "8px 10px", fontSize: 13, outline: "none", width: 80 }} />
+                    style={{ background: "#fff", border: "1px solid #E3D9CC", borderRadius: 8, padding: "8px 10px", fontSize: 13, outline: "none", width: 80 }} />
                 </div>
                 <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-                  <label style={{ fontSize: 10, color: "#aaa", fontFamily: "monospace" }}>Intervalo</label>
+                  <label style={{ fontSize: 10, color: "#9DA2A6", fontFamily: "var(--fonte-numero)" }}>Intervalo</label>
                   <select value={genIntervalo} onChange={e => setGenIntervalo(e.target.value)}
-                    style={{ background: "#fff", border: "1px solid #e8e8e8", borderRadius: 8, padding: "8px 10px", fontSize: 13, outline: "none", width: 150 }}>
+                    style={{ background: "#fff", border: "1px solid #E3D9CC", borderRadius: 8, padding: "8px 10px", fontSize: 13, outline: "none", width: 150 }}>
                     <option value="mensal">Mensal</option>
                     <option value="quinzenal">Quinzenal (15d)</option>
                     <option value="semanal">Semanal (7d)</option>
@@ -1061,13 +1070,13 @@ export default function FluxoFuturo({ faturas: faturasTodas, faturasLoading, pag
                 </div>
                 {genIntervalo === "personalizado" && (
                   <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-                    <label style={{ fontSize: 10, color: "#aaa", fontFamily: "monospace" }}>Dias</label>
+                    <label style={{ fontSize: 10, color: "#9DA2A6", fontFamily: "var(--fonte-numero)" }}>Dias</label>
                     <input type="number" min={1} value={genDias} onChange={e => setGenDias(parseInt(e.target.value) || 30)}
-                      style={{ background: "#fff", border: "1px solid #e8e8e8", borderRadius: 8, padding: "8px 10px", fontSize: 13, outline: "none", width: 80 }} />
+                      style={{ background: "#fff", border: "1px solid #E3D9CC", borderRadius: 8, padding: "8px 10px", fontSize: 13, outline: "none", width: 80 }} />
                   </div>
                 )}
                 <button onClick={gerarParcelas} type="button"
-                  style={{ background: "#1a1a2e", color: "#fff", border: "none", padding: "9px 16px", borderRadius: 8, fontSize: 12, fontWeight: 700, cursor: "pointer" }}>
+                  style={{ background: "#091C2A", color: "#fff", border: "none", padding: "9px 16px", borderRadius: 8, fontSize: 12, fontWeight: 700, cursor: "pointer" }}>
                   ⚡ Gerar / Refazer
                 </button>
               </div>
@@ -1075,71 +1084,71 @@ export default function FluxoFuturo({ faturas: faturasTodas, faturasLoading, pag
 
             {/* Tabela editável de parcelas */}
             {parcelasArr.length > 0 ? (
-              <div style={{ border: "1px solid #e8e8e8", borderRadius: 10, overflow: "hidden", marginBottom: 14 }}>
+              <div style={{ border: "1px solid #E3D9CC", borderRadius: 10, overflow: "hidden", marginBottom: 14 }}>
                 <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
                   <thead>
-                    <tr style={{ background: "#f8f9fc" }}>
-                      <th style={{ padding: "10px 8px", textAlign: "left", color: "#888", fontWeight: 600, fontFamily: "monospace", fontSize: 10, letterSpacing: 0.5, width: 50 }}>#</th>
-                      <th style={{ padding: "10px 8px", textAlign: "left", color: "#888", fontWeight: 600, fontFamily: "monospace", fontSize: 10, letterSpacing: 0.5 }}>Data</th>
-                      <th style={{ padding: "10px 8px", textAlign: "right", color: "#888", fontWeight: 600, fontFamily: "monospace", fontSize: 10, letterSpacing: 0.5 }}>Valor (€)</th>
-                      <th style={{ padding: "10px 8px", textAlign: "left", color: "#888", fontWeight: 600, fontFamily: "monospace", fontSize: 10, letterSpacing: 0.5 }}>Observação</th>
+                    <tr style={{ background: "#FAF6F0" }}>
+                      <th style={{ padding: "10px 8px", textAlign: "left", color: "#7E8388", fontWeight: 600, fontFamily: "var(--fonte-numero)", fontSize: 10, letterSpacing: 0.5, width: 50 }}>#</th>
+                      <th style={{ padding: "10px 8px", textAlign: "left", color: "#7E8388", fontWeight: 600, fontFamily: "var(--fonte-numero)", fontSize: 10, letterSpacing: 0.5 }}>Data</th>
+                      <th style={{ padding: "10px 8px", textAlign: "right", color: "#7E8388", fontWeight: 600, fontFamily: "var(--fonte-numero)", fontSize: 10, letterSpacing: 0.5 }}>Valor (€)</th>
+                      <th style={{ padding: "10px 8px", textAlign: "left", color: "#7E8388", fontWeight: 600, fontFamily: "var(--fonte-numero)", fontSize: 10, letterSpacing: 0.5 }}>Observação</th>
                       <th style={{ width: 40 }}></th>
                     </tr>
                   </thead>
                   <tbody>
                     {parcelasArr.map((p, i) => (
-                      <tr key={i} style={{ borderTop: i > 0 ? "1px solid #f0f0f0" : "none" }}>
-                        <td style={{ padding: "6px 8px", color: "#888", fontFamily: "monospace" }}>{i + 1}/{parcelasArr.length}</td>
+                      <tr key={i} style={{ borderTop: i > 0 ? "1px solid #E7DED2" : "none" }}>
+                        <td style={{ padding: "6px 8px", color: "#7E8388", fontFamily: "var(--fonte-numero)" }}>{i + 1}/{parcelasArr.length}</td>
                         <td style={{ padding: "6px 8px" }}>
                           <input type="date" value={p.data}
                             onChange={e => updateParcela(i, { data: e.target.value })}
                             title={p.data ? "" : "Data inválida ou vazia — verifica se o dia existe nesse mês"}
-                            style={{ background: p.data ? "#f8f8f8" : "#fef2f2", border: p.data ? "1px solid #eee" : "1px solid #f87171", borderRadius: 6, padding: "6px 8px", fontSize: 12, outline: "none", width: "100%" }} />
+                            style={{ background: p.data ? "#F9F5EF" : "#FBEDEB", border: p.data ? "1px solid #EFE8DE" : "1px solid #f87171", borderRadius: 6, padding: "6px 8px", fontSize: 12, outline: "none", width: "100%" }} />
                         </td>
                         <td style={{ padding: "6px 8px" }}>
                           <input type="number" step="0.01" value={p.valor}
                             onChange={e => updateParcela(i, { valor: e.target.value })}
-                            style={{ background: "#f8f8f8", border: "1px solid #eee", borderRadius: 6, padding: "6px 8px", fontSize: 12, outline: "none", width: "100%", textAlign: "right", fontWeight: 700, fontFamily: "monospace" }} />
+                            style={{ background: "#F9F5EF", border: "1px solid #EFE8DE", borderRadius: 6, padding: "6px 8px", fontSize: 12, outline: "none", width: "100%", textAlign: "right", fontWeight: 700, fontFamily: "var(--fonte-numero)" }} />
                         </td>
                         <td style={{ padding: "6px 8px" }}>
                           <input type="text" value={p.obs} placeholder="ex: sinal, à entrega…"
                             onChange={e => updateParcela(i, { obs: e.target.value })}
-                            style={{ background: "#f8f8f8", border: "1px solid #eee", borderRadius: 6, padding: "6px 8px", fontSize: 12, outline: "none", width: "100%" }} />
+                            style={{ background: "#F9F5EF", border: "1px solid #EFE8DE", borderRadius: 6, padding: "6px 8px", fontSize: 12, outline: "none", width: "100%" }} />
                         </td>
                         <td style={{ padding: "6px 8px", textAlign: "center" }}>
                           <button onClick={() => removeParcela(i)} type="button"
-                            style={{ background: "#fef2f2", border: "1px solid #fecaca", color: "#dc2626", padding: "4px 8px", borderRadius: 6, fontSize: 11, cursor: "pointer" }}>✕</button>
+                            style={{ background: "#FBEDEB", border: "1px solid #EFCFC9", color: "#A93226", padding: "4px 8px", borderRadius: 6, fontSize: 11, cursor: "pointer" }}>✕</button>
                         </td>
                       </tr>
                     ))}
                   </tbody>
                   <tfoot>
-                    <tr style={{ background: "#fafafa", borderTop: "2px solid #e8e8e8" }}>
-                      <td colSpan={2} style={{ padding: "10px 8px", fontSize: 11, color: "#888", fontFamily: "monospace" }}>
+                    <tr style={{ background: "#FBF7F1", borderTop: "2px solid #E3D9CC" }}>
+                      <td colSpan={2} style={{ padding: "10px 8px", fontSize: 11, color: "#7E8388", fontFamily: "var(--fonte-numero)" }}>
                         Σ {parcelasArr.length} parcela(s)
                       </td>
-                      <td style={{ padding: "10px 8px", textAlign: "right", fontWeight: 800, fontFamily: "monospace", color: "#1a1a2e" }}>{fmt(totalParcelas)}</td>
+                      <td style={{ padding: "10px 8px", textAlign: "right", fontWeight: 800, fontFamily: "var(--fonte-numero)", color: "#091C2A" }}>{fmt(totalParcelas)}</td>
                       <td colSpan={2}></td>
                     </tr>
                   </tfoot>
                 </table>
               </div>
             ) : (
-              <div style={{ background: "#fff7ed", border: "1px dashed #fed7aa", color: "#c2410c", padding: 14, borderRadius: 10, fontSize: 12, marginBottom: 14, textAlign: "center" }}>
+              <div style={{ background: "#FBF6EC", border: "1px dashed #E8D2AE", color: "#9C4A22", padding: 14, borderRadius: 10, fontSize: 12, marginBottom: 14, textAlign: "center" }}>
                 Usa o gerador acima para criar as parcelas, ou adiciona uma manualmente abaixo.
               </div>
             )}
 
             <button onClick={addParcela} type="button"
-              style={{ background: "none", border: "1px dashed #C8A96E", color: "#C8A96E", padding: "8px 16px", borderRadius: 8, fontSize: 12, fontWeight: 700, cursor: "pointer", marginBottom: 20 }}>
+              style={{ background: "none", border: "1px dashed #BAA685", color: "#BAA685", padding: "8px 16px", borderRadius: 8, fontSize: 12, fontWeight: 700, cursor: "pointer", marginBottom: 20 }}>
               + Adicionar parcela manualmente
             </button>
 
             <div style={{ display: "flex", justifyContent: "flex-end", gap: 10 }}>
-              <button onClick={() => setShowForm(false)} style={{ background: "#f0f0f0", color: "#666", border: "none", padding: "10px 20px", borderRadius: 8, fontSize: 13, cursor: "pointer" }}>Cancelar</button>
+              <button onClick={() => setShowForm(false)} style={{ background: "#E7DED2", color: "#5C6166", border: "none", padding: "10px 20px", borderRadius: 8, fontSize: 13, cursor: "pointer" }}>Cancelar</button>
               <button onClick={handleAddPagamento}
                 disabled={!form.descricao || parcelasArr.length === 0}
-                style={{ background: (!form.descricao || parcelasArr.length === 0) ? "#9ca3af" : "#1a1a2e", color: "#fff", border: "none", padding: "10px 24px", borderRadius: 8, fontSize: 13, cursor: (!form.descricao || parcelasArr.length === 0) ? "default" : "pointer", fontWeight: 600 }}>
+                style={{ background: (!form.descricao || parcelasArr.length === 0) ? "#9DA2A6" : "#091C2A", color: "#fff", border: "none", padding: "10px 24px", borderRadius: 8, fontSize: 13, cursor: (!form.descricao || parcelasArr.length === 0) ? "default" : "pointer", fontWeight: 600 }}>
                 Adicionar {parcelasArr.length > 1 ? `${parcelasArr.length} parcelas` : (form.tipo === "entrada" ? "recebimento" : "pagamento")}
               </button>
             </div>
@@ -1148,8 +1157,8 @@ export default function FluxoFuturo({ faturas: faturasTodas, faturasLoading, pag
       )}
 
       {/* Cashflow table */}
-      <div style={{ background: "#fff", border: "1px solid #f0f0f0", borderRadius: 14, overflow: "hidden" }}>
-        <div style={{ padding: "14px 20px", borderBottom: "1px solid #f0f0f0", fontWeight: 700, color: "#1a1a2e", fontSize: 13, fontFamily: "Georgia,serif" }}>
+      <div style={{ background: "#fff", border: "1px solid #E7DED2", borderRadius: 14, overflow: "hidden" }}>
+        <div style={{ padding: "14px 20px", borderBottom: "1px solid #E7DED2", fontWeight: 700, color: "#091C2A", fontSize: 13, fontFamily: "var(--fonte-titulo)" }}>
           Fluxo de Caixa — {empObj.nome} · {(dataInicio || dataFim)
             ? `${mesesFiltrados.length} ${mesesFiltrados.length === 1 ? "mês" : "meses"} filtrados`
             : view === "mensal"
@@ -1159,9 +1168,9 @@ export default function FluxoFuturo({ faturas: faturasTodas, faturasLoading, pag
         <div style={{ overflowX: "auto" }}>
           <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
             <thead>
-              <tr style={{ background: "#f8f9fc" }}>
+              <tr style={{ background: "#FAF6F0" }}>
                 {["Período", "Entradas", "Saídas", "Líquido", "Saldo Fim Mês", "Barra"].map(h => (
-                  <th key={h} style={{ padding: "10px 16px", textAlign: "left", color: "#aaa", fontSize: 10, letterSpacing: "0.07em", textTransform: "uppercase", fontFamily: "monospace", borderBottom: "1px solid #f0f0f0", whiteSpace: "nowrap" }}>{h}</th>
+                  <th key={h} style={{ padding: "10px 16px", textAlign: "left", color: "#9DA2A6", fontSize: 10, letterSpacing: "0.07em", textTransform: "uppercase", fontFamily: "var(--fonte-numero)", borderBottom: "1px solid #E7DED2", whiteSpace: "nowrap" }}>{h}</th>
                 ))}
               </tr>
             </thead>
@@ -1170,40 +1179,40 @@ export default function FluxoFuturo({ faturas: faturasTodas, faturasLoading, pag
               {view === "mensal" && (vencidas.saidas > 0 || vencidas.entradas > 0) && [
                 <tr key="vencidas-row"
                   onClick={() => setExpandedMes(expandedMes === "__vencidas__" ? null : "__vencidas__")}
-                  style={{ borderBottom: "2px solid #dc2626", cursor: "pointer", background: "#fef2f2" }}>
-                  <td style={{ padding: "10px 16px", fontFamily: "monospace", fontWeight: 700, color: "#dc2626", whiteSpace: "nowrap" }}>
+                  style={{ borderBottom: "2px solid #A93226", cursor: "pointer", background: "#FBEDEB" }}>
+                  <td style={{ padding: "10px 16px", fontFamily: "var(--fonte-numero)", fontWeight: 700, color: "#A93226", whiteSpace: "nowrap" }}>
                     {expandedMes === "__vencidas__" ? "▼ " : "▶ "}⚠️ Vencidas ({vencidas.items.length})
                   </td>
-                  <td style={{ padding: "10px 16px", color: "#16a34a", fontFamily: "monospace", fontWeight: vencidas.entradas > 0 ? 700 : 400 }}>
+                  <td style={{ padding: "10px 16px", color: "#1F7A54", fontFamily: "var(--fonte-numero)", fontWeight: vencidas.entradas > 0 ? 700 : 400 }}>
                     {vencidas.entradas > 0 ? "+" + fmtK(vencidas.entradas).replace("-", "") : "—"}
                   </td>
-                  <td style={{ padding: "10px 16px", color: "#dc2626", fontFamily: "monospace", fontWeight: 700 }}>
+                  <td style={{ padding: "10px 16px", color: "#A93226", fontFamily: "var(--fonte-numero)", fontWeight: 700 }}>
                     {fmtK(-vencidas.saidas)}
                   </td>
-                  <td style={{ padding: "10px 16px", fontFamily: "monospace", fontWeight: 700, color: (vencidas.entradas - vencidas.saidas) >= 0 ? "#16a34a" : "#dc2626" }}>
+                  <td style={{ padding: "10px 16px", fontFamily: "var(--fonte-numero)", fontWeight: 700, color: (vencidas.entradas - vencidas.saidas) >= 0 ? "#1F7A54" : "#A93226" }}>
                     {fmtK(vencidas.entradas - vencidas.saidas)}
                   </td>
-                  <td style={{ padding: "10px 16px", fontFamily: "monospace", color: "#888", fontStyle: "italic" }}>
+                  <td style={{ padding: "10px 16px", fontFamily: "var(--fonte-numero)", color: "#7E8388", fontStyle: "italic" }}>
                     (pendente)
                   </td>
                   <td style={{ padding: "10px 16px" }}>
-                    <div style={{ background: "#dc2626", height: 6, width: Math.min(100, (vencidas.saidas / maxAbs) * 100) + "%", borderRadius: 3, opacity: 0.8 }}></div>
+                    <div style={{ background: "#A93226", height: 6, width: Math.min(100, (vencidas.saidas / maxAbs) * 100) + "%", borderRadius: 3, opacity: 0.8 }}></div>
                   </td>
                 </tr>,
                 ...(expandedMes === "__vencidas__" ? vencidas.items.map((item, j) => (
-                  <tr key={`venc_${j}`} style={{ background: "#fff8f8", borderBottom: "1px solid #f0f0f0" }}>
-                    <td style={{ padding: "7px 16px 7px 32px", color: "#dc2626", fontSize: 11, fontWeight: 600 }}>
+                  <tr key={`venc_${j}`} style={{ background: "#FDF3F1", borderBottom: "1px solid #E7DED2" }}>
+                    <td style={{ padding: "7px 16px 7px 32px", color: "#A93226", fontSize: 11, fontWeight: 600 }}>
                       {fmtDate(item.vencimento)} ⚠
                     </td>
-                    <td colSpan={2} style={{ padding: "7px 16px", color: "#444", fontSize: 11 }}>
-                      <span style={{ background: (item.natureza || "previsto") === "real" ? "#e0f2fe" : "#fef3c7", color: (item.natureza || "previsto") === "real" ? "#0369a1" : "#b45309", fontSize: 9, padding: "1px 5px", borderRadius: 3, marginRight: 6, fontFamily: "monospace" }}>{(item.natureza || "previsto") === "real" ? "REAL" : "PREV"}</span><span style={{ background: (item.natureza || "previsto") === "real" ? "#e0f2fe" : "#fef3c7", color: (item.natureza || "previsto") === "real" ? "#0369a1" : "#b45309", fontSize: 9, padding: "1px 5px", borderRadius: 3, marginRight: 6, fontFamily: "monospace" }}>{(item.natureza || "previsto") === "real" ? "REAL" : "PREV"}</span><span style={{ color: "#888", marginRight: 6 }}>{item.origem}</span>{item.desc || "—"}
+                    <td colSpan={2} style={{ padding: "7px 16px", color: "#3A4044", fontSize: 11 }}>
+                      <span style={{ background: (item.natureza || "previsto") === "real" ? "#E6EDF3" : "#F6ECD6", color: (item.natureza || "previsto") === "real" ? "#2C4A63" : "#96702A", fontSize: 9, padding: "1px 5px", borderRadius: 3, marginRight: 6, fontFamily: "var(--fonte-numero)" }}>{(item.natureza || "previsto") === "real" ? "REAL" : "PREV"}</span><span style={{ background: (item.natureza || "previsto") === "real" ? "#E6EDF3" : "#F6ECD6", color: (item.natureza || "previsto") === "real" ? "#2C4A63" : "#96702A", fontSize: 9, padding: "1px 5px", borderRadius: 3, marginRight: 6, fontFamily: "var(--fonte-numero)" }}>{(item.natureza || "previsto") === "real" ? "REAL" : "PREV"}</span><span style={{ color: "#7E8388", marginRight: 6 }}>{item.origem}</span>{item.desc || "—"}
                     </td>
-                    <td colSpan={2} style={{ padding: "7px 16px", fontFamily: "monospace", fontSize: 11, color: item.tipo === "entrada" ? "#16a34a" : "#dc2626", fontWeight: 600 }}>
+                    <td colSpan={2} style={{ padding: "7px 16px", fontFamily: "var(--fonte-numero)", fontSize: 11, color: item.tipo === "entrada" ? "#1F7A54" : "#A93226", fontWeight: 600 }}>
                       {item.tipo === "entrada" ? "+" : "-"}{fmtFull(item.valor || 0)}
                     </td>
                     <td style={{ padding: "7px 16px" }}>
                       <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                        <span style={{ background: "#fee2e2", color: "#dc2626", fontSize: 9, padding: "1px 6px", borderRadius: 3, fontFamily: "monospace" }}>{item.cat || "—"}</span>
+                        <span style={{ background: "#F6DED9", color: "#A93226", fontSize: 9, padding: "1px 6px", borderRadius: 3, fontFamily: "var(--fonte-numero)" }}>{item.cat || "—"}</span>
                         {isAdmin && item.tipo === "saida" && (item.pagamento || item.fatura) && (
                           <BotaoFunding fonte={item.pagamento || item.fatura}
                             onAlternar={() => alternaFunding(item)}
@@ -1211,7 +1220,7 @@ export default function FluxoFuturo({ faturas: faturasTodas, faturasLoading, pag
                         )}
                         {item._funding && (
                           <span title={`Entrada do banco associada a "${item.funding_de}" — neutraliza a despesa no caixa`}
-                            style={{ background: "#ecfdf5", color: "#047857", fontSize: 9, padding: "1px 6px", borderRadius: 3, fontFamily: "monospace", fontWeight: 700 }}>
+                            style={{ background: "#EFF5F1", color: "#1B6A49", fontSize: 9, padding: "1px 6px", borderRadius: 3, fontFamily: "var(--fonte-numero)", fontWeight: 700 }}>
                             🏦 funding
                           </span>
                         )}
@@ -1219,32 +1228,32 @@ export default function FluxoFuturo({ faturas: faturasTodas, faturasLoading, pag
                           <>
                             <button onClick={(e) => { e.stopPropagation(); handleMarkAsPaid(item.pagamento); }}
                               title="Marcar como Pago (sai do fluxo)"
-                              style={{ background: "#dcfce7", border: "none", color: "#16a34a", padding: "3px 8px", borderRadius: 5, fontSize: 10, cursor: "pointer", marginLeft: 4, fontWeight: 700 }}>✓</button>
+                              style={{ background: "#E2EFE8", border: "none", color: "#1F7A54", padding: "3px 8px", borderRadius: 5, fontSize: 10, cursor: "pointer", marginLeft: 4, fontWeight: 700 }}>✓</button>
                             <button onClick={(e) => { e.stopPropagation(); setConverter(item.pagamento); }}
                               title="Já recebi a fatura: converter esta previsão em custo real"
-                              style={{ background: "#fef3c7", border: "none", color: "#b45309", padding: "3px 8px", borderRadius: 5, fontSize: 10, cursor: "pointer", fontWeight: 700 }}>→ fatura</button>
+                              style={{ background: "#F6ECD6", border: "none", color: "#96702A", padding: "3px 8px", borderRadius: 5, fontSize: 10, cursor: "pointer", fontWeight: 700 }}>→ fatura</button>
                             <button onClick={(e) => { e.stopPropagation(); openEdit(item.pagamento); }}
                               title="Editar pagamento"
-                              style={{ background: "#f0f4ff", border: "none", color: "#4a6fa5", padding: "3px 7px", borderRadius: 5, fontSize: 10, cursor: "pointer" }}>✎</button>
+                              style={{ background: "#EDF1F5", border: "none", color: "#2C4A63", padding: "3px 7px", borderRadius: 5, fontSize: 10, cursor: "pointer" }}>✎</button>
                             <button onClick={(e) => { e.stopPropagation(); handleDeletePagamento(item.pagamento); }}
                               title="Eliminar pagamento"
-                              style={{ background: "#fff0f0", border: "none", color: "#dc2626", padding: "3px 7px", borderRadius: 5, fontSize: 10, cursor: "pointer" }}>✕</button>
+                              style={{ background: "#FBEDEB", border: "none", color: "#A93226", padding: "3px 7px", borderRadius: 5, fontSize: 10, cursor: "pointer" }}>✕</button>
                           </>
                         )}
                         {isAdmin && (item.origem === "Vencida" || item.origem === "Contas a Pagar") && item.fatura && (
                           <>
                             <button onClick={(e) => { e.stopPropagation(); handleMarkFaturaPaid(item.fatura); }}
                               title="Marcar fatura como Paga"
-                              style={{ background: "#dcfce7", border: "none", color: "#16a34a", padding: "3px 8px", borderRadius: 5, fontSize: 10, cursor: "pointer", marginLeft: 4, fontWeight: 700 }}>✓</button>
+                              style={{ background: "#E2EFE8", border: "none", color: "#1F7A54", padding: "3px 8px", borderRadius: 5, fontSize: 10, cursor: "pointer", marginLeft: 4, fontWeight: 700 }}>✓</button>
                             <button onClick={(e) => { e.stopPropagation(); handleDeleteFatura(item.fatura); }}
                               title="Eliminar fatura"
-                              style={{ background: "#fff0f0", border: "none", color: "#dc2626", padding: "3px 7px", borderRadius: 5, fontSize: 10, cursor: "pointer" }}>✕</button>
+                              style={{ background: "#FBEDEB", border: "none", color: "#A93226", padding: "3px 7px", borderRadius: 5, fontSize: 10, cursor: "pointer" }}>✕</button>
                           </>
                         )}
                         {isAdmin && (item.origem === "Recebível Escritura" || item.origem === "Comissão Pendente") && item.venda && (
                           <button onClick={(e) => { e.stopPropagation(); handleMarkVendaItemPaid(item.venda, item.vendaTipo); }}
                             title={item.tipo === "entrada" ? "Marcar como Recebido (sai do fluxo)" : "Marcar como Pago (sai do fluxo)"}
-                            style={{ background: "#dcfce7", border: "none", color: "#16a34a", padding: "3px 8px", borderRadius: 5, fontSize: 10, cursor: "pointer", marginLeft: 4, fontWeight: 700 }}>✓</button>
+                            style={{ background: "#E2EFE8", border: "none", color: "#1F7A54", padding: "3px 8px", borderRadius: 5, fontSize: 10, cursor: "pointer", marginLeft: 4, fontWeight: 700 }}>✓</button>
                         )}
                       </div>
                     </td>
@@ -1259,55 +1268,55 @@ export default function FluxoFuturo({ faturas: faturasTodas, faturasLoading, pag
                   <React.Fragment key={m.key || m.ano || i}>
                     <tr
                       onClick={() => setExpandedMes(isExpanded ? null : (m.key || m.ano))}
-                      style={{ borderBottom: "1px solid #fafafa", cursor: m.items?.length > 0 ? "pointer" : "default", background: isNegativo ? "#fff8f8" : i % 2 === 0 ? "#fff" : "#fafafa" }}
-                      onMouseEnter={e => { if (!isNegativo) e.currentTarget.style.background = "#f0f4ff"; }}
-                      onMouseLeave={e => { e.currentTarget.style.background = isNegativo ? "#fff8f8" : i % 2 === 0 ? "#fff" : "#fafafa"; }}>
-                      <td style={{ padding: "10px 16px", fontFamily: "monospace", fontWeight: 600, color: "#1a1a2e", whiteSpace: "nowrap" }}>
+                      style={{ borderBottom: "1px solid #FBF7F1", cursor: m.items?.length > 0 ? "pointer" : "default", background: isNegativo ? "#FDF3F1" : i % 2 === 0 ? "#fff" : "#FBF7F1" }}
+                      onMouseEnter={e => { if (!isNegativo) e.currentTarget.style.background = "#EDF1F5"; }}
+                      onMouseLeave={e => { e.currentTarget.style.background = isNegativo ? "#FDF3F1" : i % 2 === 0 ? "#fff" : "#FBF7F1"; }}>
+                      <td style={{ padding: "10px 16px", fontFamily: "var(--fonte-numero)", fontWeight: 600, color: "#091C2A", whiteSpace: "nowrap" }}>
                         {m.items?.length > 0 ? (isExpanded ? "▼ " : "▶ ") : "  "}{m.label || m.ano}
                       </td>
-                      <td style={{ padding: "10px 16px", color: "#16a34a", fontFamily: "monospace", fontWeight: m.entradas > 0 ? 700 : 400 }}>
+                      <td style={{ padding: "10px 16px", color: "#1F7A54", fontFamily: "var(--fonte-numero)", fontWeight: m.entradas > 0 ? 700 : 400 }}>
                         {m.entradas > 0 ? "+" + fmtK(m.entradas) : "—"}
                       </td>
-                      <td style={{ padding: "10px 16px", color: m.saidas > 0 ? "#dc2626" : "#aaa", fontFamily: "monospace", fontWeight: m.saidas > 0 ? 700 : 400 }}>
+                      <td style={{ padding: "10px 16px", color: m.saidas > 0 ? "#A93226" : "#9DA2A6", fontFamily: "var(--fonte-numero)", fontWeight: m.saidas > 0 ? 700 : 400 }}>
                         {m.saidas > 0 ? fmtK(-m.saidas) : "—"}
                       </td>
-                      <td style={{ padding: "10px 16px", fontFamily: "monospace", fontWeight: 700, color: m.liquido >= 0 ? "#16a34a" : "#dc2626" }}>
+                      <td style={{ padding: "10px 16px", fontFamily: "var(--fonte-numero)", fontWeight: 700, color: m.liquido >= 0 ? "#1F7A54" : "#A93226" }}>
                         {m.liquido >= 0 ? "+" + fmtK(m.liquido) : fmtK(m.liquido)}
                       </td>
-                      <td style={{ padding: "10px 16px", fontFamily: "monospace", fontWeight: 700, color: isNegativo ? "#dc2626" : "#1a1a2e" }}>
+                      <td style={{ padding: "10px 16px", fontFamily: "var(--fonte-numero)", fontWeight: 700, color: isNegativo ? "#A93226" : "#091C2A" }}>
                         {isNegativo ? "⚠ " : ""}{fmtK(m.saldo_fim)}
                       </td>
                       <td style={{ padding: "10px 16px", minWidth: 120 }}>
                         <div style={{ display: "flex", gap: 2, height: 14, alignItems: "center" }}>
-                          {m.entradas > 0 && <div style={{ width: `${(m.entradas / maxAbs) * 60}px`, height: 8, background: "#16a34a", borderRadius: 2, opacity: 0.8 }} />}
-                          {m.saidas > 0 && <div style={{ width: `${(m.saidas / maxAbs) * 60}px`, height: 8, background: "#dc2626", borderRadius: 2, opacity: 0.8 }} />}
+                          {m.entradas > 0 && <div style={{ width: `${(m.entradas / maxAbs) * 60}px`, height: 8, background:"#091C2A", borderRadius: 2, opacity: 0.8 }} />}
+                          {m.saidas > 0 && <div style={{ width: `${(m.saidas / maxAbs) * 60}px`, height: 8, background: "#A93226", borderRadius: 2, opacity: 0.8 }} />}
                         </div>
                       </td>
                     </tr>
                     {isExpanded && m.items?.map((item, j) => (
-                      <tr key={`${i}_${j}`} style={{ background: "#f8f9ff", borderBottom: "1px solid #f0f0f0" }}>
-                        <td style={{ padding: "7px 16px 7px 32px", color: "#888", fontSize: 11 }}>{item.origem}</td>
-                        <td colSpan={2} style={{ padding: "7px 16px", color: "#444", fontSize: 11 }}>{item.desc}</td>
-                        <td colSpan={2} style={{ padding: "7px 16px", fontFamily: "monospace", fontSize: 11, color: item.tipo === "entrada" ? "#16a34a" : "#dc2626", fontWeight: 600 }}>
+                      <tr key={`${i}_${j}`} style={{ background: "#FAF6F0", borderBottom: "1px solid #E7DED2" }}>
+                        <td style={{ padding: "7px 16px 7px 32px", color: "#7E8388", fontSize: 11 }}>{item.origem}</td>
+                        <td colSpan={2} style={{ padding: "7px 16px", color: "#3A4044", fontSize: 11 }}>{item.desc}</td>
+                        <td colSpan={2} style={{ padding: "7px 16px", fontFamily: "var(--fonte-numero)", fontSize: 11, color: item.tipo === "entrada" ? "#1F7A54" : "#A93226", fontWeight: 600 }}>
                           {item.tipo === "entrada" ? "+" : "-"}{fmtFull(item.valor)}
                         </td>
                         <td style={{ padding: "7px 16px" }}>
                           <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                            <span style={{ background: "#f0f4ff", color: "#4a6fa5", fontSize: 9, padding: "1px 6px", borderRadius: 3, fontFamily: "monospace" }}>{item.cat}</span>
+                            <span style={{ background: "#EDF1F5", color: "#2C4A63", fontSize: 9, padding: "1px 6px", borderRadius: 3, fontFamily: "var(--fonte-numero)" }}>{item.cat}</span>
                             {isAdmin && item.origem === "Manual" && item.pagamento && (
                               <>
                                 <button onClick={(e) => { e.stopPropagation(); handleMarkAsPaid(item.pagamento); }}
                                   title="Marcar como Pago (sai do fluxo)"
-                                  style={{ background: "#dcfce7", border: "none", color: "#16a34a", padding: "3px 8px", borderRadius: 5, fontSize: 10, cursor: "pointer", marginLeft: 4, fontWeight: 700 }}>✓</button>
+                                  style={{ background: "#E2EFE8", border: "none", color: "#1F7A54", padding: "3px 8px", borderRadius: 5, fontSize: 10, cursor: "pointer", marginLeft: 4, fontWeight: 700 }}>✓</button>
                                 <button onClick={(e) => { e.stopPropagation(); setConverter(item.pagamento); }}
                                   title="Já recebi a fatura: converter esta previsão em custo real"
-                                  style={{ background: "#fef3c7", border: "none", color: "#b45309", padding: "3px 8px", borderRadius: 5, fontSize: 10, cursor: "pointer", fontWeight: 700 }}>→ fatura</button>
+                                  style={{ background: "#F6ECD6", border: "none", color: "#96702A", padding: "3px 8px", borderRadius: 5, fontSize: 10, cursor: "pointer", fontWeight: 700 }}>→ fatura</button>
                                 <button onClick={(e) => { e.stopPropagation(); openEdit(item.pagamento); }}
                                   title="Editar pagamento"
-                                  style={{ background: "#f0f4ff", border: "none", color: "#4a6fa5", padding: "3px 7px", borderRadius: 5, fontSize: 10, cursor: "pointer" }}>✎</button>
+                                  style={{ background: "#EDF1F5", border: "none", color: "#2C4A63", padding: "3px 7px", borderRadius: 5, fontSize: 10, cursor: "pointer" }}>✎</button>
                                 <button onClick={(e) => { e.stopPropagation(); handleDeletePagamento(item.pagamento); }}
                                   title="Eliminar pagamento"
-                                  style={{ background: "#fff0f0", border: "none", color: "#dc2626", padding: "3px 7px", borderRadius: 5, fontSize: 10, cursor: "pointer" }}>✕</button>
+                                  style={{ background: "#FBEDEB", border: "none", color: "#A93226", padding: "3px 7px", borderRadius: 5, fontSize: 10, cursor: "pointer" }}>✕</button>
                               </>
                             )}
                             {isAdmin && item.tipo === "saida" && (item.pagamento || item.fatura) && (
@@ -1317,7 +1326,7 @@ export default function FluxoFuturo({ faturas: faturasTodas, faturasLoading, pag
                             )}
                             {item._funding && (
                               <span title={`Entrada do banco associada a "${item.funding_de}" — neutraliza a despesa no caixa`}
-                                style={{ background: "#ecfdf5", color: "#047857", fontSize: 9, padding: "1px 6px", borderRadius: 3, fontFamily: "monospace", fontWeight: 700 }}>
+                                style={{ background: "#EFF5F1", color: "#1B6A49", fontSize: 9, padding: "1px 6px", borderRadius: 3, fontFamily: "var(--fonte-numero)", fontWeight: 700 }}>
                                 🏦 funding
                               </span>
                             )}
@@ -1325,10 +1334,10 @@ export default function FluxoFuturo({ faturas: faturasTodas, faturasLoading, pag
                               <>
                                 <button onClick={(e) => { e.stopPropagation(); handleMarkFaturaPaid(item.fatura); }}
                                   title="Marcar fatura como Paga"
-                                  style={{ background: "#dcfce7", border: "none", color: "#16a34a", padding: "3px 8px", borderRadius: 5, fontSize: 10, cursor: "pointer", marginLeft: 4, fontWeight: 700 }}>✓</button>
+                                  style={{ background: "#E2EFE8", border: "none", color: "#1F7A54", padding: "3px 8px", borderRadius: 5, fontSize: 10, cursor: "pointer", marginLeft: 4, fontWeight: 700 }}>✓</button>
                                 <button onClick={(e) => { e.stopPropagation(); handleDeleteFatura(item.fatura); }}
                                   title="Eliminar fatura"
-                                  style={{ background: "#fff0f0", border: "none", color: "#dc2626", padding: "3px 7px", borderRadius: 5, fontSize: 10, cursor: "pointer" }}>✕</button>
+                                  style={{ background: "#FBEDEB", border: "none", color: "#A93226", padding: "3px 7px", borderRadius: 5, fontSize: 10, cursor: "pointer" }}>✕</button>
                               </>
                             )}
                           </div>
@@ -1348,6 +1357,7 @@ export default function FluxoFuturo({ faturas: faturasTodas, faturasLoading, pag
         <ModalPlanoObra
           empresa={empresa} grupo={grupoDaEmpresa} nomeEmpresa={nomeDaEmpresa}
           plano={planoDaEmpresa} faturas={faturas} pagamentos={pagamentosExtras}
+          contaIds={contasDaEmpresa}
           currentUser={currentUser}
           onGuardar={guardarPlano}
           onAplicar={aplicarPlanoObra}
@@ -1358,33 +1368,33 @@ export default function FluxoFuturo({ faturas: faturasTodas, faturasLoading, pag
         <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.4)", zIndex: 215, display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}
           onClick={e => { if (e.target === e.currentTarget) setAproximar(false); }}>
           <div style={{ background: "#fff", borderRadius: 16, padding: 26, width: 940, maxWidth: "96vw", maxHeight: "88vh", display: "flex", flexDirection: "column", boxShadow: "0 20px 60px rgba(0,0,0,0.3)" }}>
-            <div style={{ fontSize: 18, fontWeight: 700, fontFamily: "Georgia,serif", color: "#1a1a2e" }}>
+            <div style={{ fontSize: 18, fontWeight: 700, fontFamily: "var(--fonte-titulo)", color: "#091C2A" }}>
               Aproximar previsões a faturas
             </div>
-            <div style={{ fontSize: 12, color: "#888", margin: "5px 0 16px", lineHeight: 1.5 }}>
+            <div style={{ fontSize: 12, color: "#7E8388", margin: "5px 0 16px", lineHeight: 1.5 }}>
               Para cada despesa prevista procurámos a fatura por pagar mais parecida, comparando valor,
               data e descrição. Escolhe a fatura correta (ou deixa em branco) e confirma — as previsões
               marcadas saem do fluxo e ficam só as faturas, sem duplicar valores.
             </div>
 
-            <div style={{ flex: 1, overflowY: "auto", border: "1px solid #eee", borderRadius: 10 }}>
+            <div style={{ flex: 1, overflowY: "auto", border: "1px solid #EFE8DE", borderRadius: 10 }}>
               {sugestoes.length === 0 ? (
-                <div style={{ padding: 40, textAlign: "center", fontSize: 13, color: "#aaa" }}>
+                <div style={{ padding: 40, textAlign: "center", fontSize: 13, color: "#9DA2A6" }}>
                   Não há despesas previstas em aberto.
                 </div>
               ) : sugestoes.map(({ pagamento: p, ranking }) => {
                 const escolhido = escolhas[p.id] || "";
                 const conf = ranking[0]?.score || 0;
-                const nivel = conf >= 0.75 ? { txt: "provável", cor: "#16a34a", fundo: "#dcfce7" }
-                  : conf >= 0.45 ? { txt: "possível", cor: "#b45309", fundo: "#fef3c7" }
-                  : { txt: "sem par claro", cor: "#94a3b8", fundo: "#f1f5f9" };
+                const nivel = conf >= 0.75 ? { txt: "provável", cor: "#1F7A54", fundo: "#E2EFE8" }
+                  : conf >= 0.45 ? { txt: "possível", cor: "#96702A", fundo: "#F6ECD6" }
+                  : { txt: "sem par claro", cor: "#9DA2A6", fundo: "#F2EDE5" };
                 return (
-                  <div key={p.id} style={{ display: "flex", gap: 14, alignItems: "center", padding: "12px 16px", borderBottom: "1px solid #f4f4f4", background: escolhido ? "#f0fdf4" : "#fff" }}>
+                  <div key={p.id} style={{ display: "flex", gap: 14, alignItems: "center", padding: "12px 16px", borderBottom: "1px solid #F7F2EA", background: escolhido ? "#EFF5F1" : "#fff" }}>
                     <div style={{ flex: "1 1 40%", minWidth: 0 }}>
-                      <div style={{ fontSize: 12, fontWeight: 600, color: "#1a1a2e", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                      <div style={{ fontSize: 12, fontWeight: 600, color: "#091C2A", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                         {p.descricao}
                       </div>
-                      <div style={{ fontSize: 10, color: "#aaa", fontFamily: "monospace", marginTop: 2 }}>
+                      <div style={{ fontSize: 10, color: "#9DA2A6", fontFamily: "var(--fonte-numero)", marginTop: 2 }}>
                         {fmtFull(p.valor)} · {fmtDate(p.data_inicio)} · {labelEmpresa(p.empresa)}
                       </div>
                     </div>
@@ -1393,7 +1403,7 @@ export default function FluxoFuturo({ faturas: faturasTodas, faturasLoading, pag
                     </span>
                     <div style={{ flex: "1 1 45%", minWidth: 0 }}>
                       <select value={escolhido} onChange={e => setEscolhas(x => ({ ...x, [p.id]: e.target.value }))}
-                        style={{ width: "100%", background: "#f8f8f8", border: "1px solid #e4e4ea", borderRadius: 8, padding: "8px 10px", fontSize: 11, outline: "none" }}>
+                        style={{ width: "100%", background: "#F9F5EF", border: "1px solid #e4e4ea", borderRadius: 8, padding: "8px 10px", fontSize: 11, outline: "none" }}>
                         <option value="">— não converter —</option>
                         {ranking.map(({ fatura: f, score }) => (
                           <option key={f.id} value={f.id}>
@@ -1408,16 +1418,16 @@ export default function FluxoFuturo({ faturas: faturasTodas, faturasLoading, pag
             </div>
 
             <div style={{ display: "flex", gap: 10, justifyContent: "space-between", alignItems: "center", marginTop: 16 }}>
-              <div style={{ fontSize: 12, color: "#888" }}>
+              <div style={{ fontSize: 12, color: "#7E8388" }}>
                 {Object.values(escolhas).filter(Boolean).length} de {sugestoes.length} marcadas para converter
               </div>
               <div style={{ display: "flex", gap: 10 }}>
                 <button onClick={() => { setAproximar(false); setEscolhas({}); }}
-                  style={{ background: "#f0f0f0", border: "none", color: "#666", padding: "10px 18px", borderRadius: 8, fontSize: 12, cursor: "pointer" }}>
+                  style={{ background: "#E7DED2", border: "none", color: "#5C6166", padding: "10px 18px", borderRadius: 8, fontSize: 12, cursor: "pointer" }}>
                   Cancelar
                 </button>
                 <button onClick={aplicarAproximacoes} disabled={aAplicar || !Object.values(escolhas).filter(Boolean).length}
-                  style={{ background: Object.values(escolhas).filter(Boolean).length ? "#1a1a2e" : "#ddd", border: "none", color: "#fff", padding: "10px 20px", borderRadius: 8, fontSize: 12, cursor: "pointer", fontWeight: 700 }}>
+                  style={{ background: Object.values(escolhas).filter(Boolean).length ? "#091C2A" : "#D8CCBB", border: "none", color: "#fff", padding: "10px 20px", borderRadius: 8, fontSize: 12, cursor: "pointer", fontWeight: 700 }}>
                   {aAplicar ? "A converter…" : "Converter marcadas"}
                 </button>
               </div>
@@ -1431,38 +1441,38 @@ export default function FluxoFuturo({ faturas: faturasTodas, faturasLoading, pag
         <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.4)", zIndex: 210, display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}
           onClick={e => { if (e.target === e.currentTarget) setConverter(null); }}>
           <div style={{ background: "#fff", borderRadius: 16, padding: 26, width: 620, maxHeight: "84vh", overflowY: "auto", boxShadow: "0 20px 60px rgba(0,0,0,0.3)" }}>
-            <div style={{ fontSize: 17, fontWeight: 700, fontFamily: "Georgia,serif", color: "#1a1a2e", marginBottom: 4 }}>
+            <div style={{ fontSize: 17, fontWeight: 700, fontFamily: "var(--fonte-titulo)", color: "#091C2A", marginBottom: 4 }}>
               Converter previsão em custo real
             </div>
-            <div style={{ fontSize: 12, color: "#888", marginBottom: 16, lineHeight: 1.5 }}>
-              <strong style={{ color: "#444" }}>{converter.descricao}</strong> · {fmtFull(converter.valor)} · {fmtDate(converter.data_inicio)}
+            <div style={{ fontSize: 12, color: "#7E8388", marginBottom: 16, lineHeight: 1.5 }}>
+              <strong style={{ color: "#3A4044" }}>{converter.descricao}</strong> · {fmtFull(converter.valor)} · {fmtDate(converter.data_inicio)}
               <br />A previsão sai do fluxo para não somar em duplicado com a fatura.
             </div>
 
             {candidatasFatura(converter).length > 0 ? (
               <>
-                <div style={{ fontSize: 11, color: "#888", textTransform: "uppercase", letterSpacing: "0.06em", fontFamily: "monospace", marginBottom: 8 }}>
+                <div style={{ fontSize: 11, color: "#7E8388", textTransform: "uppercase", letterSpacing: "0.06em", fontFamily: "var(--fonte-numero)", marginBottom: 8 }}>
                   Faturas por pagar que podem corresponder
                 </div>
-                <div style={{ border: "1px solid #eee", borderRadius: 10, overflow: "hidden", marginBottom: 16 }}>
+                <div style={{ border: "1px solid #EFE8DE", borderRadius: 10, overflow: "hidden", marginBottom: 16 }}>
                   {candidatasFatura(converter).map(f => {
                     const dif = (parseFloat(f.valor) || 0) - (parseFloat(converter.valor) || 0);
                     return (
                       <div key={f.id} onClick={() => handleConverter(converter, f)}
-                        style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, padding: "10px 14px", borderBottom: "1px solid #f4f4f4", cursor: "pointer" }}
-                        onMouseEnter={e => e.currentTarget.style.background = "#f0f4ff"}
+                        style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, padding: "10px 14px", borderBottom: "1px solid #F7F2EA", cursor: "pointer" }}
+                        onMouseEnter={e => e.currentTarget.style.background = "#EDF1F5"}
                         onMouseLeave={e => e.currentTarget.style.background = "#fff"}>
                         <div style={{ minWidth: 0 }}>
-                          <div style={{ fontSize: 12, color: "#1a1a2e", fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                          <div style={{ fontSize: 12, color: "#091C2A", fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                             {f.fornecedor || f.fatura || "—"}
                           </div>
-                          <div style={{ fontSize: 10, color: "#aaa", fontFamily: "monospace" }}>
+                          <div style={{ fontSize: 10, color: "#9DA2A6", fontFamily: "var(--fonte-numero)" }}>
                             {f.fatura ? f.fatura + " · " : ""}venc. {fmtDate(f.vencimento)} · {f.categoria || "—"}
                           </div>
                         </div>
                         <div style={{ textAlign: "right", whiteSpace: "nowrap" }}>
-                          <div style={{ fontSize: 12, fontFamily: "monospace", fontWeight: 700, color: "#1a1a2e" }}>{fmtFull(f.valor)}</div>
-                          <div style={{ fontSize: 10, fontFamily: "monospace", color: Math.abs(dif) < 0.005 ? "#16a34a" : "#b45309" }}>
+                          <div style={{ fontSize: 12, fontFamily: "var(--fonte-numero)", fontWeight: 700, color: "#091C2A" }}>{fmtFull(f.valor)}</div>
+                          <div style={{ fontSize: 10, fontFamily: "var(--fonte-numero)", color: Math.abs(dif) < 0.005 ? "#1F7A54" : "#96702A" }}>
                             {Math.abs(dif) < 0.005 ? "valor igual" : (dif > 0 ? "+" : "") + fmtFull(dif)}
                           </div>
                         </div>
@@ -1472,7 +1482,7 @@ export default function FluxoFuturo({ faturas: faturasTodas, faturasLoading, pag
                 </div>
               </>
             ) : (
-              <div style={{ background: "#fffbeb", border: "1px solid #fde68a", borderRadius: 10, padding: "12px 14px", fontSize: 12, color: "#a16207", marginBottom: 16, lineHeight: 1.5 }}>
+              <div style={{ background: "#FBF6EC", border: "1px solid #E3CE9F", borderRadius: 10, padding: "12px 14px", fontSize: 12, color: "#8A6727", marginBottom: 16, lineHeight: 1.5 }}>
                 Não há faturas por pagar desta empresa com vencimento próximo. Importa a fatura
                 primeiro (Importar → Fatura) e volta aqui, ou converte sem associar.
               </div>
@@ -1480,12 +1490,12 @@ export default function FluxoFuturo({ faturas: faturasTodas, faturasLoading, pag
 
             <div style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}>
               <button onClick={() => setConverter(null)}
-                style={{ background: "#f0f0f0", border: "none", color: "#666", padding: "9px 18px", borderRadius: 8, fontSize: 12, cursor: "pointer" }}>
+                style={{ background: "#E7DED2", border: "none", color: "#5C6166", padding: "9px 18px", borderRadius: 8, fontSize: 12, cursor: "pointer" }}>
                 Cancelar
               </button>
               <button onClick={() => handleConverter(converter, null)}
                 title="Retira a previsão do fluxo sem indicar qual a fatura"
-                style={{ background: "#1a1a2e", border: "none", color: "#fff", padding: "9px 18px", borderRadius: 8, fontSize: 12, cursor: "pointer", fontWeight: 600 }}>
+                style={{ background: "#091C2A", border: "none", color: "#fff", padding: "9px 18px", borderRadius: 8, fontSize: 12, cursor: "pointer", fontWeight: 600 }}>
                 Converter sem associar
               </button>
             </div>
@@ -1499,50 +1509,50 @@ export default function FluxoFuturo({ faturas: faturasTodas, faturasLoading, pag
           onClick={e => { if (e.target === e.currentTarget) closeEdit(); }}>
           <div style={{ background: "#fff", borderRadius: 16, padding: 28, width: 600, maxWidth: "95vw", maxHeight: "92vh", overflowY: "auto", boxShadow: "0 20px 60px rgba(0,0,0,0.25)" }}>
             <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 20 }}>
-              <h2 style={{ margin: 0, fontSize: 18, fontFamily: "Georgia,serif", color: "#1a1a2e" }}>Editar Pagamento</h2>
-              <button onClick={closeEdit} style={{ background: "none", border: "none", fontSize: 20, cursor: "pointer", color: "#aaa" }}>✕</button>
+              <h2 style={{ margin: 0, fontSize: 18, fontFamily: "var(--fonte-titulo)", color: "#091C2A" }}>Editar Pagamento</h2>
+              <button onClick={closeEdit} style={{ background: "none", border: "none", fontSize: 20, cursor: "pointer", color: "#9DA2A6" }}>✕</button>
             </div>
 
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
               <div style={{ gridColumn: "1/-1", display: "flex", flexDirection: "column", gap: 4 }}>
-                <label style={{ fontSize: 10, color: "#aaa", fontFamily: "monospace", textTransform: "uppercase" }}>Descrição *</label>
+                <label style={{ fontSize: 10, color: "#9DA2A6", fontFamily: "var(--fonte-numero)", textTransform: "uppercase" }}>Descrição *</label>
                 <input type="text" value={editForm.descricao}
                   onChange={e => setEditForm(f => ({ ...f, descricao: e.target.value }))}
-                  style={{ background: "#f8f8f8", border: "1px solid #eee", borderRadius: 8, padding: "9px 12px", fontSize: 13, outline: "none" }} />
+                  style={{ background: "#F9F5EF", border: "1px solid #EFE8DE", borderRadius: 8, padding: "9px 12px", fontSize: 13, outline: "none" }} />
               </div>
 
               <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-                <label style={{ fontSize: 10, color: "#aaa", fontFamily: "monospace", textTransform: "uppercase" }}>Tipo</label>
+                <label style={{ fontSize: 10, color: "#9DA2A6", fontFamily: "var(--fonte-numero)", textTransform: "uppercase" }}>Tipo</label>
                 <select value={editForm.tipo} onChange={e => setEditForm(f => ({ ...f, tipo: e.target.value }))}
-                  style={{ background: "#f8f8f8", border: "1px solid #eee", borderRadius: 8, padding: "9px 12px", fontSize: 13, outline: "none" }}>
+                  style={{ background: "#F9F5EF", border: "1px solid #EFE8DE", borderRadius: 8, padding: "9px 12px", fontSize: 13, outline: "none" }}>
                   <option value="saida">Saída</option>
                   <option value="entrada">Entrada</option>
                 </select>
               </div>
               <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-                <label style={{ fontSize: 10, color: "#aaa", fontFamily: "monospace", textTransform: "uppercase" }}>Valor (€)</label>
+                <label style={{ fontSize: 10, color: "#9DA2A6", fontFamily: "var(--fonte-numero)", textTransform: "uppercase" }}>Valor (€)</label>
                 <input type="number" step="0.01" value={editForm.valor}
                   onChange={e => setEditForm(f => ({ ...f, valor: e.target.value }))}
-                  style={{ background: "#f8f8f8", border: "1px solid #eee", borderRadius: 8, padding: "9px 12px", fontSize: 13, outline: "none", fontFamily: "monospace", fontWeight: 700 }} />
+                  style={{ background: "#F9F5EF", border: "1px solid #EFE8DE", borderRadius: 8, padding: "9px 12px", fontSize: 13, outline: "none", fontFamily: "var(--fonte-numero)", fontWeight: 700 }} />
               </div>
 
               <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-                <label style={{ fontSize: 10, color: "#aaa", fontFamily: "monospace", textTransform: "uppercase" }}>Data Início</label>
+                <label style={{ fontSize: 10, color: "#9DA2A6", fontFamily: "var(--fonte-numero)", textTransform: "uppercase" }}>Data Início</label>
                 <input type="date" value={editForm.data_inicio}
                   onChange={e => setEditForm(f => ({ ...f, data_inicio: e.target.value }))}
-                  style={{ background: "#f8f8f8", border: "1px solid #eee", borderRadius: 8, padding: "9px 12px", fontSize: 13, outline: "none" }} />
+                  style={{ background: "#F9F5EF", border: "1px solid #EFE8DE", borderRadius: 8, padding: "9px 12px", fontSize: 13, outline: "none" }} />
               </div>
               <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-                <label style={{ fontSize: 10, color: "#aaa", fontFamily: "monospace", textTransform: "uppercase" }}>Nº Parcelas</label>
+                <label style={{ fontSize: 10, color: "#9DA2A6", fontFamily: "var(--fonte-numero)", textTransform: "uppercase" }}>Nº Parcelas</label>
                 <input type="number" min={1} max={120} value={editForm.parcelas}
                   onChange={e => setEditForm(f => ({ ...f, parcelas: e.target.value }))}
-                  style={{ background: "#f8f8f8", border: "1px solid #eee", borderRadius: 8, padding: "9px 12px", fontSize: 13, outline: "none" }} />
+                  style={{ background: "#F9F5EF", border: "1px solid #EFE8DE", borderRadius: 8, padding: "9px 12px", fontSize: 13, outline: "none" }} />
               </div>
 
               <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-                <label style={{ fontSize: 10, color: "#aaa", fontFamily: "monospace", textTransform: "uppercase" }}>Periodicidade</label>
+                <label style={{ fontSize: 10, color: "#9DA2A6", fontFamily: "var(--fonte-numero)", textTransform: "uppercase" }}>Periodicidade</label>
                 <select value={editForm.periodicidade} onChange={e => setEditForm(f => ({ ...f, periodicidade: e.target.value }))}
-                  style={{ background: "#f8f8f8", border: "1px solid #eee", borderRadius: 8, padding: "9px 12px", fontSize: 13, outline: "none" }}>
+                  style={{ background: "#F9F5EF", border: "1px solid #EFE8DE", borderRadius: 8, padding: "9px 12px", fontSize: 13, outline: "none" }}>
                   <option value="unica">Única</option>
                   <option value="mensal">Mensal</option>
                   <option value="trimestral">Trimestral</option>
@@ -1550,35 +1560,35 @@ export default function FluxoFuturo({ faturas: faturasTodas, faturasLoading, pag
                 </select>
               </div>
               <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-                <label style={{ fontSize: 10, color: "#aaa", fontFamily: "monospace", textTransform: "uppercase" }}>Empresa</label>
+                <label style={{ fontSize: 10, color: "#9DA2A6", fontFamily: "var(--fonte-numero)", textTransform: "uppercase" }}>Empresa</label>
                 <select value={editForm.empresa} onChange={e => setEditForm(f => ({ ...f, empresa: e.target.value }))}
-                  style={{ background: "#f8f8f8", border: "1px solid #eee", borderRadius: 8, padding: "9px 12px", fontSize: 13, outline: "none" }}>
+                  style={{ background: "#F9F5EF", border: "1px solid #EFE8DE", borderRadius: 8, padding: "9px 12px", fontSize: 13, outline: "none" }}>
                   {EMPRESAS_CAIXA.filter(e => e.id !== "all").map(e => <option key={e.id} value={e.id}>{e.nome}</option>)}
                 </select>
               </div>
 
               <div style={{ gridColumn: "1/-1", display: "flex", flexDirection: "column", gap: 4 }}>
-                <label style={{ fontSize: 10, color: "#aaa", fontFamily: "monospace", textTransform: "uppercase" }}>Categoria</label>
+                <label style={{ fontSize: 10, color: "#9DA2A6", fontFamily: "var(--fonte-numero)", textTransform: "uppercase" }}>Categoria</label>
                 <select value={editForm.categoria} onChange={e => setEditForm(f => ({ ...f, categoria: e.target.value }))}
-                  style={{ background: "#f8f8f8", border: "1px solid #eee", borderRadius: 8, padding: "9px 12px", fontSize: 13, outline: "none" }}>
+                  style={{ background: "#F9F5EF", border: "1px solid #EFE8DE", borderRadius: 8, padding: "9px 12px", fontSize: 13, outline: "none" }}>
                   {CATEGORIAS.map(v => <option key={v}>{v}</option>)}
                 </select>
               </div>
             </div>
 
-            <div style={{ marginTop: 20, padding: 12, background: "#fffbeb", border: "1px solid #fde68a", borderRadius: 8, fontSize: 11, color: "#92400e", lineHeight: 1.5 }}>
+            <div style={{ marginTop: 20, padding: 12, background: "#FBF6EC", border: "1px solid #E3CE9F", borderRadius: 8, fontSize: 11, color: "#7A5A22", lineHeight: 1.5 }}>
               💡 Este pagamento foi criado como parcela única. Aqui podes ajustar o valor, a data, ou transformá-lo num pagamento recorrente (mensal/trimestral/anual).
             </div>
 
             <div style={{ display: "flex", justifyContent: "space-between", marginTop: 20 }}>
               <button onClick={() => { handleDeletePagamento(editPagamento); closeEdit(); }}
-                style={{ background: "#fef2f2", color: "#dc2626", border: "1px solid #fecaca", padding: "10px 18px", borderRadius: 8, fontSize: 13, cursor: "pointer", fontWeight: 600 }}>
+                style={{ background: "#FBEDEB", color: "#A93226", border: "1px solid #EFCFC9", padding: "10px 18px", borderRadius: 8, fontSize: 13, cursor: "pointer", fontWeight: 600 }}>
                 ✕ Eliminar
               </button>
               <div style={{ display: "flex", gap: 10 }}>
-                <button onClick={closeEdit} style={{ background: "#f0f0f0", color: "#666", border: "none", padding: "10px 20px", borderRadius: 8, fontSize: 13, cursor: "pointer" }}>Cancelar</button>
+                <button onClick={closeEdit} style={{ background: "#E7DED2", color: "#5C6166", border: "none", padding: "10px 20px", borderRadius: 8, fontSize: 13, cursor: "pointer" }}>Cancelar</button>
                 <button onClick={handleSaveEdit}
-                  style={{ background: "#1a1a2e", color: "#fff", border: "none", padding: "10px 24px", borderRadius: 8, fontSize: 13, cursor: "pointer", fontWeight: 600 }}>
+                  style={{ background: "#091C2A", color: "#fff", border: "none", padding: "10px 24px", borderRadius: 8, fontSize: 13, cursor: "pointer", fontWeight: 600 }}>
                   Guardar alterações
                 </button>
               </div>

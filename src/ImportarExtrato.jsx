@@ -451,19 +451,19 @@ export default function ImportarExtrato({ onSaveMovimentos, onGoToExtrato }) {
   if (step === 0) return (
     <div style={{ display: "flex", flexDirection: "column", gap: 24 }}>
       <div>
-        <div style={{ fontSize: 20, fontWeight: 700, color: "#1a1a2e", fontFamily: "Georgia,serif", marginBottom: 4 }}>📄 Importar Extrato Bancário</div>
-        <div style={{ fontSize: 13, color: "#888" }}>Seleciona a empresa e o banco, faz upload do extrato (Excel, CSV ou PDF Revolut) e os movimentos são adicionados ao Caixa Único.</div>
+        <div style={{ fontSize: 20, fontWeight: 700, color: "#091C2A", fontFamily: "var(--fonte-titulo)", marginBottom: 4 }}>📄 Importar Extrato Bancário</div>
+        <div style={{ fontSize: 13, color: "#7E8388" }}>Seleciona a empresa e o banco, faz upload do extrato (Excel, CSV ou PDF Revolut) e os movimentos são adicionados ao Caixa Único.</div>
       </div>
 
       <div>
-        <label style={{ fontSize: 11, color: "#888", fontFamily: "monospace", textTransform: "uppercase", letterSpacing: "0.08em", display: "block", marginBottom: 10 }}>Empresa (SPV)</label>
+        <label style={{ fontSize: 11, color: "#7E8388", fontFamily: "var(--fonte-numero)", textTransform: "uppercase", letterSpacing: "0.08em", display: "block", marginBottom: 10 }}>Empresa (SPV)</label>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(200px, 1fr))", gap: 8 }}>
           {EMPRESAS.map(e => (
             <div key={e.id} onClick={() => { setEmpresa(e); setBanco(""); }}
-              style={{ background: empresa?.id === e.id ? "#1a1a2e" : "#fff", border: `2px solid ${empresa?.id === e.id ? "#1a1a2e" : "#eee"}`, borderRadius: 10, padding: "12px 14px", cursor: "pointer", transition: "all 0.15s" }}>
-              <div style={{ fontSize: 12, fontWeight: 600, color: empresa?.id === e.id ? "#6B7C93" : "#1a1a2e" }}>{e.nome}</div>
+              style={{ background: empresa?.id === e.id ? "#091C2A" : "#fff", border: `2px solid ${empresa?.id === e.id ? "#091C2A" : "#EFE8DE"}`, borderRadius: 10, padding: "12px 14px", cursor: "pointer", transition: "all 0.15s" }}>
+              <div style={{ fontSize: 12, fontWeight: 600, color: empresa?.id === e.id ? "#BAA685" : "#091C2A" }}>{e.nome}</div>
               <div style={{ display: "flex", gap: 4, marginTop: 6, flexWrap: "wrap" }}>
-                {e.contas.map(b => <span key={b} style={{ fontSize: 9, padding: "1px 6px", borderRadius: 3, background: empresa?.id === e.id ? "#ffffff22" : "#f0f0f0", color: empresa?.id === e.id ? "#ddd" : "#888", fontFamily: "monospace" }}>{b}</span>)}
+                {e.contas.map(b => <span key={b} style={{ fontSize: 9, padding: "1px 6px", borderRadius: 3, background: empresa?.id === e.id ? "#ffffff22" : "#E7DED2", color: empresa?.id === e.id ? "#D8CCBB" : "#7E8388", fontFamily: "var(--fonte-numero)" }}>{b}</span>)}
               </div>
             </div>
           ))}
@@ -472,11 +472,11 @@ export default function ImportarExtrato({ onSaveMovimentos, onGoToExtrato }) {
 
       {empresa && (
         <div>
-          <label style={{ fontSize: 11, color: "#888", fontFamily: "monospace", textTransform: "uppercase", letterSpacing: "0.08em", display: "block", marginBottom: 10 }}>Conta Bancária</label>
+          <label style={{ fontSize: 11, color: "#7E8388", fontFamily: "var(--fonte-numero)", textTransform: "uppercase", letterSpacing: "0.08em", display: "block", marginBottom: 10 }}>Conta Bancária</label>
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
             {empObj?.contas.map(b => (
               <button key={b} onClick={() => setBanco(b)}
-                style={{ background: banco === b ? "#1a1a2e" : "#fff", color: banco === b ? "#6B7C93" : "#666", border: `2px solid ${banco === b ? "#1a1a2e" : "#eee"}`, padding: "8px 20px", borderRadius: 8, fontSize: 13, cursor: "pointer", fontWeight: banco === b ? 700 : 400 }}>
+                style={{ background: banco === b ? "#091C2A" : "#fff", color: banco === b ? "#BAA685" : "#5C6166", border: `2px solid ${banco === b ? "#091C2A" : "#EFE8DE"}`, padding: "8px 20px", borderRadius: 8, fontSize: 13, cursor: "pointer", fontWeight: banco === b ? 700 : 400 }}>
                 {b}
               </button>
             ))}
@@ -486,7 +486,7 @@ export default function ImportarExtrato({ onSaveMovimentos, onGoToExtrato }) {
 
       <div style={{ display: "flex", justifyContent: "flex-end" }}>
         <button onClick={() => setStep(1)} disabled={!empresa || !banco}
-          style={{ background: empresa && banco ? "#1a1a2e" : "#e0e0e0", color: empresa && banco ? "#fff" : "#aaa", border: "none", padding: "12px 32px", borderRadius: 10, fontSize: 14, fontWeight: 700, cursor: empresa && banco ? "pointer" : "default" }}>
+          style={{ background: empresa && banco ? "#091C2A" : "#DFD5C8", color: empresa && banco ? "#fff" : "#9DA2A6", border: "none", padding: "12px 32px", borderRadius: 10, fontSize: 14, fontWeight: 700, cursor: empresa && banco ? "pointer" : "default" }}>
           Continuar →
         </button>
       </div>
@@ -496,39 +496,39 @@ export default function ImportarExtrato({ onSaveMovimentos, onGoToExtrato }) {
   // ── Step 1: Upload ─────────────────────────────────────────────────────────
   if (step === 1) return (
     <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
-      <div style={{ background: "#f8f9fc", borderRadius: 10, padding: "12px 16px", display: "flex", gap: 16, alignItems: "center" }}>
-        <div><span style={{ fontSize: 10, color: "#aaa", fontFamily: "monospace" }}>EMPRESA</span><div style={{ fontSize: 13, fontWeight: 700, color: "#1a1a2e" }}>{empresa?.nome}</div></div>
-        <div style={{ width: 1, height: 32, background: "#e0e0e0" }} />
-        <div><span style={{ fontSize: 10, color: "#aaa", fontFamily: "monospace" }}>BANCO</span><div style={{ fontSize: 13, fontWeight: 700, color: "#1a1a2e" }}>{banco}</div></div>
-        <button onClick={() => setStep(0)} style={{ marginLeft: "auto", background: "none", border: "1px solid #eee", borderRadius: 6, padding: "4px 12px", fontSize: 11, color: "#aaa", cursor: "pointer" }}>Alterar</button>
+      <div style={{ background: "#FAF6F0", borderRadius: 10, padding: "12px 16px", display: "flex", gap: 16, alignItems: "center" }}>
+        <div><span style={{ fontSize: 10, color: "#9DA2A6", fontFamily: "var(--fonte-numero)" }}>EMPRESA</span><div style={{ fontSize: 13, fontWeight: 700, color: "#091C2A" }}>{empresa?.nome}</div></div>
+        <div style={{ width: 1, height: 32, background: "#DFD5C8" }} />
+        <div><span style={{ fontSize: 10, color: "#9DA2A6", fontFamily: "var(--fonte-numero)" }}>BANCO</span><div style={{ fontSize: 13, fontWeight: 700, color: "#091C2A" }}>{banco}</div></div>
+        <button onClick={() => setStep(0)} style={{ marginLeft: "auto", background: "none", border: "1px solid #EFE8DE", borderRadius: 6, padding: "4px 12px", fontSize: 11, color: "#9DA2A6", cursor: "pointer" }}>Alterar</button>
       </div>
 
       <div onDragOver={e => { e.preventDefault(); setDragging(true); }} onDragLeave={() => setDragging(false)}
         onDrop={e => { e.preventDefault(); setDragging(false); handleFile(e.dataTransfer.files[0]); }}
         onClick={() => fileRef.current?.click()}
-        style={{ border: `2px dashed ${dragging ? "#1a1a2e" : file ? "#16a34a" : "#ddd"}`, borderRadius: 16, padding: "52px 24px", textAlign: "center", cursor: "pointer", background: file ? "#f0fdf4" : "#fafafa", transition: "all 0.2s" }}>
+        style={{ border: `2px dashed ${dragging ? "#091C2A" : file ? "#1F7A54" : "#D8CCBB"}`, borderRadius: 16, padding: "52px 24px", textAlign: "center", cursor: "pointer", background: file ? "#EFF5F1" : "#FBF7F1", transition: "all 0.2s" }}>
         <input ref={fileRef} type="file" accept=".xlsx,.xls,.csv,.txt,.pdf" style={{ display: "none" }} onChange={e => handleFile(e.target.files[0])} />
         {file ? (
           <>
             <div style={{ fontSize: 40, marginBottom: 10 }}>✅</div>
-            <div style={{ fontSize: 15, fontWeight: 700, color: "#16a34a" }}>{file.name}</div>
-            <div style={{ fontSize: 12, color: "#aaa", marginTop: 4 }}>{fmtTamanho(file.size)} · Clica para trocar</div>
+            <div style={{ fontSize: 15, fontWeight: 700, color: "#1F7A54" }}>{file.name}</div>
+            <div style={{ fontSize: 12, color: "#9DA2A6", marginTop: 4 }}>{fmtTamanho(file.size)} · Clica para trocar</div>
           </>
         ) : (
           <>
             <div style={{ fontSize: 48, marginBottom: 14 }}>📊</div>
-            <div style={{ fontSize: 16, fontWeight: 700, color: "#1a1a2e", marginBottom: 8 }}>Arrasta o extrato aqui</div>
-            <div style={{ fontSize: 13, color: "#aaa", marginBottom: 14 }}>ou clica para selecionar</div>
+            <div style={{ fontSize: 16, fontWeight: 700, color: "#091C2A", marginBottom: 8 }}>Arrasta o extrato aqui</div>
+            <div style={{ fontSize: 13, color: "#9DA2A6", marginBottom: 14 }}>ou clica para selecionar</div>
             <div style={{ display: "flex", gap: 8, justifyContent: "center", flexWrap: "wrap" }}>
-              {["Excel (.xlsx)", "CSV", "PDF (Revolut)"].map(f => <span key={f} style={{ background: "#fff", border: "1px solid #e0e0e0", color: "#888", fontSize: 11, padding: "4px 12px", borderRadius: 20, fontFamily: "monospace" }}>{f}</span>)}
+              {["Excel (.xlsx)", "CSV", "PDF (Revolut)"].map(f => <span key={f} style={{ background: "#fff", border: "1px solid #DFD5C8", color: "#7E8388", fontSize: 11, padding: "4px 12px", borderRadius: 20, fontFamily: "var(--fonte-numero)" }}>{f}</span>)}
             </div>
           </>
         )}
       </div>
 
-      <div style={{ background: "#fffbeb", border: "1px solid #fde68a", borderRadius: 10, padding: "12px 16px" }}>
-        <div style={{ fontSize: 12, color: "#92400e", fontWeight: 600, marginBottom: 4 }}>💡 Formatos reconhecidos automaticamente</div>
-        <div style={{ fontSize: 11, color: "#a16207", lineHeight: 1.7 }}>
+      <div style={{ background: "#FBF6EC", border: "1px solid #E3CE9F", borderRadius: 10, padding: "12px 16px" }}>
+        <div style={{ fontSize: 12, color: "#7A5A22", fontWeight: 600, marginBottom: 4 }}>💡 Formatos reconhecidos automaticamente</div>
+        <div style={{ fontSize: 11, color: "#8A6727", lineHeight: 1.7 }}>
           • <strong>BCP Millennium</strong> (.xlsx) — Data Lançamento, Descrição, Montante, Saldo<br/>
           • <strong>BNI</strong> (.xlsx) — Data movimento, Descrição, Valor, Saldo<br/>
           • <strong>Banco Invest</strong> (.xlsx) — Data Operação, Descrição, Débito, Crédito, Saldo<br/>
@@ -537,12 +537,12 @@ export default function ImportarExtrato({ onSaveMovimentos, onGoToExtrato }) {
         </div>
       </div>
 
-      {erro && <div style={{ background: "#fef2f2", border: "1px solid #fecaca", borderRadius: 10, padding: "12px 16px", color: "#dc2626", fontSize: 13 }}>⚠️ {erro}</div>}
+      {erro && <div style={{ background: "#FBEDEB", border: "1px solid #EFCFC9", borderRadius: 10, padding: "12px 16px", color: "#A93226", fontSize: 13 }}>⚠️ {erro}</div>}
 
       <div style={{ display: "flex", justifyContent: "space-between" }}>
-        <button onClick={() => setStep(0)} style={{ background: "none", border: "1px solid #eee", padding: "12px 24px", borderRadius: 10, fontSize: 14, color: "#888", cursor: "pointer" }}>← Voltar</button>
+        <button onClick={() => setStep(0)} style={{ background: "none", border: "1px solid #EFE8DE", padding: "12px 24px", borderRadius: 10, fontSize: 14, color: "#7E8388", cursor: "pointer" }}>← Voltar</button>
         <button onClick={handleParse} disabled={!file || loading}
-          style={{ background: file && !loading ? "#1a1a2e" : "#e0e0e0", color: file && !loading ? "#fff" : "#aaa", border: "none", padding: "12px 32px", borderRadius: 10, fontSize: 14, fontWeight: 700, cursor: file && !loading ? "pointer" : "default", display: "flex", alignItems: "center", gap: 10 }}>
+          style={{ background: file && !loading ? "#091C2A" : "#DFD5C8", color: file && !loading ? "#fff" : "#9DA2A6", border: "none", padding: "12px 32px", borderRadius: 10, fontSize: 14, fontWeight: 700, cursor: file && !loading ? "pointer" : "default", display: "flex", alignItems: "center", gap: 10 }}>
           {loading ? "A processar..." : "📊 Processar Extrato →"}
         </button>
       </div>
@@ -555,90 +555,90 @@ export default function ImportarExtrato({ onSaveMovimentos, onGoToExtrato }) {
       <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
           <div>
-            <div style={{ fontSize: 18, fontWeight: 700, color: "#1a1a2e", fontFamily: "Georgia,serif" }}>Rever Movimentos</div>
-            <div style={{ fontSize: 13, color: "#888", marginTop: 2 }}>
+            <div style={{ fontSize: 18, fontWeight: 700, color: "#091C2A", fontFamily: "var(--fonte-titulo)" }}>Rever Movimentos</div>
+            <div style={{ fontSize: 13, color: "#7E8388", marginTop: 2 }}>
               {empresa?.nome} · {banco} · {movimentos.length} movimentos lidos
               {duplicados.length > 0 && (
-                <span style={{ color: "#92400e", fontWeight: 600, marginLeft: 6 }}>
+                <span style={{ color: "#7A5A22", fontWeight: 600, marginLeft: 6 }}>
                   · {duplicados.length} já existem no extrato (desmarcados)
                 </span>
               )}
             </div>
           </div>
-          <button onClick={reset} style={{ background: "none", border: "1px solid #eee", padding: "7px 16px", borderRadius: 8, fontSize: 12, color: "#888", cursor: "pointer" }}>← Novo upload</button>
+          <button onClick={reset} style={{ background: "none", border: "1px solid #EFE8DE", padding: "7px 16px", borderRadius: 8, fontSize: 12, color: "#7E8388", cursor: "pointer" }}>← Novo upload</button>
         </div>
 
         {/* KPIs */}
         <div style={{ display: "grid", gridTemplateColumns: "repeat(5,1fr)", gap: 12 }}>
           {[
-            { label: "Total lidos", value: movimentos.length, color: "#1a1a2e", fmt: v => v },
-            { label: "Novos", value: novos.length, color: "#16a34a", fmt: v => v },
-            { label: "Já existentes", value: duplicados.length, color: "#92400e", fmt: v => v },
-            { label: "Entradas (novos)", value: aprovados.filter(m => m.valor > 0).reduce((s, m) => s + m.valor, 0), color: "#16a34a", fmt: fmt },
-            { label: "Saídas (novos)", value: Math.abs(aprovados.filter(m => m.valor < 0).reduce((s, m) => s + m.valor, 0)), color: "#dc2626", fmt: fmt },
+            { label: "Total lidos", value: movimentos.length, color: "#091C2A", fmt: v => v },
+            { label: "Novos", value: novos.length, color: "#1F7A54", fmt: v => v },
+            { label: "Já existentes", value: duplicados.length, color: "#7A5A22", fmt: v => v },
+            { label: "Entradas (novos)", value: aprovados.filter(m => m.valor > 0).reduce((s, m) => s + m.valor, 0), color: "#1F7A54", fmt: fmt },
+            { label: "Saídas (novos)", value: Math.abs(aprovados.filter(m => m.valor < 0).reduce((s, m) => s + m.valor, 0)), color: "#A93226", fmt: fmt },
           ].map((k, i) => (
-            <div key={i} style={{ background: "#fff", border: "1px solid #f0f0f0", borderRadius: 10, padding: "12px 16px", borderTop: `3px solid ${k.color}` }}>
-              <div style={{ fontSize: 10, color: "#aaa", textTransform: "uppercase", fontFamily: "monospace", marginBottom: 4 }}>{k.label}</div>
-              <div style={{ fontSize: 18, fontWeight: 700, color: k.color, fontFamily: "monospace" }}>{k.fmt(k.value)}</div>
+            <div key={i} style={{ background: "#fff", border: "1px solid #E7DED2", borderRadius: 10, padding: "12px 16px", borderTop: `3px solid ${k.color}` }}>
+              <div style={{ fontSize: 10, color: "#9DA2A6", textTransform: "uppercase", fontFamily: "var(--fonte-numero)", marginBottom: 4 }}>{k.label}</div>
+              <div style={{ fontSize: 18, fontWeight: 700, color: k.color, fontFamily: "var(--fonte-numero)" }}>{k.fmt(k.value)}</div>
             </div>
           ))}
         </div>
 
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 10 }}>
-          <div style={{ fontSize: 13, color: "#888" }}>
+          <div style={{ fontSize: 13, color: "#7E8388" }}>
             Verifica e ajusta as categorias antes de guardar
           </div>
           <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
             {duplicados.length > 0 && (
               <button onClick={() => setEsconderDuplicados(v => !v)}
                 title={esconderDuplicados ? "Mostrar movimentos já existentes (cinzentos)" : "Esconder movimentos já existentes"}
-                style={{ background: esconderDuplicados ? "#1a1a2e" : "#fff", border: "1px solid #e5e5e5", color: esconderDuplicados ? "#fff" : "#666", padding: "7px 14px", borderRadius: 8, fontSize: 11, cursor: "pointer", fontWeight: 600 }}>
+                style={{ background: esconderDuplicados ? "#091C2A" : "#fff", border: "1px solid #E3D9CC", color: esconderDuplicados ? "#fff" : "#5C6166", padding: "7px 14px", borderRadius: 8, fontSize: 11, cursor: "pointer", fontWeight: 600 }}>
                 {esconderDuplicados ? "👁️ Mostrar todos" : "🙈 Esconder duplicados"}
               </button>
             )}
-            <button onClick={aprovarTodos} style={{ background: "#f0fdf4", border: "1px solid #bbf7d0", color: "#16a34a", padding: "7px 16px", borderRadius: 8, fontSize: 12, cursor: "pointer", fontWeight: 600 }}>✓ Aprovar todos os novos</button>
+            <button onClick={aprovarTodos} style={{ background: "#EFF5F1", border: "1px solid #C9E3D5", color: "#1F7A54", padding: "7px 16px", borderRadius: 8, fontSize: 12, cursor: "pointer", fontWeight: 600 }}>✓ Aprovar todos os novos</button>
           </div>
         </div>
 
-        <div style={{ background: "#fff", border: "1px solid #f0f0f0", borderRadius: 12, overflow: "hidden" }}>
+        <div style={{ background: "#fff", border: "1px solid #E7DED2", borderRadius: 12, overflow: "hidden" }}>
           <div style={{ overflowX: "auto" }}>
             <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
               <thead>
-                <tr style={{ background: "#f8f9fc" }}>
+                <tr style={{ background: "#FAF6F0" }}>
                   {["✓", "Data", "Descrição", "Valor", "Saldo", "Categoria", "Observação", "Estado"].map(h => (
-                    <th key={h} style={{ padding: "10px 12px", textAlign: "left", color: "#aaa", fontSize: 10, letterSpacing: "0.07em", textTransform: "uppercase", fontFamily: "monospace", borderBottom: "1px solid #f0f0f0", whiteSpace: "nowrap" }}>{h}</th>
+                    <th key={h} style={{ padding: "10px 12px", textAlign: "left", color: "#9DA2A6", fontSize: 10, letterSpacing: "0.07em", textTransform: "uppercase", fontFamily: "var(--fonte-numero)", borderBottom: "1px solid #E7DED2", whiteSpace: "nowrap" }}>{h}</th>
                   ))}
                 </tr>
               </thead>
               <tbody>
                 {movimentosVisiveis.map((m, i) => {
                   const dup = m._jaExiste;
-                  const rowBg = dup ? "#f3f4f6" : (m.aprovado ? "" : "#fff8f8");
+                  const rowBg = dup ? "#F4EEE5" : (m.aprovado ? "" : "#FDF3F1");
                   const rowOpacity = dup ? 0.65 : 1;
                   return (
-                  <tr key={m.id} style={{ borderBottom: "1px solid #fafafa", background: rowBg, opacity: rowOpacity }}>
+                  <tr key={m.id} style={{ borderBottom: "1px solid #FBF7F1", background: rowBg, opacity: rowOpacity }}>
                     <td style={{ padding: "9px 12px" }}>
                       <input type="checkbox" checked={m.aprovado} onChange={() => toggleAprov(m.id)} style={{ cursor: "pointer", width: 16, height: 16 }} />
                     </td>
                     <td style={{ padding: "6px 8px" }}>
                       <input type="date" value={m.data||""} onChange={e=>setMovimentos(ms=>ms.map(mv=>mv.id===m.id?{...mv,data:e.target.value}:mv))}
-                        style={{background:"#f8f8f8",border:"1px solid #eee",borderRadius:6,padding:"4px 7px",fontSize:11,outline:"none",fontFamily:"monospace",width:"115px"}}/>
+                        style={{background:"#F9F5EF",border:"1px solid #EFE8DE",borderRadius:6,padding:"4px 7px",fontSize:11,outline:"none",fontFamily: "var(--fonte-numero)",width:"115px"}}/>
                     </td>
                     <td style={{ padding: "6px 8px" }}>
                       <input type="text" value={m.movimento||""} onChange={e=>setMovimentos(ms=>ms.map(mv=>mv.id===m.id?{...mv,movimento:e.target.value}:mv))}
-                        style={{background:"#f8f8f8",border:"1px solid #eee",borderRadius:6,padding:"4px 7px",fontSize:11,outline:"none",width:"200px"}}/>
+                        style={{background:"#F9F5EF",border:"1px solid #EFE8DE",borderRadius:6,padding:"4px 7px",fontSize:11,outline:"none",width:"200px"}}/>
                     </td>
                     <td style={{ padding: "6px 8px" }}>
                       <input type="number" value={m.valor||0} onChange={e=>setMovimentos(ms=>ms.map(mv=>mv.id===m.id?{...mv,valor:parseFloat(e.target.value)||0}:mv))}
-                        style={{background:"#f8f8f8",border:"1px solid #eee",borderRadius:6,padding:"4px 7px",fontSize:11,outline:"none",fontFamily:"monospace",width:"90px",color:m.valor>=0?"#16a34a":"#dc2626",fontWeight:700}} step="0.01"/>
+                        style={{background:"#F9F5EF",border:"1px solid #EFE8DE",borderRadius:6,padding:"4px 7px",fontSize:11,outline:"none",fontFamily: "var(--fonte-numero)",width:"90px",color:m.valor>=0?"#1F7A54":"#A93226",fontWeight:700}} step="0.01"/>
                     </td>
                     <td style={{ padding: "6px 8px" }}>
                       <input type="number" value={m.saldo||0} onChange={e=>setMovimentos(ms=>ms.map(mv=>mv.id===m.id?{...mv,saldo:parseFloat(e.target.value)||0}:mv))}
-                        style={{background:"#f8f8f8",border:"1px solid #eee",borderRadius:6,padding:"4px 7px",fontSize:11,outline:"none",fontFamily:"monospace",width:"90px"}} step="0.01"/>
+                        style={{background:"#F9F5EF",border:"1px solid #EFE8DE",borderRadius:6,padding:"4px 7px",fontSize:11,outline:"none",fontFamily: "var(--fonte-numero)",width:"90px"}} step="0.01"/>
                     </td>
                     <td style={{ padding: "9px 12px", minWidth: 160 }}>
                       <select value={m.catEditada} onChange={e => updateCat(m.id, e.target.value)}
-                        style={{ width: "100%", background: "#f8f8f8", border: "1px solid #eee", borderRadius: 6, padding: "4px 8px", fontSize: 11, outline: "none" }}>
+                        style={{ width: "100%", background: "#F9F5EF", border: "1px solid #EFE8DE", borderRadius: 6, padding: "4px 8px", fontSize: 11, outline: "none" }}>
                         <option value="">-- sem categoria --</option>
                         {CATEGORIAS.map(c => <option key={c}>{c}</option>)}
                       </select>
@@ -648,18 +648,18 @@ export default function ImportarExtrato({ onSaveMovimentos, onGoToExtrato }) {
                         type="text"
                         value={m.detalhes || ""}
                         onChange={e => setMovimentos(ms => ms.map(mv => mv.id === m.id ? { ...mv, detalhes: e.target.value } : mv))}
-                        style={{ width: "100%", background: "#f8f8f8", border: "1px solid #eee", borderRadius: 6, padding: "4px 8px", fontSize: 11, outline: "none", fontFamily: "inherit" }}
+                        style={{ width: "100%", background: "#F9F5EF", border: "1px solid #EFE8DE", borderRadius: 6, padding: "4px 8px", fontSize: 11, outline: "none", fontFamily: "inherit" }}
                         placeholder="Observação..."
                       />
                     </td>
                     <td style={{ padding: "9px 12px" }}>
                       {dup ? (
                         <span title="Este movimento já existe no extrato (mesma data, descrição, valor e saldo). Marca a caixa se mesmo assim quiseres reinserir."
-                          style={{ background: "#e0e7ff", color: "#3730a3", fontSize: 10, padding: "2px 8px", borderRadius: 12, fontFamily: "monospace", fontWeight: 700 }}>
+                          style={{ background: "#E0E9F0", color: "#2C4A63", fontSize: 10, padding: "2px 8px", borderRadius: 12, fontFamily: "var(--fonte-numero)", fontWeight: 700 }}>
                           🔁 Já existe
                         </span>
                       ) : (
-                        <span style={{ background: m.aprovado ? "#f0fdf4" : "#fff8f8", color: m.aprovado ? "#16a34a" : "#dc2626", fontSize: 10, padding: "2px 8px", borderRadius: 12, fontFamily: "monospace" }}>
+                        <span style={{ background: m.aprovado ? "#EFF5F1" : "#FDF3F1", color: m.aprovado ? "#1F7A54" : "#A93226", fontSize: 10, padding: "2px 8px", borderRadius: 12, fontFamily: "var(--fonte-numero)" }}>
                           {m.aprovado ? "Aprovado" : "Ignorado"}
                         </span>
                       )}
@@ -673,9 +673,9 @@ export default function ImportarExtrato({ onSaveMovimentos, onGoToExtrato }) {
         </div>
 
         <div style={{ display: "flex", justifyContent: "space-between" }}>
-          <button onClick={() => setStep(1)} disabled={saving} style={{ background: "none", border: "1px solid #eee", padding: "12px 24px", borderRadius: 10, fontSize: 14, color: "#888", cursor: saving ? "default" : "pointer" }}>← Voltar</button>
+          <button onClick={() => setStep(1)} disabled={saving} style={{ background: "none", border: "1px solid #EFE8DE", padding: "12px 24px", borderRadius: 10, fontSize: 14, color: "#7E8388", cursor: saving ? "default" : "pointer" }}>← Voltar</button>
           <button onClick={handleSave} disabled={aprovados.length === 0 || saving}
-            style={{ background: aprovados.length > 0 && !saving ? "#16a34a" : "#e0e0e0", color: "#fff", border: "none", padding: "12px 32px", borderRadius: 10, fontSize: 14, fontWeight: 700, cursor: aprovados.length > 0 && !saving ? "pointer" : "default" }}>
+            style={{ background: aprovados.length > 0 && !saving ? "#091C2A" : "#DFD5C8", color: "#fff", border: "none", padding: "12px 32px", borderRadius: 10, fontSize: 14, fontWeight: 700, cursor: aprovados.length > 0 && !saving ? "pointer" : "default" }}>
             {saving ? "⏳ A guardar..." : `💾 Guardar ${aprovados.length} movimentos no Caixa Único`}
           </button>
         </div>
@@ -688,27 +688,27 @@ export default function ImportarExtrato({ onSaveMovimentos, onGoToExtrato }) {
   return (
     <div style={{ textAlign: "center", padding: "60px 0" }}>
       <div style={{ fontSize: 64, marginBottom: 20 }}>{r.ok ? "✅" : "⚠️"}</div>
-      <div style={{ fontSize: 22, fontWeight: 700, color: r.ok ? "#1a1a2e" : "#b91c1c", fontFamily: "Georgia,serif", marginBottom: 8 }}>
+      <div style={{ fontSize: 22, fontWeight: 700, color: r.ok ? "#091C2A" : "#8E2A20", fontFamily: "var(--fonte-titulo)", marginBottom: 8 }}>
         {r.ok ? "Extrato importado!" : "Erro a guardar"}
       </div>
-      <div style={{ fontSize: 14, color: "#444", marginBottom: 8 }}>
-        <strong style={{ color: "#16a34a" }}>{r.inserted}</strong> movimentos inseridos
-        {r.skipped > 0 && <> · <strong style={{ color: "#888" }}>{r.skipped}</strong> ignorados (duplicados)</>}
+      <div style={{ fontSize: 14, color: "#3A4044", marginBottom: 8 }}>
+        <strong style={{ color: "#1F7A54" }}>{r.inserted}</strong> movimentos inseridos
+        {r.skipped > 0 && <> · <strong style={{ color: "#7E8388" }}>{r.skipped}</strong> ignorados (duplicados)</>}
       </div>
-      <div style={{ fontSize: 13, color: "#888", marginBottom: r.error ? 16 : 32 }}>
+      <div style={{ fontSize: 13, color: "#7E8388", marginBottom: r.error ? 16 : 32 }}>
         <strong>{empresa?.nome}</strong> · {banco}
       </div>
       {r.error && (
-        <div style={{ background: "#fef2f2", border: "1px solid #fecaca", color: "#991b1b", padding: "12px 16px", borderRadius: 10, fontSize: 12, fontFamily: "monospace", marginBottom: 24, maxWidth: 600, marginLeft: "auto", marginRight: "auto", textAlign: "left" }}>
+        <div style={{ background: "#FBEDEB", border: "1px solid #EFCFC9", color: "#8E2A20", padding: "12px 16px", borderRadius: 10, fontSize: 12, fontFamily: "var(--fonte-numero)", marginBottom: 24, maxWidth: 600, marginLeft: "auto", marginRight: "auto", textAlign: "left" }}>
           {r.error}
         </div>
       )}
       <div style={{ display: "flex", gap: 10, justifyContent: "center" }}>
-        <button onClick={reset} style={{ background: "#fff", color: "#1a1a2e", border: "1px solid #e0e0e0", padding: "12px 24px", borderRadius: 10, fontSize: 14, fontWeight: 600, cursor: "pointer" }}>
+        <button onClick={reset} style={{ background: "#fff", color: "#091C2A", border: "1px solid #DFD5C8", padding: "12px 24px", borderRadius: 10, fontSize: 14, fontWeight: 600, cursor: "pointer" }}>
           + Importar outro extrato
         </button>
         {r.ok && onGoToExtrato && (
-          <button onClick={onGoToExtrato} style={{ background: "#1a1a2e", color: "#fff", border: "none", padding: "12px 28px", borderRadius: 10, fontSize: 14, fontWeight: 700, cursor: "pointer" }}>
+          <button onClick={onGoToExtrato} style={{ background: "#091C2A", color: "#fff", border: "none", padding: "12px 28px", borderRadius: 10, fontSize: 14, fontWeight: 700, cursor: "pointer" }}>
             Ver no Extrato →
           </button>
         )}

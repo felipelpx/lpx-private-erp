@@ -18,18 +18,18 @@ import { fmtEUR, fmtEUR0, fmtNum, fmtInt, fmtCompacto, fmtData, fmtPctSinal } fr
 // ─────────────────────────────────────────────────────────────────────────────
 
 const COR = {
-  tinta:    "#1a1a2e",
-  entrada:  "#16a34a",
-  saida:    "#dc2626",
-  neutro:   "#6B7C93",
-  saldo:    "#4a6fa5",
-  fundo:    "#f8f9fc",
+  tinta:    "#091C2A",
+  entrada:  "#1F7A54",
+  saida:    "#A93226",
+  neutro:   "#BAA685",
+  saldo:    "#2C4A63",
+  fundo:    "#FAF6F0",
   grelha:   "#eef0f4",
-  texto:    "#888",
+  texto:    "#7E8388",
 };
 
 // Paleta para centros de custo (estável: mesma categoria = mesma cor)
-const PALETA = ["#4a6fa5","#6B7C93","#8b7355","#5b8c85","#9c6b8e","#7a8b6f","#b08968","#5f7a8c","#8c7ba6","#a67b5b"];
+const PALETA = ["#2C4A63","#BAA685","#8b7355","#5b8c85","#9c6b8e","#7a8b6f","#b08968","#5f7a8c","#8c7ba6","#a67b5b"];
 const corCategoria = (nome, i) => PALETA[i % PALETA.length];
 
 // O contorno branco é o que garante que nenhuma linha nem barra come o número.
@@ -49,11 +49,11 @@ const Rotulos = ({ postos }) => (
 );
 
 const Card = ({ titulo, subtitulo, children, acao }) => (
-  <div style={{ background: "#fff", border: "1px solid #f0f0f0", borderRadius: 14, padding: 20 }}>
+  <div style={{ background: "#fff", border: "1px solid #E7DED2", borderRadius: 14, padding: 20 }}>
     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 16, gap: 12 }}>
       <div>
-        <div style={{ fontSize: 15, fontWeight: 700, color: COR.tinta, fontFamily: "Georgia,serif" }}>{titulo}</div>
-        {subtitulo && <div style={{ fontSize: 11, color: "#aaa", marginTop: 3 }}>{subtitulo}</div>}
+        <div style={{ fontSize: 15, fontWeight: 700, color: COR.tinta, fontFamily: "var(--fonte-titulo)" }}>{titulo}</div>
+        {subtitulo && <div style={{ fontSize: 11, color: "#9DA2A6", marginTop: 3 }}>{subtitulo}</div>}
       </div>
       {acao}
     </div>
@@ -62,7 +62,7 @@ const Card = ({ titulo, subtitulo, children, acao }) => (
 );
 
 const Vazio = ({ texto }) => (
-  <div style={{ padding: 40, textAlign: "center", color: "#ccc", fontSize: 12 }}>{texto}</div>
+  <div style={{ padding: 40, textAlign: "center", color: "#C4C7CA", fontSize: 12 }}>{texto}</div>
 );
 
 // ─── GRÁFICO EM CASCATA (saldo inicial → receitas → custos → saldo final) ────
@@ -105,7 +105,7 @@ function Cascata({ inicial, entradas, saidas, final }) {
     <div style={{ overflowX: "auto" }}>
       <svg viewBox={`0 0 ${largura} ${altura}`} width={largura} height={altura} style={{ minWidth: "100%", height: "auto", display: "block" }}>
         {/* linha do zero */}
-        <line x1={margemX} y1={y(0)} x2={largura - margemX} y2={y(0)} stroke="#ddd" strokeWidth="1" />
+        <line x1={margemX} y1={y(0)} x2={largura - margemX} y2={y(0)} stroke="#D8CCBB" strokeWidth="1" />
 
         {barras.map((b, i) => {
           const cx = margemX + passo * i + passo / 2;
@@ -122,7 +122,7 @@ function Cascata({ inicial, entradas, saidas, final }) {
                 <line x1={margemX + passo * (i - 1) + passo / 2 + larguraBarra / 2}
                       y1={y(b.tipo === "total" ? anterior.topo : b.base)}
                       x2={x} y2={y(b.tipo === "total" ? anterior.topo : b.base)}
-                      stroke="#ccc" strokeWidth="1" strokeDasharray="3 3" />
+                      stroke="#C4C7CA" strokeWidth="1" strokeDasharray="3 3" />
               )}
               <rect x={x} y={yTopo} width={larguraBarra} height={alt} fill={cor}
                     rx="2" opacity={b.tipo === "total" ? 1 : 0.9}>
@@ -170,11 +170,11 @@ function BarrasCentroCusto({ dados }) {
             <div style={{ flex: 1, background: COR.fundo, borderRadius: 5, height: 22, position: "relative", overflow: "hidden" }}>
               <div style={{ width: `${pct}%`, height: "100%", background: corCategoria(d.nome, i), borderRadius: 5, transition: "width .3s" }} />
             </div>
-            <div style={{ width: 108, textAlign: "right", fontFamily: "monospace", fontSize: 11.5, fontWeight: 700, color: COR.tinta }}>
+            <div style={{ width: 108, textAlign: "right", fontFamily: "var(--fonte-numero)", fontSize: 11.5, fontWeight: 700, color: COR.tinta }}>
               {fmtEUR0(Math.abs(d.atual))}
             </div>
-            <div style={{ width: 74, textAlign: "right", fontFamily: "monospace", fontSize: 10.5,
-                          color: varPct === null ? "#ccc" : varPct > 0 ? COR.saida : COR.entrada }}>
+            <div style={{ width: 74, textAlign: "right", fontFamily: "var(--fonte-numero)", fontSize: 10.5,
+                          color: varPct === null ? "#C4C7CA" : varPct > 0 ? COR.saida : COR.entrada }}>
               {varPct === null ? "—" : fmtPctSinal(varPct, 0)}
             </div>
           </div>
@@ -238,20 +238,20 @@ function EvolucaoSaldo({ serie }) {
   return (
     <div>
       <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10, flexWrap: "wrap" }}>
-        <span style={{ fontSize: 10, color: "#bbb", fontFamily: "monospace", textTransform: "uppercase", letterSpacing: "0.07em" }}>
+        <span style={{ fontSize: 10, color: "#B2B6B9", fontFamily: "var(--fonte-numero)", textTransform: "uppercase", letterSpacing: "0.07em" }}>
           Detalhe
         </span>
-        <div style={{ display: "flex", background: "#f4f5f7", borderRadius: 8, padding: 2, gap: 2 }}>
+        <div style={{ display: "flex", background: "#F6F0E8", borderRadius: 8, padding: 2, gap: 2 }}>
           {OPCOES.map(([k, label]) => (
             <button key={k} onClick={() => setGrao(k)}
               title={k === "auto" ? "Ajusta o detalhe ao número de meses para os valores continuarem legíveis" : undefined}
-              style={{ background: grao === k ? "#1a1a2e" : "transparent", color: grao === k ? "#fff" : "#777",
+              style={{ background: grao === k ? "#091C2A" : "transparent", color: grao === k ? "#fff" : "#6E7378",
                        border: "none", padding: "4px 12px", borderRadius: 6, fontSize: 11, fontWeight: 600, cursor: "pointer" }}>
               {label}
             </button>
           ))}
         </div>
-        <span style={{ fontSize: 10.5, color: "#bbb" }}>
+        <span style={{ fontSize: 10.5, color: "#B2B6B9" }}>
           {pontos.length} pontos · {nomeGrao}
         </span>
       </div>
@@ -262,7 +262,7 @@ function EvolucaoSaldo({ serie }) {
           {[max, (max + min) / 2, min].map((v, i) => (
             <g key={i}>
               <line x1={mX} y1={y(v)} x2={L - 22} y2={y(v)} stroke={COR.grelha} strokeWidth="1" />
-              <text x={mX - 8} y={y(v) + 4} textAnchor="end" fontSize="11" fontFamily="monospace" fill="#aaa">
+              <text x={mX - 8} y={y(v) + 4} textAnchor="end" fontSize="11" fontFamily="monospace" fill="#9DA2A6">
                 {fmtCompacto(v)}
               </text>
             </g>
@@ -274,7 +274,7 @@ function EvolucaoSaldo({ serie }) {
               <circle cx={x(i)} cy={y(p.saldo)} r="3.4" fill="#fff" stroke={COR.saldo} strokeWidth="2">
                 <title>{`${p.rotulo}: ${fmtEUR(p.saldo)}`}</title>
               </circle>
-              <text x={x(i)} y={A - 12} textAnchor="middle" fontSize="11" fontFamily="monospace" fill="#aaa">
+              <text x={x(i)} y={A - 12} textAnchor="middle" fontSize="11" fontFamily="monospace" fill="#9DA2A6">
                 {p.rotulo}
               </text>
             </g>
@@ -314,7 +314,7 @@ function BarrasRecebiveis({ meses }) {
         {[max, max / 2, 0].map((v, i) => (
           <g key={i}>
             <line x1={mX} y1={y(v)} x2={L - 16} y2={y(v)} stroke={COR.grelha} strokeWidth="1" />
-            <text x={mX - 8} y={y(v) + 4} textAnchor="end" fontSize="11" fontFamily="monospace" fill="#aaa">{fmtCompacto(v)}</text>
+            <text x={mX - 8} y={y(v) + 4} textAnchor="end" fontSize="11" fontFamily="monospace" fill="#9DA2A6">{fmtCompacto(v)}</text>
           </g>
         ))}
         {meses.map((m, i) => {
@@ -329,7 +329,7 @@ function BarrasRecebiveis({ meses }) {
                 <title>{`${m.rotulo} — projetado: ${fmtEUR(m.projetado)}`}</title>
               </rect>
 
-              <text x={cx} y={A - 10} textAnchor="middle" fontSize="11" fontFamily="monospace" fill="#aaa">{m.rotulo}</text>
+              <text x={cx} y={A - 10} textAnchor="middle" fontSize="11" fontFamily="monospace" fill="#9DA2A6">{m.rotulo}</text>
             </g>
           );
         })}
@@ -362,10 +362,10 @@ function BarrasRecebiveis({ meses }) {
 
 // ─── ESPELHO DE VENDAS — o "predinho" ────────────────────────────────────────
 const ESTADO_COR = {
-  "Disponível":  { fundo: "#f4f5f7", borda: "#dcdfe5", texto: "#8a8f99" },
-  "Reservada":   { fundo: "#fff7ed", borda: "#fdba74", texto: "#c2410c" },
-  "CPCV":        { fundo: "#eff6ff", borda: "#93c5fd", texto: "#1d4ed8" },
-  "Escriturada": { fundo: "#f0fdf4", borda: "#86efac", texto: "#15803d" },
+  "Disponível":  { fundo: "#F6F0E8", borda: "#dcdfe5", texto: "#6E7378" },
+  "Reservada":   { fundo: "#FBF6EC", borda: "#DCBE8E", texto: "#9C4A22" },
+  "CPCV":        { fundo: "#EDF1F5", borda: "#93c5fd", texto: "#1F3A52" },
+  "Escriturada": { fundo: "#EFF5F1", borda: "#7FBE9C", texto: "#1B6A49" },
 };
 
 function Predinho({ fracoes }) {
@@ -411,7 +411,7 @@ function Predinho({ fracoes }) {
 
           {/* Telhado */}
           <polygon points={`${MARGEM_ESQ - 10},26 ${LARGURA / 2 + MARGEM_ESQ / 2 - 5},4 ${LARGURA - 6},26`}
-                   fill="#e8eaef" stroke="#cdd2da" strokeWidth="1" />
+                   fill="#E7DED2" stroke="#cdd2da" strokeWidth="1" />
 
           {pisos.map((piso, iPiso) => {
             const unidades = porPiso[piso].slice().sort((a, b) => String(a.fracao).localeCompare(String(b.fracao)));
@@ -481,7 +481,7 @@ function Predinho({ fracoes }) {
             {st} <strong style={{ color: COR.tinta }}>{resumo[st] || 0}</strong>
           </span>
         ))}
-        <span style={{ marginLeft: "auto", fontSize: 10.5, color: "#aaa", fontFamily: "monospace" }}>
+        <span style={{ marginLeft: "auto", fontSize: 10.5, color: "#9DA2A6", fontFamily: "var(--fonte-numero)" }}>
           {fmtInt(fracoes.length)} frações · {fmtNum(areaTotal, 0)} m² · largura proporcional à área
         </span>
       </div>
@@ -494,10 +494,10 @@ function Predinho({ fracoes }) {
 // alinhada por baixo do eixo em vez de espalhados pelo gráfico. Assim lê-se
 // cada número por inteiro (sem "k") e a área do gráfico fica limpa.
 const COR_FLUXO = {
-  entradas: "#4a6fa5",   // azul ardósia da marca
+  entradas: "#2C4A63",   // azul ardósia da marca
   saidas:   "#97a0ae",   // cinzento-azulado: o sinal já é dado pelo lado do eixo
-  saldo:    "#1a1a2e",
-  negativo: "#b45309",
+  saldo:    "#091C2A",
+  negativo: "#96702A",
 };
 
 export function BarrasFluxoFuturo({ meses, saldoArranque }) {
@@ -552,9 +552,9 @@ export function BarrasFluxoFuturo({ meses, saldoArranque }) {
                 stroke={COR.grelha} strokeWidth="1" />
         ))}
         <line x1={x0 - 8} y1={zero} x2={L - 12} y2={zero} stroke="#c8ccd4" strokeWidth="1" />
-        <text x={x0 - 14} y={zero - h(max) + 4} textAnchor="end" fontSize="10.5" fontFamily="monospace" fill="#b4b9c2">{fmtNum(max, 0)}</text>
-        <text x={x0 - 14} y={zero + 4} textAnchor="end" fontSize="10.5" fontFamily="monospace" fill="#b4b9c2">0</text>
-        <text x={x0 - 14} y={zero + h(max) + 4} textAnchor="end" fontSize="10.5" fontFamily="monospace" fill="#b4b9c2">−{fmtNum(max, 0)}</text>
+        <text x={x0 - 14} y={zero - h(max) + 4} textAnchor="end" fontSize="10.5" fontFamily="monospace" fill="#B2B6B9">{fmtNum(max, 0)}</text>
+        <text x={x0 - 14} y={zero + 4} textAnchor="end" fontSize="10.5" fontFamily="monospace" fill="#B2B6B9">0</text>
+        <text x={x0 - 14} y={zero + h(max) + 4} textAnchor="end" fontSize="10.5" fontFamily="monospace" fill="#B2B6B9">−{fmtNum(max, 0)}</text>
 
         {/* Barras */}
         {meses.map((m, i) => {
@@ -595,7 +595,7 @@ export function BarrasFluxoFuturo({ meses, saldoArranque }) {
             {m.rotulo}
           </text>
         ))}
-        <text x={6} y={baseTabela - 8} fontSize="10" fontFamily="monospace" fill="#b4b9c2"
+        <text x={6} y={baseTabela - 8} fontSize="10" fontFamily="monospace" fill="#B2B6B9"
               letterSpacing="0.06em">VALORES EM €</text>
 
         {LINHAS.map((linha, li) => {
@@ -603,9 +603,9 @@ export function BarrasFluxoFuturo({ meses, saldoArranque }) {
           return (
             <g key={linha.rotulo}>
               {li % 2 === 1 && (
-                <rect x={4} y={y - 16} width={L - 16} height={LINHA} fill="#fafbfc" />
+                <rect x={4} y={y - 16} width={L - 16} height={LINHA} fill="#F9F4EC" />
               )}
-              <text x={6} y={y} fontSize="11" fill={linha.forte ? COR.tinta : "#8a8f99"}
+              <text x={6} y={y} fontSize="11" fill={linha.forte ? COR.tinta : "#6E7378"}
                     fontWeight={linha.forte ? 700 : 400}>
                 {linha.rotulo}
               </text>
@@ -669,7 +669,7 @@ function Timeline({ cronograma, projeto }) {
       {/* Régua de anos */}
       <div style={{ position: "relative", height: 20, marginBottom: 6, marginLeft: 176 }}>
         {anos.map(a => (
-          <div key={a} style={{ position: "absolute", left: `${pos(a * 12)}%`, fontSize: 9.5, color: "#bbb", fontFamily: "monospace" }}>
+          <div key={a} style={{ position: "absolute", left: `${pos(a * 12)}%`, fontSize: 9.5, color: "#B2B6B9", fontFamily: "var(--fonte-numero)" }}>
             {a}
           </div>
         ))}
@@ -688,14 +688,14 @@ function Timeline({ cronograma, projeto }) {
                    title={m.fase}>{m.fase}</div>
               <div style={{ flex: 1, position: "relative", height: 26, background: "#fbfcfd", borderRadius: 5 }}>
                 {/* linha de hoje */}
-                <div style={{ position: "absolute", left: `${pos(hojeN)}%`, top: 0, bottom: 0, width: 1, background: "#f59e0b" }} />
+                <div style={{ position: "absolute", left: `${pos(hojeN)}%`, top: 0, bottom: 0, width: 1, background: "#C19A4A" }} />
                 <div title={`${m.fase}\n${rotuloMes(m.inicio)}${m.fim ? ` → ${rotuloMes(m.fim)}` : ""}\n${est.rotulo}${m.nota ? `\n${m.nota}` : ""}`}
                   style={{
                     position: "absolute", left: `${esquerda}%`, width: pontual ? undefined : `${largura}%`,
                     top: 4, height: 18, background: est.fundo, border: `1px solid ${est.cor}`,
                     borderRadius: pontual ? "50%" : 5, minWidth: pontual ? 18 : undefined,
                     display: "flex", alignItems: "center", paddingLeft: pontual ? 0 : 7,
-                    fontSize: 9, color: est.cor, fontFamily: "monospace", whiteSpace: "nowrap", cursor: "default",
+                    fontSize: 9, color: est.cor, fontFamily: "var(--fonte-numero)", whiteSpace: "nowrap", cursor: "default",
                   }}>
                   {!pontual && largura > 12 ? `${rotuloMes(m.inicio)} → ${rotuloMes(m.fim)}` : ""}
                 </div>
@@ -712,14 +712,14 @@ function Timeline({ cronograma, projeto }) {
           </span>
         ))}
         <span style={{ fontSize: 10.5, color: COR.texto, display: "flex", alignItems: "center", gap: 5 }}>
-          <span style={{ width: 2, height: 12, background: "#f59e0b" }} />hoje
+          <span style={{ width: 2, height: 12, background: "#C19A4A" }} />hoje
         </span>
       </div>
 
       {marcos.some(m => m.nota) && (
-        <div style={{ marginTop: 12, borderTop: "1px solid #f0f0f0", paddingTop: 10, display: "flex", flexDirection: "column", gap: 5 }}>
+        <div style={{ marginTop: 12, borderTop: "1px solid #E7DED2", paddingTop: 10, display: "flex", flexDirection: "column", gap: 5 }}>
           {marcos.filter(m => m.nota).map((m, i) => (
-            <div key={i} style={{ fontSize: 10.5, color: "#888" }}>
+            <div key={i} style={{ fontSize: 10.5, color: "#7E8388" }}>
               <strong style={{ color: ESTADO_MARCO[m.estado]?.cor || COR.tinta }}>{m.fase}</strong> — {m.nota}
             </div>
           ))}
@@ -731,10 +731,10 @@ function Timeline({ cronograma, projeto }) {
 
 // ─── KPI ─────────────────────────────────────────────────────────────────────
 const Kpi = ({ rotulo, valor, cor = COR.tinta, nota }) => (
-  <div style={{ background: "#fff", border: "1px solid #f0f0f0", borderRadius: 12, padding: "15px 18px", borderTop: `3px solid ${cor}` }}>
-    <div style={{ fontSize: 9.5, color: "#aaa", textTransform: "uppercase", letterSpacing: "0.08em", fontFamily: "monospace", marginBottom: 6 }}>{rotulo}</div>
-    <div style={{ fontSize: 19, fontWeight: 700, color: cor, fontFamily: "monospace" }}>{valor}</div>
-    {nota && <div style={{ fontSize: 10, color: "#bbb", marginTop: 4 }}>{nota}</div>}
+  <div style={{ background: "#fff", border: "1px solid #E7DED2", borderRadius: 12, padding: "15px 18px", borderTop: `3px solid ${cor}` }}>
+    <div style={{ fontSize: 9.5, color: "#9DA2A6", textTransform: "uppercase", letterSpacing: "0.08em", fontFamily: "var(--fonte-numero)", marginBottom: 6 }}>{rotulo}</div>
+    <div style={{ fontSize: 19, fontWeight: 700, color: cor, fontFamily: "var(--fonte-numero)" }}>{valor}</div>
+    {nota && <div style={{ fontSize: 10, color: "#B2B6B9", marginTop: 4 }}>{nota}</div>}
   </div>
 );
 
@@ -1003,13 +1003,13 @@ export default function IRView({ currentUser, empresasVisiveis }) {
     { id: "timeline",   rotulo: "Cronograma" },
   ];
 
-  const inputEstilo = { background: "#fff", border: "1px solid #e8e8e8", borderRadius: 8, padding: "7px 11px", fontSize: 12, outline: "none", fontFamily: "monospace" };
+  const inputEstilo = { background: "#fff", border: "1px solid #E3D9CC", borderRadius: 8, padding: "7px 11px", fontSize: 12, outline: "none", fontFamily: "var(--fonte-numero)" };
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
 
       {/* Filtros */}
-      <div style={{ background: "#fff", border: "1px solid #f0f0f0", borderRadius: 12, padding: "13px 18px",
+      <div style={{ background: "#fff", border: "1px solid #E7DED2", borderRadius: 12, padding: "13px 18px",
                     display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
         <select value={empSel} onChange={e => setEmpSel(e.target.value)}
           style={{ ...inputEstilo, fontFamily: "inherit", minWidth: 240, fontWeight: 600 }}>
@@ -1019,11 +1019,11 @@ export default function IRView({ currentUser, empresasVisiveis }) {
             </optgroup>
           ))}
         </select>
-        <span style={{ fontSize: 10, color: "#aaa", fontFamily: "monospace", textTransform: "uppercase" }}>Período</span>
-        <div style={{ display: "flex", background: "#f0f0f0", borderRadius: 8, padding: 2, gap: 2 }}>
+        <span style={{ fontSize: 10, color: "#9DA2A6", fontFamily: "var(--fonte-numero)", textTransform: "uppercase" }}>Período</span>
+        <div style={{ display: "flex", background: "#E7DED2", borderRadius: 8, padding: 2, gap: 2 }}>
           {[["tudo", "Tudo"], ["a2026", "2026"], ["livre", "Escolher datas"]].map(([id, rot]) => (
             <button key={id} onClick={() => setPeriodo(id)}
-              style={{ background: periodo === id ? "#1a1a2e" : "transparent", color: periodo === id ? "#fff" : "#777",
+              style={{ background: periodo === id ? "#091C2A" : "transparent", color: periodo === id ? "#fff" : "#6E7378",
                        border: "none", padding: "6px 14px", borderRadius: 6, fontSize: 11.5,
                        fontWeight: periodo === id ? 700 : 500, cursor: "pointer" }}>
               {rot}
@@ -1033,7 +1033,7 @@ export default function IRView({ currentUser, empresasVisiveis }) {
         {personalizado && (
           <>
             <input type="date" value={deLivre} max={ateLivre || undefined} onChange={e => setDeLivre(e.target.value)} style={inputEstilo} />
-            <span style={{ color: "#ccc", fontSize: 12 }}>até</span>
+            <span style={{ color: "#C4C7CA", fontSize: 12 }}>até</span>
             <input type="date" value={ateLivre} min={deLivre || undefined} onChange={e => setAteLivre(e.target.value)} style={inputEstilo} />
           </>
         )}
@@ -1052,7 +1052,7 @@ export default function IRView({ currentUser, empresasVisiveis }) {
         <Kpi rotulo="Saldo final" valor={fmtEUR0(saldoInicial + agregado.resultado)} cor={COR.saldo} nota={fmtData(ate)} />
       </div>
 
-      {loading && <div style={{ fontSize: 11, color: "#aaa", fontFamily: "monospace" }}>a carregar movimentos…</div>}
+      {loading && <div style={{ fontSize: 11, color: "#9DA2A6", fontFamily: "var(--fonte-numero)" }}>a carregar movimentos…</div>}
 
       {/* Navegação por secções */}
       <div style={{ display: "flex", gap: 7, flexWrap: "wrap" }}>
@@ -1062,8 +1062,8 @@ export default function IRView({ currentUser, empresasVisiveis }) {
             <button key={sec.id} onClick={() => setSeccao(sec.id)}
               style={{
                 background: ativo ? COR.tinta : "#fff",
-                color: ativo ? "#fff" : "#666",
-                border: "1px solid " + (ativo ? COR.tinta : "#e8e8e8"),
+                color: ativo ? "#fff" : "#5C6166",
+                border: "1px solid " + (ativo ? COR.tinta : "#E3D9CC"),
                 borderRadius: 20, padding: "8px 16px", fontSize: 12.5,
                 fontWeight: ativo ? 700 : 500, cursor: "pointer",
               }}>
@@ -1081,7 +1081,7 @@ export default function IRView({ currentUser, empresasVisiveis }) {
             : <Cascata inicial={saldoInicial} entradas={entradasTop} saidas={saidasTop}
                        final={saldoInicial + agregado.resultado} />}
           {agregado.nExcluidos > 0 && (
-            <div style={{ fontSize: 10.5, color: "#aaa", marginTop: 10, textAlign: "right" }}>
+            <div style={{ fontSize: 10.5, color: "#9DA2A6", marginTop: 10, textAlign: "right" }}>
               Excluídos {fmtInt(agregado.nExcluidos)} movimentos de ajuste e transferência
               intra-grupo ({fmtEUR0(agregado.excluido)} líquidos) — entram e saem pelo mesmo
               valor e não são fluxo do projeto.

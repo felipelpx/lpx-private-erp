@@ -18,10 +18,10 @@ const fmtDateTime = (s) => {
 };
 
 const STATUS_INFO = {
-  pendente_nivel_1: { label: "Pendente N1", color: "#f59e0b", bg: "#fef3c7" },
-  pendente_nivel_2: { label: "Pendente N2", color: "#3b82f6", bg: "#dbeafe" },
-  aprovado:         { label: "Aprovado",     color: "#16a34a", bg: "#dcfce7" },
-  recusado:         { label: "Recusado",     color: "#dc2626", bg: "#fee2e2" },
+  pendente_nivel_1: { label: "Pendente N1", color: "#C19A4A", bg: "#F6ECD6" },
+  pendente_nivel_2: { label: "Pendente N2", color: "#2C4A63", bg: "#E0E9F0" },
+  aprovado:         { label: "Aprovado",     color: "#1F7A54", bg: "#E2EFE8" },
+  recusado:         { label: "Recusado",     color: "#A93226", bg: "#F6DED9" },
 };
 
 export default function PagamentosView({ faturas, pagamentosExtras, currentUser, profiles = [] }) {
@@ -92,13 +92,13 @@ export default function PagamentosView({ faturas, pagamentosExtras, currentUser,
   }
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 20, fontFamily: "'DM Sans', sans-serif" }}>
+    <div style={{ display: "flex", flexDirection: "column", gap: 20, fontFamily: "var(--fonte-titulo)" }}>
 
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-        <h2 style={{ margin: 0, fontFamily: "Georgia, serif", fontSize: 22, color: "#1a1a2e" }}>Mapas de Pagamento</h2>
+        <h2 style={{ margin: 0, fontFamily: "var(--fonte-titulo)", fontSize: 22, color: "#091C2A" }}>Mapas de Pagamento</h2>
         {canCreate && (
           <button onClick={() => setView("novo")}
-            style={{ background: "#16a34a", color: "#fff", border: "none", padding: "9px 20px", borderRadius: 8, fontSize: 13, cursor: "pointer", fontWeight: 700 }}>
+            style={{ background:"#091C2A", color: "#fff", border: "none", padding: "9px 20px", borderRadius: 8, fontSize: 13, cursor: "pointer", fontWeight: 700 }}>
             + Novo Mapa
           </button>
         )}
@@ -107,58 +107,58 @@ export default function PagamentosView({ faturas, pagamentosExtras, currentUser,
       {/* KPIs */}
       <div style={{ display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: 12 }}>
         {[
-          { label: "Total Mapas", value: kpis.total, color: "#1a1a2e" },
-          { label: "Pendente N1", value: kpis.pendN1, color: "#f59e0b" },
-          { label: "Pendente N2", value: kpis.pendN2, color: "#3b82f6" },
-          { label: "Aprovados", value: kpis.aprovados, color: "#16a34a" },
-          { label: "Recusados", value: kpis.recusados, color: "#dc2626" },
+          { label: "Total Mapas", value: kpis.total, color: "#091C2A" },
+          { label: "Pendente N1", value: kpis.pendN1, color: "#C19A4A" },
+          { label: "Pendente N2", value: kpis.pendN2, color: "#2C4A63" },
+          { label: "Aprovados", value: kpis.aprovados, color: "#1F7A54" },
+          { label: "Recusados", value: kpis.recusados, color: "#A93226" },
         ].map((k, i) => (
           <div key={i} style={{ background: "#fff", borderRadius: 10, padding: "14px 16px", boxShadow: "0 1px 3px rgba(0,0,0,0.05)", borderTop: `3px solid ${k.color}` }}>
-            <div style={{ fontSize: 10, color: "#aaa", textTransform: "uppercase", fontFamily: "monospace", marginBottom: 4 }}>{k.label}</div>
-            <div style={{ fontSize: 24, fontWeight: 700, color: k.color, fontFamily: "monospace" }}>{k.value}</div>
+            <div style={{ fontSize: 10, color: "#9DA2A6", textTransform: "uppercase", fontFamily: "var(--fonte-numero)", marginBottom: 4 }}>{k.label}</div>
+            <div style={{ fontSize: 24, fontWeight: 700, color: k.color, fontFamily: "var(--fonte-numero)" }}>{k.value}</div>
           </div>
         ))}
       </div>
 
       {/* Tabela de mapas */}
       <div style={{ background: "#fff", borderRadius: 10, overflow: "hidden", boxShadow: "0 1px 3px rgba(0,0,0,0.05)" }}>
-        <div style={{ padding: "14px 18px", borderBottom: "1px solid #f0f0f0", fontWeight: 600, fontSize: 14, color: "#1a1a2e" }}>
+        <div style={{ padding: "14px 18px", borderBottom: "1px solid #E7DED2", fontWeight: 600, fontSize: 14, color: "#091C2A" }}>
           Lista de Mapas
         </div>
         {mapasLoading ? (
-          <div style={{ padding: 32, textAlign: "center", color: "#888" }}>A carregar…</div>
+          <div style={{ padding: 32, textAlign: "center", color: "#7E8388" }}>A carregar…</div>
         ) : (!mapas || mapas.length === 0) ? (
-          <div style={{ padding: 32, textAlign: "center", color: "#888" }}>
+          <div style={{ padding: 32, textAlign: "center", color: "#7E8388" }}>
             Ainda não há mapas de pagamento. {canCreate && "Clica em '+ Novo Mapa' para criar o primeiro."}
           </div>
         ) : (
           <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
             <thead>
-              <tr style={{ background: "#fafafa", textAlign: "left" }}>
-                <th style={{ padding: "10px 16px", fontWeight: 600, color: "#666", textTransform: "uppercase", fontSize: 10, fontFamily: "monospace" }}>Nº</th>
-                <th style={{ padding: "10px 16px", fontWeight: 600, color: "#666", textTransform: "uppercase", fontSize: 10, fontFamily: "monospace" }}>Descrição</th>
-                <th style={{ padding: "10px 16px", fontWeight: 600, color: "#666", textTransform: "uppercase", fontSize: 10, fontFamily: "monospace" }}>Criado por</th>
-                <th style={{ padding: "10px 16px", fontWeight: 600, color: "#666", textTransform: "uppercase", fontSize: 10, fontFamily: "monospace" }}>Data</th>
-                <th style={{ padding: "10px 16px", fontWeight: 600, color: "#666", textTransform: "uppercase", fontSize: 10, fontFamily: "monospace", textAlign: "right" }}>Total</th>
-                <th style={{ padding: "10px 16px", fontWeight: 600, color: "#666", textTransform: "uppercase", fontSize: 10, fontFamily: "monospace" }}>Estado</th>
+              <tr style={{ background: "#FBF7F1", textAlign: "left" }}>
+                <th style={{ padding: "10px 16px", fontWeight: 600, color: "#5C6166", textTransform: "uppercase", fontSize: 10, fontFamily: "var(--fonte-numero)" }}>Nº</th>
+                <th style={{ padding: "10px 16px", fontWeight: 600, color: "#5C6166", textTransform: "uppercase", fontSize: 10, fontFamily: "var(--fonte-numero)" }}>Descrição</th>
+                <th style={{ padding: "10px 16px", fontWeight: 600, color: "#5C6166", textTransform: "uppercase", fontSize: 10, fontFamily: "var(--fonte-numero)" }}>Criado por</th>
+                <th style={{ padding: "10px 16px", fontWeight: 600, color: "#5C6166", textTransform: "uppercase", fontSize: 10, fontFamily: "var(--fonte-numero)" }}>Data</th>
+                <th style={{ padding: "10px 16px", fontWeight: 600, color: "#5C6166", textTransform: "uppercase", fontSize: 10, fontFamily: "var(--fonte-numero)", textAlign: "right" }}>Total</th>
+                <th style={{ padding: "10px 16px", fontWeight: 600, color: "#5C6166", textTransform: "uppercase", fontSize: 10, fontFamily: "var(--fonte-numero)" }}>Estado</th>
               </tr>
             </thead>
             <tbody>
               {mapas.map(m => {
-                const st = STATUS_INFO[m.status] || { label: m.status, color: "#888", bg: "#eee" };
+                const st = STATUS_INFO[m.status] || { label: m.status, color: "#7E8388", bg: "#EFE8DE" };
                 return (
                   <tr key={m.id}
                     onClick={() => { setActiveMapaId(m.id); setView("detalhe"); }}
-                    style={{ borderBottom: "1px solid #f5f5f5", cursor: "pointer" }}
-                    onMouseOver={e => e.currentTarget.style.background = "#fafafa"}
+                    style={{ borderBottom: "1px solid #F7F2EA", cursor: "pointer" }}
+                    onMouseOver={e => e.currentTarget.style.background = "#FBF7F1"}
                     onMouseOut={e => e.currentTarget.style.background = "transparent"}>
-                    <td style={{ padding: "10px 16px", fontFamily: "monospace", color: "#1a1a2e", fontWeight: 600 }}>{m.numero || m.id?.slice(0, 8)}</td>
+                    <td style={{ padding: "10px 16px", fontFamily: "var(--fonte-numero)", color: "#091C2A", fontWeight: 600 }}>{m.numero || m.id?.slice(0, 8)}</td>
                     <td style={{ padding: "10px 16px" }}>{m.descricao || "—"}</td>
-                    <td style={{ padding: "10px 16px", color: "#666", fontSize: 11 }}>{nomeUser(m.created_by)}</td>
-                    <td style={{ padding: "10px 16px", color: "#666", fontSize: 11 }}>{fmtDateTime(m.created_at)}</td>
-                    <td style={{ padding: "10px 16px", textAlign: "right", fontFamily: "monospace", fontWeight: 600 }}>{fmtFull(m.total_valor)}</td>
+                    <td style={{ padding: "10px 16px", color: "#5C6166", fontSize: 11 }}>{nomeUser(m.created_by)}</td>
+                    <td style={{ padding: "10px 16px", color: "#5C6166", fontSize: 11 }}>{fmtDateTime(m.created_at)}</td>
+                    <td style={{ padding: "10px 16px", textAlign: "right", fontFamily: "var(--fonte-numero)", fontWeight: 600 }}>{fmtFull(m.total_valor)}</td>
                     <td style={{ padding: "10px 16px" }}>
-                      <span style={{ background: st.bg, color: st.color, padding: "3px 8px", borderRadius: 4, fontSize: 10, fontFamily: "monospace", fontWeight: 700 }}>
+                      <span style={{ background: st.bg, color: st.color, padding: "3px 8px", borderRadius: 4, fontSize: 10, fontFamily: "var(--fonte-numero)", fontWeight: 700 }}>
                         {st.label}
                       </span>
                     </td>
@@ -171,7 +171,7 @@ export default function PagamentosView({ faturas, pagamentosExtras, currentUser,
       </div>
 
       {/* Info de permissões */}
-      <div style={{ background: "#f0f4ff", border: "1px solid #c7d2fe", borderRadius: 8, padding: "10px 14px", fontSize: 11, color: "#3730a3" }}>
+      <div style={{ background: "#EDF1F5", border: "1px solid #CBDAE5", borderRadius: 8, padding: "10px 14px", fontSize: 11, color: "#2C4A63" }}>
         <strong>O teu nível:</strong> {isN1 ? "Aprovador Nível 1" : isN2 ? "Aprovador Nível 2" : "Sem aprovação"}
         {canCreate && " · Podes criar mapas"}
       </div>
@@ -307,75 +307,75 @@ function NovoMapa({ faturas, currentUser, onCancel, onCreated }) {
   };
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 16, fontFamily: "'DM Sans', sans-serif" }}>
+    <div style={{ display: "flex", flexDirection: "column", gap: 16, fontFamily: "var(--fonte-titulo)" }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-        <h2 style={{ margin: 0, fontFamily: "Georgia, serif", fontSize: 22, color: "#1a1a2e" }}>Novo Mapa de Pagamento</h2>
-        <button onClick={onCancel} style={{ background: "#f0f0f0", color: "#666", border: "none", padding: "9px 20px", borderRadius: 8, cursor: "pointer", fontSize: 13 }}>← Voltar</button>
+        <h2 style={{ margin: 0, fontFamily: "var(--fonte-titulo)", fontSize: 22, color: "#091C2A" }}>Novo Mapa de Pagamento</h2>
+        <button onClick={onCancel} style={{ background: "#E7DED2", color: "#5C6166", border: "none", padding: "9px 20px", borderRadius: 8, cursor: "pointer", fontSize: 13 }}>← Voltar</button>
       </div>
 
       {/* Header form */}
       <div style={{ background: "#fff", borderRadius: 10, padding: 16, boxShadow: "0 1px 3px rgba(0,0,0,0.05)" }}>
-        <div style={{ fontSize: 10, color: "#888", textTransform: "uppercase", fontFamily: "monospace", marginBottom: 5 }}>Descrição do mapa</div>
+        <div style={{ fontSize: 10, color: "#7E8388", textTransform: "uppercase", fontFamily: "var(--fonte-numero)", marginBottom: 5 }}>Descrição do mapa</div>
         <input value={descricao} onChange={e => setDescricao(e.target.value)}
-          style={{ width: "100%", padding: "9px 12px", border: "1px solid #e5e5e5", borderRadius: 6, fontSize: 13, fontFamily: "inherit" }} />
+          style={{ width: "100%", padding: "9px 12px", border: "1px solid #E3D9CC", borderRadius: 6, fontSize: 13, fontFamily: "inherit" }} />
       </div>
 
       {/* Tabela de candidatos */}
       <div style={{ background: "#fff", borderRadius: 10, overflow: "hidden", boxShadow: "0 1px 3px rgba(0,0,0,0.05)" }}>
-        <div style={{ padding: "12px 18px", borderBottom: "1px solid #f0f0f0", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
-          <div style={{ fontWeight: 600, fontSize: 14, color: "#1a1a2e" }}>
-            Itens disponíveis ({candidatosFiltrados.length}{candidatosFiltrados.length !== candidatos.length ? ` de ${candidatos.length}` : ""}) · <span style={{ color: "#16a34a" }}>{nSelecionados} selecionados</span>
+        <div style={{ padding: "12px 18px", borderBottom: "1px solid #E7DED2", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+          <div style={{ fontWeight: 600, fontSize: 14, color: "#091C2A" }}>
+            Itens disponíveis ({candidatosFiltrados.length}{candidatosFiltrados.length !== candidatos.length ? ` de ${candidatos.length}` : ""}) · <span style={{ color: "#1F7A54" }}>{nSelecionados} selecionados</span>
           </div>
           <input value={filtro} onChange={e => setFiltro(e.target.value)} placeholder="Pesquisa livre…"
-            style={{ padding: "6px 10px", border: "1px solid #e5e5e5", borderRadius: 6, fontSize: 12, fontFamily: "inherit", width: 200 }} />
+            style={{ padding: "6px 10px", border: "1px solid #E3D9CC", borderRadius: 6, fontSize: 12, fontFamily: "inherit", width: 200 }} />
         </div>
         {/* Filtros estruturados */}
-        <div style={{ padding: "10px 18px", borderBottom: "1px solid #f0f0f0", display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap", background: "#fafafa" }}>
+        <div style={{ padding: "10px 18px", borderBottom: "1px solid #E7DED2", display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap", background: "#FBF7F1" }}>
           <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-            <span style={{ fontSize: 10, color: "#888", textTransform: "uppercase", fontFamily: "monospace" }}>Empresa:</span>
+            <span style={{ fontSize: 10, color: "#7E8388", textTransform: "uppercase", fontFamily: "var(--fonte-numero)" }}>Empresa:</span>
             <select value={filtroEmpresa} onChange={e => setFiltroEmpresa(e.target.value)}
-              style={{ padding: "5px 8px", border: "1px solid #e5e5e5", borderRadius: 6, fontSize: 11, fontFamily: "inherit", background: "#fff" }}>
+              style={{ padding: "5px 8px", border: "1px solid #E3D9CC", borderRadius: 6, fontSize: 11, fontFamily: "inherit", background: "#fff" }}>
               <option value="">Todas</option>
               {empresasUnicas.map(e => <option key={e} value={e}>{e}</option>)}
             </select>
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-            <span style={{ fontSize: 10, color: "#888", textTransform: "uppercase", fontFamily: "monospace" }}>Fornecedor:</span>
+            <span style={{ fontSize: 10, color: "#7E8388", textTransform: "uppercase", fontFamily: "var(--fonte-numero)" }}>Fornecedor:</span>
             <select value={filtroFornecedor} onChange={e => setFiltroFornecedor(e.target.value)}
-              style={{ padding: "5px 8px", border: "1px solid #e5e5e5", borderRadius: 6, fontSize: 11, fontFamily: "inherit", background: "#fff", maxWidth: 200 }}>
+              style={{ padding: "5px 8px", border: "1px solid #E3D9CC", borderRadius: 6, fontSize: 11, fontFamily: "inherit", background: "#fff", maxWidth: 200 }}>
               <option value="">Todos</option>
               {fornecedoresUnicos.map(f => <option key={f} value={f}>{f}</option>)}
             </select>
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-            <span style={{ fontSize: 10, color: "#888", textTransform: "uppercase", fontFamily: "monospace" }}>Vencimento de:</span>
+            <span style={{ fontSize: 10, color: "#7E8388", textTransform: "uppercase", fontFamily: "var(--fonte-numero)" }}>Vencimento de:</span>
             <input type="date" value={filtroVencDe} onChange={e => setFiltroVencDe(e.target.value)}
-              style={{ padding: "4px 6px", border: "1px solid #e5e5e5", borderRadius: 6, fontSize: 11, fontFamily: "monospace" }} />
-            <span style={{ fontSize: 10, color: "#888", textTransform: "uppercase", fontFamily: "monospace" }}>até:</span>
+              style={{ padding: "4px 6px", border: "1px solid #E3D9CC", borderRadius: 6, fontSize: 11, fontFamily: "var(--fonte-numero)" }} />
+            <span style={{ fontSize: 10, color: "#7E8388", textTransform: "uppercase", fontFamily: "var(--fonte-numero)" }}>até:</span>
             <input type="date" value={filtroVencAte} onChange={e => setFiltroVencAte(e.target.value)}
-              style={{ padding: "4px 6px", border: "1px solid #e5e5e5", borderRadius: 6, fontSize: 11, fontFamily: "monospace" }} />
+              style={{ padding: "4px 6px", border: "1px solid #E3D9CC", borderRadius: 6, fontSize: 11, fontFamily: "var(--fonte-numero)" }} />
           </div>
           {(filtro || filtroEmpresa || filtroFornecedor || filtroVencDe || filtroVencAte) && (
             <button onClick={() => { setFiltro(""); setFiltroEmpresa(""); setFiltroFornecedor(""); setFiltroVencDe(""); setFiltroVencAte(""); }}
               title="Limpar todos os filtros"
-              style={{ background: "#fee2e2", color: "#dc2626", border: "none", padding: "4px 10px", borderRadius: 6, fontSize: 10, cursor: "pointer", fontWeight: 600 }}>
+              style={{ background: "#F6DED9", color: "#A93226", border: "none", padding: "4px 10px", borderRadius: 6, fontSize: 10, cursor: "pointer", fontWeight: 600 }}>
               ✕ Limpar filtros
             </button>
           )}
         </div>
         <div style={{ maxHeight: 500, overflowY: "auto" }}>
           <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 11 }}>
-            <thead style={{ background: "#fafafa", position: "sticky", top: 0 }}>
+            <thead style={{ background: "#FBF7F1", position: "sticky", top: 0 }}>
               <tr>
                 <th style={{ padding: "8px 12px", textAlign: "center", width: 30 }}>
                   <input type="checkbox" checked={candidatosFiltrados.length > 0 && nSelecionados === candidatosFiltrados.length} onChange={toggleAll} />
                 </th>
-                <th style={{ padding: "8px 12px", fontWeight: 600, color: "#666", textTransform: "uppercase", fontSize: 9, fontFamily: "monospace", textAlign: "left" }}>Tipo</th>
-                <th style={{ padding: "8px 12px", fontWeight: 600, color: "#666", textTransform: "uppercase", fontSize: 9, fontFamily: "monospace", textAlign: "left" }}>Vencimento</th>
-                <th style={{ padding: "8px 12px", fontWeight: 600, color: "#666", textTransform: "uppercase", fontSize: 9, fontFamily: "monospace", textAlign: "left" }}>Descrição</th>
-                <th style={{ padding: "8px 12px", fontWeight: 600, color: "#666", textTransform: "uppercase", fontSize: 9, fontFamily: "monospace", textAlign: "left" }}>Empresa</th>
-                <th style={{ padding: "8px 12px", fontWeight: 600, color: "#666", textTransform: "uppercase", fontSize: 9, fontFamily: "monospace", textAlign: "left" }}>Categoria</th>
-                <th style={{ padding: "8px 12px", fontWeight: 600, color: "#666", textTransform: "uppercase", fontSize: 9, fontFamily: "monospace", textAlign: "right" }}>Valor</th>
+                <th style={{ padding: "8px 12px", fontWeight: 600, color: "#5C6166", textTransform: "uppercase", fontSize: 9, fontFamily: "var(--fonte-numero)", textAlign: "left" }}>Tipo</th>
+                <th style={{ padding: "8px 12px", fontWeight: 600, color: "#5C6166", textTransform: "uppercase", fontSize: 9, fontFamily: "var(--fonte-numero)", textAlign: "left" }}>Vencimento</th>
+                <th style={{ padding: "8px 12px", fontWeight: 600, color: "#5C6166", textTransform: "uppercase", fontSize: 9, fontFamily: "var(--fonte-numero)", textAlign: "left" }}>Descrição</th>
+                <th style={{ padding: "8px 12px", fontWeight: 600, color: "#5C6166", textTransform: "uppercase", fontSize: 9, fontFamily: "var(--fonte-numero)", textAlign: "left" }}>Empresa</th>
+                <th style={{ padding: "8px 12px", fontWeight: 600, color: "#5C6166", textTransform: "uppercase", fontSize: 9, fontFamily: "var(--fonte-numero)", textAlign: "left" }}>Categoria</th>
+                <th style={{ padding: "8px 12px", fontWeight: 600, color: "#5C6166", textTransform: "uppercase", fontSize: 9, fontFamily: "var(--fonte-numero)", textAlign: "right" }}>Valor</th>
               </tr>
             </thead>
             <tbody>
@@ -384,16 +384,16 @@ function NovoMapa({ faturas, currentUser, onCancel, onCreated }) {
                 return (
                   <tr key={c.key}
                     onClick={() => setSelected(s => ({ ...s, [c.key]: !s[c.key] }))}
-                    style={{ borderBottom: "1px solid #f5f5f5", cursor: "pointer", background: isSel ? "#f0fdf4" : "transparent" }}>
+                    style={{ borderBottom: "1px solid #F7F2EA", cursor: "pointer", background: isSel ? "#EFF5F1" : "transparent" }}>
                     <td style={{ padding: "8px 12px", textAlign: "center" }}>
                       <input type="checkbox" checked={isSel} readOnly />
                     </td>
-                    <td style={{ padding: "8px 12px", color: "#888", fontSize: 10, fontFamily: "monospace" }}>{c._label}</td>
-                    <td style={{ padding: "8px 12px", fontFamily: "monospace", fontSize: 10 }}>{fmtDate(c.vencimento)}</td>
-                    <td style={{ padding: "8px 12px" }}>{c.fornecedor && <span style={{ color: "#888", marginRight: 6 }}>{c.fornecedor} ·</span>}{c.descricao || "—"}</td>
-                    <td style={{ padding: "8px 12px", color: "#666", fontSize: 10 }}>{c.empresa || "—"}</td>
-                    <td style={{ padding: "8px 12px", color: "#666" }}><span style={{ background: "#fef3c7", color: "#92400e", padding: "1px 6px", borderRadius: 3, fontSize: 9, fontFamily: "monospace" }}>{c.categoria || "—"}</span></td>
-                    <td style={{ padding: "8px 12px", textAlign: "right", fontFamily: "monospace", fontWeight: 600, color: "#dc2626" }}>{fmtFull(c.valor)}</td>
+                    <td style={{ padding: "8px 12px", color: "#7E8388", fontSize: 10, fontFamily: "var(--fonte-numero)" }}>{c._label}</td>
+                    <td style={{ padding: "8px 12px", fontFamily: "var(--fonte-numero)", fontSize: 10 }}>{fmtDate(c.vencimento)}</td>
+                    <td style={{ padding: "8px 12px" }}>{c.fornecedor && <span style={{ color: "#7E8388", marginRight: 6 }}>{c.fornecedor} ·</span>}{c.descricao || "—"}</td>
+                    <td style={{ padding: "8px 12px", color: "#5C6166", fontSize: 10 }}>{c.empresa || "—"}</td>
+                    <td style={{ padding: "8px 12px", color: "#5C6166" }}><span style={{ background: "#F6ECD6", color: "#7A5A22", padding: "1px 6px", borderRadius: 3, fontSize: 9, fontFamily: "var(--fonte-numero)" }}>{c.categoria || "—"}</span></td>
+                    <td style={{ padding: "8px 12px", textAlign: "right", fontFamily: "var(--fonte-numero)", fontWeight: 600, color: "#A93226" }}>{fmtFull(c.valor)}</td>
                   </tr>
                 );
               })}
@@ -403,17 +403,17 @@ function NovoMapa({ faturas, currentUser, onCancel, onCreated }) {
       </div>
 
       {/* Footer com total e botão */}
-      <div style={{ background: "#1a1a2e", color: "#fff", borderRadius: 10, padding: "14px 20px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+      <div style={{ background: "#091C2A", color: "#fff", borderRadius: 10, padding: "14px 20px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
         <div>
-          <span style={{ color: "#aaa", fontSize: 11, fontFamily: "monospace", textTransform: "uppercase", marginRight: 10 }}>Total selecionado</span>
-          <span style={{ fontFamily: "monospace", fontSize: 18, fontWeight: 700, color: "#6B7C93" }}>{fmtFull(totalSelecionado)}</span>
-          <span style={{ color: "#aaa", marginLeft: 12, fontSize: 11 }}>({nSelecionados} itens)</span>
+          <span style={{ color: "#9DA2A6", fontSize: 11, fontFamily: "var(--fonte-numero)", textTransform: "uppercase", marginRight: 10 }}>Total selecionado</span>
+          <span style={{ fontFamily: "var(--fonte-numero)", fontSize: 18, fontWeight: 700, color: "#BAA685" }}>{fmtFull(totalSelecionado)}</span>
+          <span style={{ color: "#9DA2A6", marginLeft: 12, fontSize: 11 }}>({nSelecionados} itens)</span>
         </div>
         <div style={{ display: "flex", gap: 10 }}>
           <button onClick={onCancel} style={{ background: "#3a3a4e", color: "#fff", border: "none", padding: "10px 20px", borderRadius: 8, cursor: "pointer", fontSize: 13 }}>Cancelar</button>
           <button onClick={submit}
             disabled={nSelecionados === 0}
-            style={{ background: nSelecionados === 0 ? "#555" : "#16a34a", color: "#fff", border: "none", padding: "10px 24px", borderRadius: 8, cursor: nSelecionados === 0 ? "default" : "pointer", fontSize: 13, fontWeight: 700 }}>
+            style={{ background: nSelecionados === 0 ? "#4A5055" : "#091C2A", color: "#fff", border: "none", padding: "10px 24px", borderRadius: 8, cursor: nSelecionados === 0 ? "default" : "pointer", fontSize: 13, fontWeight: 700 }}>
             Criar mapa e enviar para aprovação N1 →
           </button>
         </div>
@@ -479,7 +479,7 @@ function DetalheMapa({ mapaId, mapas, currentUser, profileById, faturas = [], pa
     );
   }
 
-  const st = STATUS_INFO[mapa.status] || { label: mapa.status, color: "#888", bg: "#eee" };
+  const st = STATUS_INFO[mapa.status] || { label: mapa.status, color: "#7E8388", bg: "#EFE8DE" };
   const isN1 = (currentUser?.approval_level || 0) >= 1;
   const isN2 = (currentUser?.approval_level || 0) >= 2;
   const podeAprovarN1 = isN1 && mapa.status === "pendente_nivel_1";
@@ -629,17 +629,17 @@ function DetalheMapa({ mapaId, mapas, currentUser, profileById, faturas = [], pa
     let carimbo = "";
     if (mapa.status === "aprovado") {
       carimbo = `
-        <div style="position:fixed;top:50%;left:50%;transform:translate(-50%,-50%) rotate(-15deg);border:8px solid #16a34a;color:#16a34a;padding:30px 60px;font-size:62px;font-weight:900;font-family:Georgia,serif;letter-spacing:6px;opacity:0.18;pointer-events:none;z-index:1;border-radius:14px;">
+        <div style="position:fixed;top:50%;left:50%;transform:translate(-50%,-50%) rotate(-15deg);border:8px solid #1F7A54;color:#1F7A54;padding:30px 60px;font-size:62px;font-weight:900;font-family:Georgia,serif;letter-spacing:6px;opacity:0.18;pointer-events:none;z-index:1;border-radius:14px;">
           APROVADO
         </div>`;
     } else if (mapa.status === "recusado") {
       carimbo = `
-        <div style="position:fixed;top:50%;left:50%;transform:translate(-50%,-50%) rotate(-15deg);border:8px solid #dc2626;color:#dc2626;padding:30px 60px;font-size:62px;font-weight:900;font-family:Georgia,serif;letter-spacing:6px;opacity:0.18;pointer-events:none;z-index:1;border-radius:14px;">
+        <div style="position:fixed;top:50%;left:50%;transform:translate(-50%,-50%) rotate(-15deg);border:8px solid #A93226;color:#A93226;padding:30px 60px;font-size:62px;font-weight:900;font-family:Georgia,serif;letter-spacing:6px;opacity:0.18;pointer-events:none;z-index:1;border-radius:14px;">
           RECUSADO
         </div>`;
     } else if (mapa.status === "pendente_nivel_1" || mapa.status === "pendente_nivel_2") {
       carimbo = `
-        <div style="position:fixed;top:50%;left:50%;transform:translate(-50%,-50%) rotate(-15deg);border:8px solid #f59e0b;color:#f59e0b;padding:24px 50px;font-size:44px;font-weight:900;font-family:Georgia,serif;letter-spacing:4px;opacity:0.16;pointer-events:none;z-index:1;border-radius:14px;">
+        <div style="position:fixed;top:50%;left:50%;transform:translate(-50%,-50%) rotate(-15deg);border:8px solid #C19A4A;color:#C19A4A;padding:24px 50px;font-size:44px;font-weight:900;font-family:Georgia,serif;letter-spacing:4px;opacity:0.16;pointer-events:none;z-index:1;border-radius:14px;">
           PENDENTE
         </div>`;
     }
@@ -649,11 +649,11 @@ function DetalheMapa({ mapaId, mapas, currentUser, profileById, faturas = [], pa
       const grupo = byEmpresa[emp];
       tabelaEmpresas += `
         <thead>
-          <tr style="background:#f0f4ff;border-top:2px solid #c7d2fe;">
-            <th colspan="4" style="padding:10px 14px;text-align:left;color:#3730a3;font-size:12px;text-transform:uppercase;letter-spacing:0.5px;">
+          <tr style="background:#EDF1F5;border-top:2px solid #CBDAE5;">
+            <th colspan="4" style="padding:10px 14px;text-align:left;color:#2C4A63;font-size:12px;text-transform:uppercase;letter-spacing:0.5px;">
               ${emp} (${grupo.items.length} ${grupo.items.length === 1 ? 'item' : 'itens'})
             </th>
-            <th style="padding:10px 14px;text-align:right;color:#3730a3;font-size:13px;font-weight:700;font-family:monospace;">
+            <th style="padding:10px 14px;text-align:right;color:#2C4A63;font-size:13px;font-weight:700;font-family:monospace;">
               ${fmtFull(grupo.total)}
             </th>
           </tr>
@@ -662,12 +662,12 @@ function DetalheMapa({ mapaId, mapas, currentUser, profileById, faturas = [], pa
       `;
       grupo.items.forEach(it => {
         tabelaEmpresas += `
-          <tr style="border-bottom:1px solid #eee;">
-            <td style="padding:7px 14px 7px 28px;color:#888;font-size:10px;font-family:monospace;">${it.tipo_origem}</td>
+          <tr style="border-bottom:1px solid #EFE8DE;">
+            <td style="padding:7px 14px 7px 28px;color:#7E8388;font-size:10px;font-family:monospace;">${it.tipo_origem}</td>
             <td style="padding:7px 14px;font-family:monospace;font-size:11px;">${fmtDate(it.vencimento)}</td>
-            <td style="padding:7px 14px;font-size:11px;">${(it.fornecedor ? `<span style="color:#888">${it.fornecedor} · </span>` : "")}${(it.descricao || "").replace(/</g, "&lt;")}</td>
-            <td style="padding:7px 14px;font-size:10px;color:#92400e;">${it.categoria || "—"}</td>
-            <td style="padding:7px 14px;text-align:right;font-family:monospace;font-weight:600;font-size:11px;color:#dc2626;">${fmtFull(it.valor)}</td>
+            <td style="padding:7px 14px;font-size:11px;">${(it.fornecedor ? `<span style="color:#7E8388">${it.fornecedor} · </span>` : "")}${(it.descricao || "").replace(/</g, "&lt;")}</td>
+            <td style="padding:7px 14px;font-size:10px;color:#7A5A22;">${it.categoria || "—"}</td>
+            <td style="padding:7px 14px;text-align:right;font-family:monospace;font-weight:600;font-size:11px;color:#A93226;">${fmtFull(it.valor)}</td>
           </tr>
         `;
       });
@@ -676,27 +676,27 @@ function DetalheMapa({ mapaId, mapas, currentUser, profileById, faturas = [], pa
 
     const aprovacoesHtml = `
       <div style="margin-top:30px;display:grid;grid-template-columns:1fr 1fr;gap:24px;">
-        <div style="border:1px solid #e5e5e5;border-radius:8px;padding:14px;${mapa.aprovado_n1_em ? 'background:#f0fdf4;border-color:#bbf7d0;' : ''}">
-          <div style="font-size:10px;color:#888;text-transform:uppercase;letter-spacing:0.5px;font-family:monospace;margin-bottom:6px;">Aprovação Nível 1</div>
+        <div style="border:1px solid #E3D9CC;border-radius:8px;padding:14px;${mapa.aprovado_n1_em ? 'background:#EFF5F1;border-color:#C9E3D5;' : ''}">
+          <div style="font-size:10px;color:#7E8388;text-transform:uppercase;letter-spacing:0.5px;font-family:monospace;margin-bottom:6px;">Aprovação Nível 1</div>
           ${mapa.aprovado_n1_em ? `
-            <div style="color:#16a34a;font-weight:700;font-size:14px;">✓ ${nomeUser(mapa.aprovado_n1_por)}</div>
-            <div style="color:#666;font-size:11px;">${fmtDateTime(mapa.aprovado_n1_em)}</div>
-          ` : `<div style="color:#aaa;font-size:11px;font-style:italic;">a aguardar</div>`}
+            <div style="color:#1F7A54;font-weight:700;font-size:14px;">✓ ${nomeUser(mapa.aprovado_n1_por)}</div>
+            <div style="color:#5C6166;font-size:11px;">${fmtDateTime(mapa.aprovado_n1_em)}</div>
+          ` : `<div style="color:#9DA2A6;font-size:11px;font-style:italic;">a aguardar</div>`}
         </div>
-        <div style="border:1px solid #e5e5e5;border-radius:8px;padding:14px;${mapa.aprovado_n2_em ? 'background:#f0fdf4;border-color:#bbf7d0;' : ''}">
-          <div style="font-size:10px;color:#888;text-transform:uppercase;letter-spacing:0.5px;font-family:monospace;margin-bottom:6px;">Aprovação Nível 2 (Final)</div>
+        <div style="border:1px solid #E3D9CC;border-radius:8px;padding:14px;${mapa.aprovado_n2_em ? 'background:#EFF5F1;border-color:#C9E3D5;' : ''}">
+          <div style="font-size:10px;color:#7E8388;text-transform:uppercase;letter-spacing:0.5px;font-family:monospace;margin-bottom:6px;">Aprovação Nível 2 (Final)</div>
           ${mapa.aprovado_n2_em ? `
-            <div style="color:#16a34a;font-weight:700;font-size:14px;">✓ ${nomeUser(mapa.aprovado_n2_por)}</div>
-            <div style="color:#666;font-size:11px;">${fmtDateTime(mapa.aprovado_n2_em)}</div>
-          ` : `<div style="color:#aaa;font-size:11px;font-style:italic;">a aguardar</div>`}
+            <div style="color:#1F7A54;font-weight:700;font-size:14px;">✓ ${nomeUser(mapa.aprovado_n2_por)}</div>
+            <div style="color:#5C6166;font-size:11px;">${fmtDateTime(mapa.aprovado_n2_em)}</div>
+          ` : `<div style="color:#9DA2A6;font-size:11px;font-style:italic;">a aguardar</div>`}
         </div>
       </div>
       ${mapa.status === "recusado" ? `
-        <div style="margin-top:16px;border:1px solid #fecaca;background:#fef2f2;border-radius:8px;padding:14px;">
-          <div style="font-size:10px;color:#dc2626;text-transform:uppercase;letter-spacing:0.5px;font-family:monospace;margin-bottom:6px;">Recusado</div>
-          <div style="color:#dc2626;font-weight:700;font-size:14px;">✕ ${nomeUser(mapa.recusado_por)}</div>
-          <div style="color:#666;font-size:11px;">${fmtDateTime(mapa.recusado_em)}</div>
-          ${mapa.motivo_recusa ? `<div style="color:#7f1d1d;font-size:12px;margin-top:8px;font-style:italic;">"${mapa.motivo_recusa.replace(/</g, "&lt;")}"</div>` : ""}
+        <div style="margin-top:16px;border:1px solid #EFCFC9;background:#FBEDEB;border-radius:8px;padding:14px;">
+          <div style="font-size:10px;color:#A93226;text-transform:uppercase;letter-spacing:0.5px;font-family:monospace;margin-bottom:6px;">Recusado</div>
+          <div style="color:#A93226;font-weight:700;font-size:14px;">✕ ${nomeUser(mapa.recusado_por)}</div>
+          <div style="color:#5C6166;font-size:11px;">${fmtDateTime(mapa.recusado_em)}</div>
+          ${mapa.motivo_recusa ? `<div style="color:#6E241C;font-size:12px;margin-top:8px;font-style:italic;">"${mapa.motivo_recusa.replace(/</g, "&lt;")}"</div>` : ""}
         </div>
       ` : ""}
     `;
@@ -709,20 +709,20 @@ function DetalheMapa({ mapaId, mapas, currentUser, profileById, faturas = [], pa
   <style>
     @page { size: A4; margin: 18mm; }
     * { box-sizing: border-box; }
-    body { font-family: 'Helvetica', Arial, sans-serif; color: #1a1a2e; margin: 0; padding: 0; }
-    .header { border-bottom: 3px solid #1a1a2e; padding-bottom: 16px; margin-bottom: 20px; display: flex; justify-content: space-between; align-items: flex-start; }
-    .brand { font-family: Georgia, serif; font-size: 26px; font-weight: 700; color: #1a1a2e; letter-spacing: -0.5px; }
-    .brand span { color: #6B7C93; }
-    .subtitle { font-size: 11px; color: #888; margin-top: 4px; letter-spacing: 2px; text-transform: uppercase; }
+    body { font-family: 'Helvetica', Arial, sans-serif; color: #091C2A; margin: 0; padding: 0; }
+    .header { border-bottom: 3px solid #091C2A; padding-bottom: 16px; margin-bottom: 20px; display: flex; justify-content: space-between; align-items: flex-start; }
+    .brand { font-family: Georgia, serif; font-size: 26px; font-weight: 700; color: #091C2A; letter-spacing: -0.5px; }
+    .brand span { color: #BAA685; }
+    .subtitle { font-size: 11px; color: #7E8388; margin-top: 4px; letter-spacing: 2px; text-transform: uppercase; }
     .doc-id { text-align: right; font-family: monospace; }
-    .doc-id .num { font-size: 18px; font-weight: 700; color: #1a1a2e; }
-    .doc-id .label { font-size: 10px; color: #888; text-transform: uppercase; letter-spacing: 1px; }
+    .doc-id .num { font-size: 18px; font-weight: 700; color: #091C2A; }
+    .doc-id .label { font-size: 10px; color: #7E8388; text-transform: uppercase; letter-spacing: 1px; }
     h1 { font-family: Georgia, serif; font-size: 22px; margin: 0 0 18px 0; }
-    .info-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 16px; background: #fafafa; padding: 14px; border-radius: 8px; margin-bottom: 20px; }
-    .info-grid .label { font-size: 9px; color: #888; text-transform: uppercase; letter-spacing: 0.5px; font-family: monospace; margin-bottom: 4px; }
-    .info-grid .value { font-size: 13px; color: #1a1a2e; font-weight: 600; }
+    .info-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 16px; background: #FBF7F1; padding: 14px; border-radius: 8px; margin-bottom: 20px; }
+    .info-grid .label { font-size: 9px; color: #7E8388; text-transform: uppercase; letter-spacing: 0.5px; font-family: monospace; margin-bottom: 4px; }
+    .info-grid .value { font-size: 13px; color: #091C2A; font-weight: 600; }
     table { width: 100%; border-collapse: collapse; margin-top: 6px; }
-    .footer { margin-top: 40px; border-top: 1px solid #e5e5e5; padding-top: 14px; font-size: 9px; color: #888; display: flex; justify-content: space-between; }
+    .footer { margin-top: 40px; border-top: 1px solid #E3D9CC; padding-top: 14px; font-size: 9px; color: #7E8388; display: flex; justify-content: space-between; }
     @media print {
       body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
     }
@@ -739,7 +739,7 @@ function DetalheMapa({ mapaId, mapas, currentUser, profileById, faturas = [], pa
     <div class="doc-id">
       <div class="label">Nº</div>
       <div class="num">${numeroAmigavel}</div>
-      <div style="font-size:10px;color:#888;margin-top:4px;">${fmtDateTime(mapa.created_at)}</div>
+      <div style="font-size:10px;color:#7E8388;margin-top:4px;">${fmtDateTime(mapa.created_at)}</div>
     </div>
   </div>
 
@@ -756,13 +756,13 @@ function DetalheMapa({ mapaId, mapas, currentUser, profileById, faturas = [], pa
     </div>
     <div>
       <div class="label">Total a Pagar</div>
-      <div class="value" style="font-size:18px;color:#6B7C93;font-family:monospace;">${fmtFull(mapa.total_valor)}</div>
+      <div class="value" style="font-size:18px;color:#BAA685;font-family:monospace;">${fmtFull(mapa.total_valor)}</div>
     </div>
   </div>
 
   <table>
     <thead>
-      <tr style="background:#1a1a2e;color:#fff;">
+      <tr style="background:#091C2A;color:#fff;">
         <th style="padding:9px 14px;text-align:left;font-size:10px;text-transform:uppercase;font-family:monospace;letter-spacing:0.5px;">Tipo</th>
         <th style="padding:9px 14px;text-align:left;font-size:10px;text-transform:uppercase;font-family:monospace;letter-spacing:0.5px;">Vencimento</th>
         <th style="padding:9px 14px;text-align:left;font-size:10px;text-transform:uppercase;font-family:monospace;letter-spacing:0.5px;">Descrição</th>
@@ -772,9 +772,9 @@ function DetalheMapa({ mapaId, mapas, currentUser, profileById, faturas = [], pa
     </thead>
     ${tabelaEmpresas}
     <tfoot>
-      <tr style="background:#1a1a2e;color:#fff;">
-        <td colspan="4" style="padding:13px 14px;text-align:right;color:#aaa;font-size:11px;text-transform:uppercase;font-family:monospace;letter-spacing:0.8px;">Total Geral</td>
-        <td style="padding:13px 14px;text-align:right;color:#6B7C93;font-size:18px;font-weight:700;font-family:monospace;">${fmtFull(mapa.total_valor)}</td>
+      <tr style="background:#091C2A;color:#fff;">
+        <td colspan="4" style="padding:13px 14px;text-align:right;color:#9DA2A6;font-size:11px;text-transform:uppercase;font-family:monospace;letter-spacing:0.8px;">Total Geral</td>
+        <td style="padding:13px 14px;text-align:right;color:#BAA685;font-size:18px;font-weight:700;font-family:monospace;">${fmtFull(mapa.total_valor)}</td>
       </tr>
     </tfoot>
   </table>
@@ -799,66 +799,66 @@ function DetalheMapa({ mapaId, mapas, currentUser, profileById, faturas = [], pa
   };
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 16, fontFamily: "'DM Sans', sans-serif" }}>
+    <div style={{ display: "flex", flexDirection: "column", gap: 16, fontFamily: "var(--fonte-titulo)" }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-        <h2 style={{ margin: 0, fontFamily: "Georgia, serif", fontSize: 22, color: "#1a1a2e" }}>
+        <h2 style={{ margin: 0, fontFamily: "var(--fonte-titulo)", fontSize: 22, color: "#091C2A" }}>
           Mapa {mapa.numero || mapa.id?.slice(0, 8)}
         </h2>
-        <button onClick={onClose} style={{ background: "#f0f0f0", color: "#666", border: "none", padding: "9px 20px", borderRadius: 8, cursor: "pointer", fontSize: 13 }}>← Voltar</button>
+        <button onClick={onClose} style={{ background: "#E7DED2", color: "#5C6166", border: "none", padding: "9px 20px", borderRadius: 8, cursor: "pointer", fontSize: 13 }}>← Voltar</button>
       </div>
 
       {/* Header */}
       <div style={{ background: "#fff", borderRadius: 10, padding: 18, boxShadow: "0 1px 3px rgba(0,0,0,0.05)" }}>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 16 }}>
           <div>
-            <div style={{ fontSize: 10, color: "#aaa", textTransform: "uppercase", fontFamily: "monospace", marginBottom: 4 }}>Estado</div>
-            <span style={{ background: st.bg, color: st.color, padding: "5px 12px", borderRadius: 4, fontSize: 12, fontFamily: "monospace", fontWeight: 700 }}>{st.label}</span>
+            <div style={{ fontSize: 10, color: "#9DA2A6", textTransform: "uppercase", fontFamily: "var(--fonte-numero)", marginBottom: 4 }}>Estado</div>
+            <span style={{ background: st.bg, color: st.color, padding: "5px 12px", borderRadius: 4, fontSize: 12, fontFamily: "var(--fonte-numero)", fontWeight: 700 }}>{st.label}</span>
           </div>
           <div>
-            <div style={{ fontSize: 10, color: "#aaa", textTransform: "uppercase", fontFamily: "monospace", marginBottom: 4 }}>Total</div>
-            <div style={{ fontSize: 18, fontWeight: 700, color: "#1a1a2e", fontFamily: "monospace" }}>{fmtFull(mapa.total_valor)}</div>
+            <div style={{ fontSize: 10, color: "#9DA2A6", textTransform: "uppercase", fontFamily: "var(--fonte-numero)", marginBottom: 4 }}>Total</div>
+            <div style={{ fontSize: 18, fontWeight: 700, color: "#091C2A", fontFamily: "var(--fonte-numero)" }}>{fmtFull(mapa.total_valor)}</div>
           </div>
           <div>
-            <div style={{ fontSize: 10, color: "#aaa", textTransform: "uppercase", fontFamily: "monospace", marginBottom: 4 }}>Criado por</div>
+            <div style={{ fontSize: 10, color: "#9DA2A6", textTransform: "uppercase", fontFamily: "var(--fonte-numero)", marginBottom: 4 }}>Criado por</div>
             <div style={{ fontSize: 12 }}>{nomeUser(mapa.created_by)}</div>
-            <div style={{ fontSize: 10, color: "#888" }}>{fmtDateTime(mapa.created_at)}</div>
+            <div style={{ fontSize: 10, color: "#7E8388" }}>{fmtDateTime(mapa.created_at)}</div>
           </div>
           <div>
-            <div style={{ fontSize: 10, color: "#aaa", textTransform: "uppercase", fontFamily: "monospace", marginBottom: 4 }}>Descrição</div>
+            <div style={{ fontSize: 10, color: "#9DA2A6", textTransform: "uppercase", fontFamily: "var(--fonte-numero)", marginBottom: 4 }}>Descrição</div>
             <div style={{ fontSize: 12 }}>{mapa.descricao || "—"}</div>
           </div>
         </div>
 
         {/* Trilha de aprovações */}
-        <div style={{ marginTop: 16, paddingTop: 16, borderTop: "1px solid #f0f0f0", display: "flex", gap: 24 }}>
+        <div style={{ marginTop: 16, paddingTop: 16, borderTop: "1px solid #E7DED2", display: "flex", gap: 24 }}>
           <div style={{ flex: 1 }}>
-            <div style={{ fontSize: 10, color: "#aaa", textTransform: "uppercase", fontFamily: "monospace", marginBottom: 4 }}>Aprovação Nível 1</div>
+            <div style={{ fontSize: 10, color: "#9DA2A6", textTransform: "uppercase", fontFamily: "var(--fonte-numero)", marginBottom: 4 }}>Aprovação Nível 1</div>
             {mapa.aprovado_n1_em ? (
               <div>
-                <div style={{ color: "#16a34a", fontSize: 12, fontWeight: 600 }}>✓ {nomeUser(mapa.aprovado_n1_por)}</div>
-                <div style={{ fontSize: 10, color: "#888" }}>{fmtDateTime(mapa.aprovado_n1_em)}</div>
+                <div style={{ color: "#1F7A54", fontSize: 12, fontWeight: 600 }}>✓ {nomeUser(mapa.aprovado_n1_por)}</div>
+                <div style={{ fontSize: 10, color: "#7E8388" }}>{fmtDateTime(mapa.aprovado_n1_em)}</div>
               </div>
             ) : (
-              <div style={{ color: "#aaa", fontSize: 11, fontStyle: "italic" }}>a aguardar</div>
+              <div style={{ color: "#9DA2A6", fontSize: 11, fontStyle: "italic" }}>a aguardar</div>
             )}
           </div>
           <div style={{ flex: 1 }}>
-            <div style={{ fontSize: 10, color: "#aaa", textTransform: "uppercase", fontFamily: "monospace", marginBottom: 4 }}>Aprovação Nível 2</div>
+            <div style={{ fontSize: 10, color: "#9DA2A6", textTransform: "uppercase", fontFamily: "var(--fonte-numero)", marginBottom: 4 }}>Aprovação Nível 2</div>
             {mapa.aprovado_n2_em ? (
               <div>
-                <div style={{ color: "#16a34a", fontSize: 12, fontWeight: 600 }}>✓ {nomeUser(mapa.aprovado_n2_por)}</div>
-                <div style={{ fontSize: 10, color: "#888" }}>{fmtDateTime(mapa.aprovado_n2_em)}</div>
+                <div style={{ color: "#1F7A54", fontSize: 12, fontWeight: 600 }}>✓ {nomeUser(mapa.aprovado_n2_por)}</div>
+                <div style={{ fontSize: 10, color: "#7E8388" }}>{fmtDateTime(mapa.aprovado_n2_em)}</div>
               </div>
             ) : (
-              <div style={{ color: "#aaa", fontSize: 11, fontStyle: "italic" }}>a aguardar</div>
+              <div style={{ color: "#9DA2A6", fontSize: 11, fontStyle: "italic" }}>a aguardar</div>
             )}
           </div>
           {mapa.status === "recusado" && (
             <div style={{ flex: 1 }}>
-              <div style={{ fontSize: 10, color: "#dc2626", textTransform: "uppercase", fontFamily: "monospace", marginBottom: 4 }}>Recusado</div>
-              <div style={{ color: "#dc2626", fontSize: 12, fontWeight: 600 }}>✕ {nomeUser(mapa.recusado_por)}</div>
-              <div style={{ fontSize: 10, color: "#888" }}>{fmtDateTime(mapa.recusado_em)}</div>
-              {mapa.motivo_recusa && <div style={{ fontSize: 11, color: "#dc2626", marginTop: 6, fontStyle: "italic" }}>"{mapa.motivo_recusa}"</div>}
+              <div style={{ fontSize: 10, color: "#A93226", textTransform: "uppercase", fontFamily: "var(--fonte-numero)", marginBottom: 4 }}>Recusado</div>
+              <div style={{ color: "#A93226", fontSize: 12, fontWeight: 600 }}>✕ {nomeUser(mapa.recusado_por)}</div>
+              <div style={{ fontSize: 10, color: "#7E8388" }}>{fmtDateTime(mapa.recusado_em)}</div>
+              {mapa.motivo_recusa && <div style={{ fontSize: 11, color: "#A93226", marginTop: 6, fontStyle: "italic" }}>"{mapa.motivo_recusa}"</div>}
             </div>
           )}
         </div>
@@ -867,18 +867,18 @@ function DetalheMapa({ mapaId, mapas, currentUser, profileById, faturas = [], pa
       {/* Ações */}
       <div style={{ display: "flex", gap: 10, justifyContent: "flex-end", flexWrap: "wrap" }}>
         <button onClick={exportPDF}
-          style={{ background: "#1a1a2e", color: "#6B7C93", border: "none", padding: "9px 20px", borderRadius: 8, cursor: "pointer", fontSize: 13, fontWeight: 700 }}>
+          style={{ background: "#091C2A", color: "#BAA685", border: "none", padding: "9px 20px", borderRadius: 8, cursor: "pointer", fontSize: 13, fontWeight: 700 }}>
           📄 Exportar PDF
         </button>
         {podeEliminar && (
           <button onClick={() => onDelete(mapa.id)}
-            style={{ background: "#fee2e2", color: "#dc2626", border: "none", padding: "9px 20px", borderRadius: 8, cursor: "pointer", fontSize: 13, fontWeight: 600 }}>
+            style={{ background: "#F6DED9", color: "#A93226", border: "none", padding: "9px 20px", borderRadius: 8, cursor: "pointer", fontSize: 13, fontWeight: 600 }}>
             🗑️ Eliminar mapa
           </button>
         )}
         {podeRecusar && (
           <button onClick={recusar}
-            style={{ background: "#dc2626", color: "#fff", border: "none", padding: "9px 20px", borderRadius: 8, cursor: "pointer", fontSize: 13, fontWeight: 700 }}>
+            style={{ background: "#A93226", color: "#fff", border: "none", padding: "9px 20px", borderRadius: 8, cursor: "pointer", fontSize: 13, fontWeight: 700 }}>
             ✕ Recusar
           </button>
         )}
@@ -886,12 +886,12 @@ function DetalheMapa({ mapaId, mapas, currentUser, profileById, faturas = [], pa
           <>
             {!todosSelecionados && numSelecionados > 0 && (
               <button onClick={() => aprovarSelecionados(1)}
-                style={{ background: "#3b82f6", color: "#fff", border: "none", padding: "9px 20px", borderRadius: 8, cursor: "pointer", fontSize: 13, fontWeight: 700 }}>
+                style={{ background: "#2C4A63", color: "#fff", border: "none", padding: "9px 20px", borderRadius: 8, cursor: "pointer", fontSize: 13, fontWeight: 700 }}>
                 ✓ Aprovar {numSelecionados} de {itens.length}
               </button>
             )}
             <button onClick={() => aprovar(1)}
-              style={{ background: "#16a34a", color: "#fff", border: "none", padding: "9px 24px", borderRadius: 8, cursor: "pointer", fontSize: 13, fontWeight: 700 }}>
+              style={{ background:"#091C2A", color: "#fff", border: "none", padding: "9px 24px", borderRadius: 8, cursor: "pointer", fontSize: 13, fontWeight: 700 }}>
               ✓ Aprovar Todos (N1)
             </button>
           </>
@@ -900,12 +900,12 @@ function DetalheMapa({ mapaId, mapas, currentUser, profileById, faturas = [], pa
           <>
             {!todosSelecionados && numSelecionados > 0 && (
               <button onClick={() => aprovarSelecionados(2)}
-                style={{ background: "#3b82f6", color: "#fff", border: "none", padding: "9px 20px", borderRadius: 8, cursor: "pointer", fontSize: 13, fontWeight: 700 }}>
+                style={{ background: "#2C4A63", color: "#fff", border: "none", padding: "9px 20px", borderRadius: 8, cursor: "pointer", fontSize: 13, fontWeight: 700 }}>
                 ✓ Aprovar {numSelecionados} de {itens.length}
               </button>
             )}
             <button onClick={() => aprovar(2)}
-              style={{ background: "#16a34a", color: "#fff", border: "none", padding: "9px 24px", borderRadius: 8, cursor: "pointer", fontSize: 13, fontWeight: 700 }}>
+              style={{ background:"#091C2A", color: "#fff", border: "none", padding: "9px 24px", borderRadius: 8, cursor: "pointer", fontSize: 13, fontWeight: 700 }}>
               ✓ Aprovar Todos (N2 Final)
             </button>
           </>
@@ -914,22 +914,22 @@ function DetalheMapa({ mapaId, mapas, currentUser, profileById, faturas = [], pa
 
       {/* Itens */}
       <div style={{ background: "#fff", borderRadius: 10, overflow: "hidden", boxShadow: "0 1px 3px rgba(0,0,0,0.05)" }}>
-        <div style={{ padding: "14px 18px", borderBottom: "1px solid #f0f0f0", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-          <div style={{ fontWeight: 600, fontSize: 14, color: "#1a1a2e" }}>
+        <div style={{ padding: "14px 18px", borderBottom: "1px solid #E7DED2", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+          <div style={{ fontWeight: 600, fontSize: 14, color: "#091C2A" }}>
             Itens do mapa ({itens.length})
           </div>
           {(podeAprovarN1 || podeAprovarN2) && selectedItens && !todosSelecionados && (
-            <div style={{ fontSize: 11, color: "#3b82f6", fontFamily: "monospace", background: "#eff6ff", padding: "5px 12px", borderRadius: 6, fontWeight: 600 }}>
+            <div style={{ fontSize: 11, color: "#2C4A63", fontFamily: "var(--fonte-numero)", background: "#EDF1F5", padding: "5px 12px", borderRadius: 6, fontWeight: 600 }}>
               {numSelecionados}/{itens.length} selecionados · {fmtFull(totalSelecionado)}
             </div>
           )}
         </div>
         {itensLoading ? (
-          <div style={{ padding: 30, textAlign: "center", color: "#888" }}>A carregar…</div>
+          <div style={{ padding: 30, textAlign: "center", color: "#7E8388" }}>A carregar…</div>
         ) : (
           <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
             <thead>
-              <tr style={{ background: "#fafafa" }}>
+              <tr style={{ background: "#FBF7F1" }}>
                 {(podeAprovarN1 || podeAprovarN2) && (
                   <th style={{ padding: "10px 8px", fontWeight: 600, textAlign: "center", width: 36 }}>
                     <input type="checkbox" checked={todosSelecionados}
@@ -940,12 +940,12 @@ function DetalheMapa({ mapaId, mapas, currentUser, profileById, faturas = [], pa
                       style={{ cursor: "pointer", width: 15, height: 15 }} title="Selecionar/desselecionar todos" />
                   </th>
                 )}
-                <th style={{ padding: "10px 16px", fontWeight: 600, color: "#666", textTransform: "uppercase", fontSize: 10, fontFamily: "monospace", textAlign: "left" }}>Tipo</th>
-                <th style={{ padding: "10px 16px", fontWeight: 600, color: "#666", textTransform: "uppercase", fontSize: 10, fontFamily: "monospace", textAlign: "left" }}>Vencimento</th>
-                <th style={{ padding: "10px 16px", fontWeight: 600, color: "#666", textTransform: "uppercase", fontSize: 10, fontFamily: "monospace", textAlign: "left" }}>Descrição</th>
-                <th style={{ padding: "10px 16px", fontWeight: 600, color: "#666", textTransform: "uppercase", fontSize: 10, fontFamily: "monospace", textAlign: "left" }}>Categoria</th>
-                <th style={{ padding: "10px 16px", fontWeight: 600, color: "#666", textTransform: "uppercase", fontSize: 10, fontFamily: "monospace", textAlign: "right" }}>Valor</th>
-                <th style={{ padding: "10px 12px", fontWeight: 600, color: "#666", textTransform: "uppercase", fontSize: 10, fontFamily: "monospace", textAlign: "center", width: 80 }}>Fatura</th>
+                <th style={{ padding: "10px 16px", fontWeight: 600, color: "#5C6166", textTransform: "uppercase", fontSize: 10, fontFamily: "var(--fonte-numero)", textAlign: "left" }}>Tipo</th>
+                <th style={{ padding: "10px 16px", fontWeight: 600, color: "#5C6166", textTransform: "uppercase", fontSize: 10, fontFamily: "var(--fonte-numero)", textAlign: "left" }}>Vencimento</th>
+                <th style={{ padding: "10px 16px", fontWeight: 600, color: "#5C6166", textTransform: "uppercase", fontSize: 10, fontFamily: "var(--fonte-numero)", textAlign: "left" }}>Descrição</th>
+                <th style={{ padding: "10px 16px", fontWeight: 600, color: "#5C6166", textTransform: "uppercase", fontSize: 10, fontFamily: "var(--fonte-numero)", textAlign: "left" }}>Categoria</th>
+                <th style={{ padding: "10px 16px", fontWeight: 600, color: "#5C6166", textTransform: "uppercase", fontSize: 10, fontFamily: "var(--fonte-numero)", textAlign: "right" }}>Valor</th>
+                <th style={{ padding: "10px 12px", fontWeight: 600, color: "#5C6166", textTransform: "uppercase", fontSize: 10, fontFamily: "var(--fonte-numero)", textAlign: "center", width: 80 }}>Fatura</th>
               </tr>
             </thead>
             <tbody>
@@ -968,9 +968,9 @@ function DetalheMapa({ mapaId, mapas, currentUser, profileById, faturas = [], pa
                   const nenhumGrupoSel = selectedItens && gruposSelIds.every(id => !selectedItens.has(id));
                   // Cabeçalho da empresa
                   rows.push(
-                    <tr key={`hdr_${emp}`} style={{ background: "#f0f4ff", borderTop: "2px solid #c7d2fe" }}>
+                    <tr key={`hdr_${emp}`} style={{ background: "#EDF1F5", borderTop: "2px solid #CBDAE5" }}>
                       {podeSel && (
-                        <td style={{ padding: "8px 8px", textAlign: "center", background: "#f0f4ff" }}>
+                        <td style={{ padding: "8px 8px", textAlign: "center", background: "#EDF1F5" }}>
                           <input type="checkbox" checked={!!todosGrupoSel}
                             ref={el => { if (el) el.indeterminate = !todosGrupoSel && !nenhumGrupoSel; }}
                             onChange={e => {
@@ -985,13 +985,13 @@ function DetalheMapa({ mapaId, mapas, currentUser, profileById, faturas = [], pa
                             title={`Selecionar/desselecionar todos de ${emp}`} />
                         </td>
                       )}
-                      <td colSpan={4} style={{ padding: "8px 16px", fontWeight: 700, color: "#3730a3", fontSize: 12, textTransform: "uppercase", fontFamily: "monospace", letterSpacing: 0.5 }}>
+                      <td colSpan={4} style={{ padding: "8px 16px", fontWeight: 700, color: "#2C4A63", fontSize: 12, textTransform: "uppercase", fontFamily: "var(--fonte-numero)", letterSpacing: 0.5 }}>
                         📂 {emp} ({grupo.items.length})
                       </td>
-                      <td style={{ padding: "8px 16px", textAlign: "right", fontFamily: "monospace", fontWeight: 700, color: "#3730a3", fontSize: 12 }}>
+                      <td style={{ padding: "8px 16px", textAlign: "right", fontFamily: "var(--fonte-numero)", fontWeight: 700, color: "#2C4A63", fontSize: 12 }}>
                         {fmtFull(grupo.total)}
                       </td>
-                      <td style={{ padding: "8px 12px", background: "#f0f4ff" }}></td>
+                      <td style={{ padding: "8px 12px", background: "#EDF1F5" }}></td>
                     </tr>
                   );
                   // Itens
@@ -1004,7 +1004,7 @@ function DetalheMapa({ mapaId, mapas, currentUser, profileById, faturas = [], pa
                     const temAnexo = !!(src?.anexo_b64 && src?.anexo_nome);
                     const itemSelecionado = selectedItens && selectedItens.has(it.id);
                     rows.push(
-                      <tr key={it.id} style={{ borderBottom: "1px solid #f5f5f5", background: podeSel && !itemSelecionado ? "#fafafa" : "#fff", opacity: podeSel && !itemSelecionado ? 0.55 : 1 }}>
+                      <tr key={it.id} style={{ borderBottom: "1px solid #F7F2EA", background: podeSel && !itemSelecionado ? "#FBF7F1" : "#fff", opacity: podeSel && !itemSelecionado ? 0.55 : 1 }}>
                         {podeSel && (
                           <td style={{ padding: "8px 8px", textAlign: "center", verticalAlign: "top" }}>
                             <input type="checkbox" checked={!!itemSelecionado}
@@ -1012,27 +1012,27 @@ function DetalheMapa({ mapaId, mapas, currentUser, profileById, faturas = [], pa
                               style={{ cursor: "pointer", width: 14, height: 14 }} />
                           </td>
                         )}
-                        <td style={{ padding: "8px 16px 8px 32px", color: "#888", fontSize: 11, fontFamily: "monospace", verticalAlign: "top" }}>{it.tipo_origem}</td>
-                        <td style={{ padding: "8px 16px", fontFamily: "monospace", fontSize: 11, verticalAlign: "top" }}>{fmtDate(it.vencimento)}</td>
+                        <td style={{ padding: "8px 16px 8px 32px", color: "#7E8388", fontSize: 11, fontFamily: "var(--fonte-numero)", verticalAlign: "top" }}>{it.tipo_origem}</td>
+                        <td style={{ padding: "8px 16px", fontFamily: "var(--fonte-numero)", fontSize: 11, verticalAlign: "top" }}>{fmtDate(it.vencimento)}</td>
                         <td style={{ padding: "8px 16px", verticalAlign: "top" }}>
-                          <div>{it.fornecedor && <span style={{ color: "#888", marginRight: 6 }}>{it.fornecedor} ·</span>}{it.descricao}</div>
+                          <div>{it.fornecedor && <span style={{ color: "#7E8388", marginRight: 6 }}>{it.fornecedor} ·</span>}{it.descricao}</div>
                           {obs && (
-                            <div style={{ fontSize: 10, color: "#888", marginTop: 3, fontStyle: "italic", lineHeight: 1.4 }}>
+                            <div style={{ fontSize: 10, color: "#7E8388", marginTop: 3, fontStyle: "italic", lineHeight: 1.4 }}>
                               💬 {obs}
                             </div>
                           )}
                         </td>
-                        <td style={{ padding: "8px 16px", verticalAlign: "top" }}><span style={{ background: "#fef3c7", color: "#92400e", padding: "2px 7px", borderRadius: 3, fontSize: 10, fontFamily: "monospace" }}>{it.categoria || "—"}</span></td>
-                        <td style={{ padding: "8px 16px", textAlign: "right", fontFamily: "monospace", fontWeight: 600, color: "#dc2626", verticalAlign: "top" }}>{fmtFull(it.valor)}</td>
+                        <td style={{ padding: "8px 16px", verticalAlign: "top" }}><span style={{ background: "#F6ECD6", color: "#7A5A22", padding: "2px 7px", borderRadius: 3, fontSize: 10, fontFamily: "var(--fonte-numero)" }}>{it.categoria || "—"}</span></td>
+                        <td style={{ padding: "8px 16px", textAlign: "right", fontFamily: "var(--fonte-numero)", fontWeight: 600, color: "#A93226", verticalAlign: "top" }}>{fmtFull(it.valor)}</td>
                         <td style={{ padding: "8px 8px", textAlign: "center", verticalAlign: "top" }}>
                           {src ? (
                             <button onClick={() => abrirPreview(it)}
                               title={temAnexo ? `Ver anexo (${src.anexo_nome})` : "Ver detalhes da fatura"}
-                              style={{ background: temAnexo ? "#e0e7ff" : "#f5f5f5", color: temAnexo ? "#3730a3" : "#888", border: "none", padding: "4px 10px", borderRadius: 6, fontSize: 10, fontWeight: 600, cursor: "pointer", fontFamily: "monospace" }}>
+                              style={{ background: temAnexo ? "#E0E9F0" : "#F7F2EA", color: temAnexo ? "#2C4A63" : "#7E8388", border: "none", padding: "4px 10px", borderRadius: 6, fontSize: 10, fontWeight: 600, cursor: "pointer", fontFamily: "var(--fonte-numero)" }}>
                               {temAnexo ? "📎 Ver" : "ℹ️ Info"}
                             </button>
                           ) : (
-                            <span style={{ color: "#ccc", fontSize: 10 }}>—</span>
+                            <span style={{ color: "#C4C7CA", fontSize: 10 }}>—</span>
                           )}
                         </td>
                       </tr>
@@ -1041,11 +1041,11 @@ function DetalheMapa({ mapaId, mapas, currentUser, profileById, faturas = [], pa
                 });
                 return rows;
               })()}
-              <tr style={{ background: "#1a1a2e", color: "#fff" }}>
-                {(podeAprovarN1 || podeAprovarN2) && <td style={{ background: "#1a1a2e" }}></td>}
-                <td colSpan={4} style={{ padding: "12px 16px", textAlign: "right", fontFamily: "monospace", color: "#aaa", textTransform: "uppercase", fontSize: 11, letterSpacing: 0.5 }}>Total Geral</td>
-                <td style={{ padding: "12px 16px", textAlign: "right", fontFamily: "monospace", fontSize: 15, fontWeight: 700, color: "#6B7C93" }}>{fmtFull(mapa.total_valor)}</td>
-                <td style={{ background: "#1a1a2e" }}></td>
+              <tr style={{ background: "#091C2A", color: "#fff" }}>
+                {(podeAprovarN1 || podeAprovarN2) && <td style={{ background: "#091C2A" }}></td>}
+                <td colSpan={4} style={{ padding: "12px 16px", textAlign: "right", fontFamily: "var(--fonte-numero)", color: "#9DA2A6", textTransform: "uppercase", fontSize: 11, letterSpacing: 0.5 }}>Total Geral</td>
+                <td style={{ padding: "12px 16px", textAlign: "right", fontFamily: "var(--fonte-numero)", fontSize: 15, fontWeight: 700, color: "#BAA685" }}>{fmtFull(mapa.total_valor)}</td>
+                <td style={{ background: "#091C2A" }}></td>
               </tr>
             </tbody>
           </table>
@@ -1068,45 +1068,45 @@ function DetalheMapa({ mapaId, mapas, currentUser, profileById, faturas = [], pa
               style={{ background: "#fff", borderRadius: 12, width: "min(1000px, 100%)", maxHeight: "92vh", display: "flex", flexDirection: "column", overflow: "hidden", boxShadow: "0 20px 60px rgba(0,0,0,0.4)" }}>
 
               {/* Header */}
-              <div style={{ padding: "16px 22px", borderBottom: "1px solid #eee", display: "flex", justifyContent: "space-between", alignItems: "center", background: "#fafafa" }}>
+              <div style={{ padding: "16px 22px", borderBottom: "1px solid #EFE8DE", display: "flex", justifyContent: "space-between", alignItems: "center", background: "#FBF7F1" }}>
                 <div>
-                  <div style={{ fontSize: 15, fontWeight: 700, color: "#1a1a2e", fontFamily: "'DM Sans', sans-serif" }}>
+                  <div style={{ fontSize: 15, fontWeight: 700, color: "#091C2A", fontFamily: "var(--fonte-titulo)" }}>
                     {src?.fornecedor || "—"} · {src?.fatura || it.descricao}
                   </div>
-                  <div style={{ fontSize: 11, color: "#888", marginTop: 3, fontFamily: "monospace" }}>
+                  <div style={{ fontSize: 11, color: "#7E8388", marginTop: 3, fontFamily: "var(--fonte-numero)" }}>
                     {it.empresa?.toUpperCase() || "—"} · Vencimento: {fmtDate(src?.vencimento || it.vencimento)} · <b>{fmtFull(src?.valor || it.valor)}</b>
                   </div>
                 </div>
                 <button onClick={() => setPreviewItem(null)}
-                  style={{ background: "#f5f5f5", border: "none", padding: "6px 14px", borderRadius: 8, fontSize: 12, fontWeight: 600, cursor: "pointer" }}>
+                  style={{ background: "#F7F2EA", border: "none", padding: "6px 14px", borderRadius: 8, fontSize: 12, fontWeight: 600, cursor: "pointer" }}>
                   ✕ Fechar
                 </button>
               </div>
 
               {/* Observações */}
               {obs && (
-                <div style={{ padding: "12px 22px", borderBottom: "1px solid #f0f0f0", background: "#fffbeb" }}>
-                  <div style={{ fontSize: 10, color: "#92400e", fontWeight: 700, textTransform: "uppercase", fontFamily: "monospace", letterSpacing: 0.5, marginBottom: 4 }}>💬 Observações</div>
-                  <div style={{ fontSize: 13, color: "#1a1a2e", lineHeight: 1.5, whiteSpace: "pre-wrap" }}>{obs}</div>
+                <div style={{ padding: "12px 22px", borderBottom: "1px solid #E7DED2", background: "#FBF6EC" }}>
+                  <div style={{ fontSize: 10, color: "#7A5A22", fontWeight: 700, textTransform: "uppercase", fontFamily: "var(--fonte-numero)", letterSpacing: 0.5, marginBottom: 4 }}>💬 Observações</div>
+                  <div style={{ fontSize: 13, color: "#091C2A", lineHeight: 1.5, whiteSpace: "pre-wrap" }}>{obs}</div>
                 </div>
               )}
 
               {/* Preview */}
-              <div style={{ flex: 1, overflow: "auto", background: "#f5f5f5", display: "flex", alignItems: "center", justifyContent: "center", padding: 20, minHeight: 300 }}>
+              <div style={{ flex: 1, overflow: "auto", background: "#F7F2EA", display: "flex", alignItems: "center", justifyContent: "center", padding: 20, minHeight: 300 }}>
                 {b64 ? (
                   isPdf ? (
                     <iframe src={b64} title={nome} style={{ width: "100%", height: "70vh", border: "none", background: "#fff", borderRadius: 6 }} />
                   ) : isImg ? (
                     <img src={b64} alt={nome} style={{ maxWidth: "100%", maxHeight: "70vh", objectFit: "contain", background: "#fff", padding: 10, borderRadius: 6, boxShadow: "0 2px 8px rgba(0,0,0,0.1)" }} />
                   ) : (
-                    <div style={{ textAlign: "center", color: "#888" }}>
+                    <div style={{ textAlign: "center", color: "#7E8388" }}>
                       <div style={{ fontSize: 40, marginBottom: 8 }}>📄</div>
                       <div style={{ fontSize: 13, marginBottom: 12 }}>Formato não pré-visualizável</div>
-                      <a href={b64} download={nome} style={{ display: "inline-block", background: "#3730a3", color: "#fff", padding: "8px 16px", borderRadius: 6, textDecoration: "none", fontSize: 12, fontWeight: 600 }}>⬇ Descarregar {nome}</a>
+                      <a href={b64} download={nome} style={{ display: "inline-block", background: "#2C4A63", color: "#fff", padding: "8px 16px", borderRadius: 6, textDecoration: "none", fontSize: 12, fontWeight: 600 }}>⬇ Descarregar {nome}</a>
                     </div>
                   )
                 ) : (
-                  <div style={{ textAlign: "center", color: "#aaa", padding: 40 }}>
+                  <div style={{ textAlign: "center", color: "#9DA2A6", padding: 40 }}>
                     <div style={{ fontSize: 32, marginBottom: 8 }}>📎</div>
                     <div style={{ fontSize: 13 }}>Esta fatura não tem anexo importado.</div>
                     {obs && <div style={{ fontSize: 11, marginTop: 6 }}>Vê as observações acima.</div>}
@@ -1116,9 +1116,9 @@ function DetalheMapa({ mapaId, mapas, currentUser, profileById, faturas = [], pa
 
               {/* Footer com download */}
               {b64 && (
-                <div style={{ padding: "12px 22px", borderTop: "1px solid #eee", background: "#fafafa", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                  <div style={{ fontSize: 11, color: "#888", fontFamily: "monospace" }}>{nome}</div>
-                  <a href={b64} download={nome} style={{ background: "#1a1a2e", color: "#fff", padding: "6px 14px", borderRadius: 6, textDecoration: "none", fontSize: 11, fontWeight: 600, fontFamily: "monospace" }}>
+                <div style={{ padding: "12px 22px", borderTop: "1px solid #EFE8DE", background: "#FBF7F1", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                  <div style={{ fontSize: 11, color: "#7E8388", fontFamily: "var(--fonte-numero)" }}>{nome}</div>
+                  <a href={b64} download={nome} style={{ background: "#091C2A", color: "#fff", padding: "6px 14px", borderRadius: 6, textDecoration: "none", fontSize: 11, fontWeight: 600, fontFamily: "var(--fonte-numero)" }}>
                     ⬇ Descarregar
                   </a>
                 </div>

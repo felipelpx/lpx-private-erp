@@ -543,7 +543,7 @@ export function useMovimentosPeriodo(contaIds = [], de = null, ate = null) {
       let todos = []
       for (;;) {
         let q = supabase.from('movimentos')
-          .select('conta_id, empresa_id, banco, data, movimento, valor, saldo, categoria, seq')
+          .select('conta_id, empresa_id, banco, data, movimento, valor, saldo, categoria, subcategoria, seq')
           .in('conta_id', ids)
           .order('data', { ascending: true })
           .order('seq', { ascending: true })

@@ -169,16 +169,16 @@ Responde APENAS o objeto JSON. Sem \`\`\`json, sem prefácio, sem sufixo.`;
 
 // ─── Fieldset styles ──────────────────────────────────────────────────────────
 const inputStyle = {
-  background:"#f8f8f8", border:"1px solid #eee", borderRadius:8,
-  padding:"9px 12px", fontSize:13, outline:"none", color:"#333",
+  background:"#F9F5EF", border:"1px solid #EFE8DE", borderRadius:8,
+  padding:"9px 12px", fontSize:13, outline:"none", color:"#23292D",
   width:"100%", boxSizing:"border-box"
 };
 const selectStyle = { ...inputStyle, cursor:"pointer" };
 const labelStyle = {
-  fontSize:10, color:"#aaa", fontFamily:"monospace",
+  fontSize:10, color:"#9DA2A6", fontFamily: "var(--fonte-numero)",
   textTransform:"uppercase", letterSpacing:"0.07em", display:"block", marginBottom:4
 };
-const reqLabelStyle = { ...labelStyle, color:"#d97706" };
+const reqLabelStyle = { ...labelStyle, color:"#A8762F" };
 const fieldWrap = { display:"flex", flexDirection:"column", gap:4 };
 
 // ─── MAIN COMPONENT ──────────────────────────────────────────────────────────
@@ -393,8 +393,8 @@ export default function ImportarFatura({ onSave }) {
   if (step === 0) return (
     <div style={{display:"flex",flexDirection:"column",gap:20}}>
       <div>
-        <div style={{fontSize:20,fontWeight:700,color:"#1a1a2e",fontFamily:"Georgia,serif",marginBottom:4}}>🧾 Importar Fatura</div>
-        <div style={{fontSize:13,color:"#888"}}>Faz upload da fatura — a IA extrai os dados automaticamente. Só precisas classificar.</div>
+        <div style={{fontSize:20,fontWeight:700,color:"#091C2A",fontFamily: "var(--fonte-titulo)",marginBottom:4}}>🧾 Importar Fatura</div>
+        <div style={{fontSize:13,color:"#7E8388"}}>Faz upload da fatura — a IA extrai os dados automaticamente. Só precisas classificar.</div>
       </div>
 
       <div
@@ -402,38 +402,38 @@ export default function ImportarFatura({ onSave }) {
         onDragLeave={()=>setDragging(false)}
         onDrop={e=>{e.preventDefault();setDragging(false);handleFile(e.dataTransfer.files[0]);}}
         onClick={()=>fileRef.current?.click()}
-        style={{border:`2px dashed ${dragging?"#1a1a2e":file?"#16a34a":"#ddd"}`,borderRadius:16,padding:"52px 24px",textAlign:"center",cursor:"pointer",background:file?"#f0fdf4":"#fafafa",transition:"all 0.2s"}}>
+        style={{border:`2px dashed ${dragging?"#091C2A":file?"#1F7A54":"#D8CCBB"}`,borderRadius:16,padding:"52px 24px",textAlign:"center",cursor:"pointer",background:file?"#EFF5F1":"#FBF7F1",transition:"all 0.2s"}}>
         <input ref={fileRef} type="file" accept=".pdf,.png,.jpg,.jpeg" style={{display:"none"}} onChange={e=>handleFile(e.target.files[0])}/>
         {file ? (
           <>
             <div style={{fontSize:40,marginBottom:10}}>✅</div>
-            <div style={{fontSize:15,fontWeight:700,color:"#16a34a"}}>{file.name}</div>
-            <div style={{fontSize:12,color:"#aaa",marginTop:4}}>{fmtTamanho(file.size)} · Clica para trocar</div>
+            <div style={{fontSize:15,fontWeight:700,color:"#1F7A54"}}>{file.name}</div>
+            <div style={{fontSize:12,color:"#9DA2A6",marginTop:4}}>{fmtTamanho(file.size)} · Clica para trocar</div>
           </>
         ) : (
           <>
             <div style={{fontSize:48,marginBottom:14}}>🧾</div>
-            <div style={{fontSize:16,fontWeight:700,color:"#1a1a2e",marginBottom:8}}>Arrasta a fatura aqui</div>
-            <div style={{fontSize:13,color:"#aaa",marginBottom:14}}>ou clica para selecionar</div>
+            <div style={{fontSize:16,fontWeight:700,color:"#091C2A",marginBottom:8}}>Arrasta a fatura aqui</div>
+            <div style={{fontSize:13,color:"#9DA2A6",marginBottom:14}}>ou clica para selecionar</div>
             <div style={{display:"flex",gap:8,justifyContent:"center",flexWrap:"wrap"}}>
-              {["PDF","PNG","JPG"].map(f=><span key={f} style={{background:"#fff",border:"1px solid #e0e0e0",color:"#888",fontSize:11,padding:"4px 12px",borderRadius:20,fontFamily:"monospace"}}>{f}</span>)}
+              {["PDF","PNG","JPG"].map(f=><span key={f} style={{background:"#fff",border:"1px solid #DFD5C8",color:"#7E8388",fontSize:11,padding:"4px 12px",borderRadius:20,fontFamily: "var(--fonte-numero)"}}>{f}</span>)}
             </div>
           </>
         )}
       </div>
 
-      <div style={{background:"#fffbeb",border:"1px solid #fde68a",borderRadius:10,padding:"12px 16px"}}>
-        <div style={{fontSize:12,color:"#92400e",fontWeight:600,marginBottom:4}}>💡 Dica</div>
-        <div style={{fontSize:11,color:"#a16207",lineHeight:1.7}}>
+      <div style={{background:"#FBF6EC",border:"1px solid #E3CE9F",borderRadius:10,padding:"12px 16px"}}>
+        <div style={{fontSize:12,color:"#7A5A22",fontWeight:600,marginBottom:4}}>💡 Dica</div>
+        <div style={{fontSize:11,color:"#8A6727",lineHeight:1.7}}>
           A IA lê PDF e imagens de faturas. Apenas <strong>Empresa</strong> e <strong>Classificação</strong> são obrigatórios — o resto é preenchido automaticamente.
         </div>
       </div>
 
-      {erro&&<div style={{background:"#fef2f2",border:"1px solid #fecaca",borderRadius:10,padding:"12px 16px",color:"#dc2626",fontSize:13}}>⚠️ {erro}</div>}
+      {erro&&<div style={{background:"#FBEDEB",border:"1px solid #EFCFC9",borderRadius:10,padding:"12px 16px",color:"#A93226",fontSize:13}}>⚠️ {erro}</div>}
 
       <div style={{display:"flex",justifyContent:"flex-end"}}>
         <button onClick={handleAnalyse} disabled={!file||loading}
-          style={{background:file&&!loading?"#1a1a2e":"#e0e0e0",color:file&&!loading?"#fff":"#aaa",border:"none",padding:"13px 32px",borderRadius:10,fontSize:14,fontWeight:700,cursor:file&&!loading?"pointer":"default",display:"flex",alignItems:"center",gap:10}}>
+          style={{background:file&&!loading?"#091C2A":"#DFD5C8",color:file&&!loading?"#fff":"#9DA2A6",border:"none",padding:"13px 32px",borderRadius:10,fontSize:14,fontWeight:700,cursor:file&&!loading?"pointer":"default",display:"flex",alignItems:"center",gap:10}}>
           {loading?<><span style={{display:"inline-block",width:16,height:16,border:"2px solid #ffffff44",borderTopColor:"#fff",borderRadius:"50%",animation:"spin 0.8s linear infinite"}}/>{loadingMsg}</>:"🤖 Extrair dados com IA →"}
         </button>
       </div>
@@ -446,29 +446,29 @@ export default function ImportarFatura({ onSave }) {
     <div style={{display:"flex",flexDirection:"column",gap:20}}>
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
         <div>
-          <div style={{fontSize:20,fontWeight:700,color:"#1a1a2e",fontFamily:"Georgia,serif",marginBottom:4}}>🧾 Rever & Classificar</div>
-          <div style={{fontSize:13,color:"#888"}}>Verifica os dados extraídos e preenche a classificação.</div>
+          <div style={{fontSize:20,fontWeight:700,color:"#091C2A",fontFamily: "var(--fonte-titulo)",marginBottom:4}}>🧾 Rever & Classificar</div>
+          <div style={{fontSize:13,color:"#7E8388"}}>Verifica os dados extraídos e preenche a classificação.</div>
         </div>
-        <button onClick={reset} style={{background:"none",border:"1px solid #eee",padding:"7px 16px",borderRadius:8,fontSize:12,color:"#888",cursor:"pointer"}}>← Novo upload</button>
+        <button onClick={reset} style={{background:"none",border:"1px solid #EFE8DE",padding:"7px 16px",borderRadius:8,fontSize:12,color:"#7E8388",cursor:"pointer"}}>← Novo upload</button>
       </div>
 
-      <div style={{background:"#f0fdf4",border:"1px solid #bbf7d0",borderRadius:10,padding:"12px 16px",display:"flex",alignItems:"center",gap:10}}>
+      <div style={{background:"#EFF5F1",border:"1px solid #C9E3D5",borderRadius:10,padding:"12px 16px",display:"flex",alignItems:"center",gap:10}}>
         <span style={{fontSize:20}}>✅</span>
-        <div style={{fontSize:13,color:"#15803d"}}><strong>Dados extraídos!</strong> Verifica e corrige se necessário. Campos a <span style={{color:"#d97706"}}>laranja</span> são obrigatórios.</div>
+        <div style={{fontSize:13,color:"#1B6A49"}}><strong>Dados extraídos!</strong> Verifica e corrige se necessário. Campos a <span style={{color:"#A8762F"}}>laranja</span> são obrigatórios.</div>
       </div>
 
       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:20}}>
 
         {/* Classificação — OBRIGATÓRIO */}
-        <div style={{background:"#fff",border:"2px solid #1a1a2e",borderRadius:14,padding:20,display:"flex",flexDirection:"column",gap:14}}>
-          <div style={{fontSize:13,fontWeight:700,color:"#1a1a2e",display:"flex",alignItems:"center",gap:8}}>
-            <span style={{background:"#1a1a2e",color:"#6B7C93",fontSize:10,padding:"2px 8px",borderRadius:4,fontFamily:"monospace"}}>OBRIGATÓRIO</span>
+        <div style={{background:"#fff",border:"2px solid #091C2A",borderRadius:14,padding:20,display:"flex",flexDirection:"column",gap:14}}>
+          <div style={{fontSize:13,fontWeight:700,color:"#091C2A",display:"flex",alignItems:"center",gap:8}}>
+            <span style={{background:"#091C2A",color:"#BAA685",fontSize:10,padding:"2px 8px",borderRadius:4,fontFamily: "var(--fonte-numero)"}}>OBRIGATÓRIO</span>
             Classificação
           </div>
 
           <div style={fieldWrap}>
             <label style={reqLabelStyle}>Empresa *</label>
-            <select value={empresa} onChange={e=>setEmpresa(e.target.value)} style={{...selectStyle,borderColor:!empresa?"#f59e0b":"#eee"}}>
+            <select value={empresa} onChange={e=>setEmpresa(e.target.value)} style={{...selectStyle,borderColor:!empresa?"#C19A4A":"#EFE8DE"}}>
               <option value="">Selecionar...</option>
               {EMPRESAS_LIST.map(e=><option key={e.id} value={e.id}>{e.nome}</option>)}
             </select>
@@ -476,7 +476,7 @@ export default function ImportarFatura({ onSave }) {
 
           <div style={fieldWrap}>
             <label style={reqLabelStyle}>Classificação / Categoria *</label>
-            <select value={categoria} onChange={e=>setCategoria(e.target.value)} style={{...selectStyle,borderColor:!categoria?"#f59e0b":"#eee"}}>
+            <select value={categoria} onChange={e=>setCategoria(e.target.value)} style={{...selectStyle,borderColor:!categoria?"#C19A4A":"#EFE8DE"}}>
               <option value="">Selecionar...</option>
               {CATEGORIAS.map(c=><option key={c}>{c}</option>)}
             </select>
@@ -502,9 +502,9 @@ export default function ImportarFatura({ onSave }) {
         </div>
 
         {/* Dados da Fatura — IA extraiu */}
-        <div style={{background:"#fff",border:"1px solid #f0f0f0",borderRadius:14,padding:20,display:"flex",flexDirection:"column",gap:14}}>
-          <div style={{fontSize:13,fontWeight:700,color:"#1a1a2e",display:"flex",alignItems:"center",gap:8}}>
-            <span style={{background:"#f0fdf4",color:"#16a34a",fontSize:10,padding:"2px 8px",borderRadius:4,fontFamily:"monospace",border:"1px solid #bbf7d0"}}>IA EXTRAIU</span>
+        <div style={{background:"#fff",border:"1px solid #E7DED2",borderRadius:14,padding:20,display:"flex",flexDirection:"column",gap:14}}>
+          <div style={{fontSize:13,fontWeight:700,color:"#091C2A",display:"flex",alignItems:"center",gap:8}}>
+            <span style={{background:"#EFF5F1",color:"#1F7A54",fontSize:10,padding:"2px 8px",borderRadius:4,fontFamily: "var(--fonte-numero)",border:"1px solid #C9E3D5"}}>IA EXTRAIU</span>
             Dados da Fatura
           </div>
           <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
@@ -523,13 +523,13 @@ export default function ImportarFatura({ onSave }) {
           </div>
 
           {/* IVA: deduz ou não, e a que taxa. É isto que alimenta a aba IVA. */}
-          <div style={{borderTop:"1px solid #f0f0f0",paddingTop:14,display:"flex",flexDirection:"column",gap:10}}>
+          <div style={{borderTop:"1px solid #E7DED2",paddingTop:14,display:"flex",flexDirection:"column",gap:10}}>
             <label style={{display:"flex",alignItems:"center",gap:9,cursor:"pointer",userSelect:"none"}}>
               <input type="checkbox" checked={deduzIva} onChange={e=>setDeduzIva(e.target.checked)}
-                style={{width:16,height:16,cursor:"pointer",accentColor:"#1a1a2e"}}/>
-              <span style={{fontSize:13,fontWeight:600,color:"#1a1a2e"}}>Este pagamento deduz IVA</span>
+                style={{width:16,height:16,cursor:"pointer",accentColor:"#091C2A"}}/>
+              <span style={{fontSize:13,fontWeight:600,color:"#091C2A"}}>Este pagamento deduz IVA</span>
             </label>
-            <div style={{fontSize:11,color:"#999",lineHeight:1.5,marginTop:-4,marginLeft:25}}>
+            <div style={{fontSize:11,color:"#8E9398",lineHeight:1.5,marginTop:-4,marginLeft:25}}>
               {deduzIva
                 ? "O IVA desta fatura entra no apuramento trimestral, a abater."
                 : "Impostos e taxas da AT, seguros, portagens, capital de empréstimos — a fatura entra no Contas a Pagar, mas fica fora do apuramento do IVA."}
@@ -552,13 +552,13 @@ export default function ImportarFatura({ onSave }) {
                           setValorIva(String(d.iva));
                         }
                       }}
-                      style={{flex:1,background:String(taxaIva)===String(t.taxa)?"#1a1a2e":"#f8f8f8",
-                              color:String(taxaIva)===String(t.taxa)?"#fff":"#555",
-                              border:"1px solid "+(String(taxaIva)===String(t.taxa)?"#1a1a2e":"#e8e8e8"),
+                      style={{flex:1,background:String(taxaIva)===String(t.taxa)?"#091C2A":"#F9F5EF",
+                              color:String(taxaIva)===String(t.taxa)?"#fff":"#4A5055",
+                              border:"1px solid "+(String(taxaIva)===String(t.taxa)?"#091C2A":"#E3D9CC"),
                               borderRadius:8,padding:"9px 4px",cursor:"pointer",fontWeight:700,fontSize:13}}>
                       {t.rotulo}
                       <div style={{fontSize:9,fontWeight:400,marginTop:2,
-                                   color:String(taxaIva)===String(t.taxa)?"#b9bfca":"#aaa"}}>{t.nota}</div>
+                                   color:String(taxaIva)===String(t.taxa)?"#A7AFB8":"#9DA2A6"}}>{t.nota}</div>
                     </button>
                   ))}
                 </div>
@@ -568,8 +568,8 @@ export default function ImportarFatura({ onSave }) {
         </div>
 
         {/* Fornecedor */}
-        <div style={{background:"#fff",border:"1px solid #f0f0f0",borderRadius:14,padding:20}}>
-          <div style={{fontSize:13,fontWeight:700,color:"#1a1a2e",marginBottom:14}}>🏢 Fornecedor</div>
+        <div style={{background:"#fff",border:"1px solid #E7DED2",borderRadius:14,padding:20}}>
+          <div style={{fontSize:13,fontWeight:700,color:"#091C2A",marginBottom:14}}>🏢 Fornecedor</div>
           <div style={{display:"flex",flexDirection:"column",gap:10}}>
             <div style={fieldWrap}>
               <label style={labelStyle}>Nome</label>
@@ -597,22 +597,22 @@ export default function ImportarFatura({ onSave }) {
         </div>
 
         {/* Valores */}
-        <div style={{background:"#fff",border:"1px solid #f0f0f0",borderRadius:14,padding:20}}>
-          <div style={{fontSize:13,fontWeight:700,color:"#1a1a2e",marginBottom:14}}>💰 Valores</div>
+        <div style={{background:"#fff",border:"1px solid #E7DED2",borderRadius:14,padding:20}}>
+          <div style={{fontSize:13,fontWeight:700,color:"#091C2A",marginBottom:14}}>💰 Valores</div>
           <div style={{display:"flex",flexDirection:"column",gap:10}}>
             <div style={fieldWrap}>
               <label style={labelStyle}>Valor Base (sem IVA)</label>
               <input type="number" value={valorBase} onChange={e=>setValorBase(e.target.value)}
-                disabled={!deduzIva} style={{...inputStyle,...(deduzIva?{}:{color:"#bbb",background:"#fafafa"})}}/>
+                disabled={!deduzIva} style={{...inputStyle,...(deduzIva?{}:{color:"#B2B6B9",background:"#FBF7F1"})}}/>
             </div>
             <div style={fieldWrap}>
               <label style={labelStyle}>IVA</label>
               <input type="number" value={valorIva} onChange={e=>setValorIva(e.target.value)}
-                disabled={!deduzIva} style={{...inputStyle,...(deduzIva?{}:{color:"#bbb",background:"#fafafa"})}}/>
+                disabled={!deduzIva} style={{...inputStyle,...(deduzIva?{}:{color:"#B2B6B9",background:"#FBF7F1"})}}/>
             </div>
-            <div style={{height:1,background:"#f0f0f0",margin:"4px 0"}}/>
+            <div style={{height:1,background:"#E7DED2",margin:"4px 0"}}/>
             <div style={fieldWrap}>
-              <label style={{...labelStyle,color:"#1a1a2e",fontWeight:700}}>Total a Pagar *</label>
+              <label style={{...labelStyle,color:"#091C2A",fontWeight:700}}>Total a Pagar *</label>
               <input type="number" value={valorTotal} style={{...inputStyle,fontWeight:700,fontSize:15}}
                 onChange={e=>{
                   const v = e.target.value;
@@ -634,24 +634,24 @@ export default function ImportarFatura({ onSave }) {
               const dif = Math.round((b + i - t) * 100) / 100;
               if (Math.abs(dif) <= 0.02) return null;
               return (
-                <div style={{background:"#fffbeb",border:"1px solid #fde68a",borderRadius:9,
-                             padding:"9px 12px",fontSize:11,color:"#92400e",lineHeight:1.5}}>
+                <div style={{background:"#FBF6EC",border:"1px solid #E3CE9F",borderRadius:9,
+                             padding:"9px 12px",fontSize:11,color:"#7A5A22",lineHeight:1.5}}>
                   Base + IVA dá {fmt(b+i)}, mas o total é {fmt(t)} ({dif>0?"+":""}{fmt(dif)}).
                   Confere os três valores — ou carrega outra vez na taxa para os recalcular a partir do total.
                 </div>
               );
             })()}
             {valorTotal&&(
-              <div style={{background:"#f8f9fc",borderRadius:10,padding:"10px 14px",textAlign:"center"}}>
-                <div style={{fontSize:10,color:"#aaa",fontFamily:"monospace",marginBottom:3}}>TOTAL</div>
-                <div style={{fontSize:22,fontWeight:800,color:"#1a1a2e",fontFamily:"monospace"}}>{fmt(parseFloat(valorTotal))}</div>
+              <div style={{background:"#FAF6F0",borderRadius:10,padding:"10px 14px",textAlign:"center"}}>
+                <div style={{fontSize:10,color:"#9DA2A6",fontFamily: "var(--fonte-numero)",marginBottom:3}}>TOTAL</div>
+                <div style={{fontSize:22,fontWeight:800,color:"#091C2A",fontFamily: "var(--fonte-numero)"}}>{fmt(parseFloat(valorTotal))}</div>
               </div>
             )}
           </div>
         </div>
 
         {/* Pagamento Parcelado */}
-        <div style={{background:"#fff",border:`2px solid ${parcelado?"#1a1a2e":"#f0f0f0"}`,borderRadius:14,padding:20,gridColumn:"1/-1",transition:"border-color 0.15s"}}>
+        <div style={{background:"#fff",border:`2px solid ${parcelado?"#091C2A":"#E7DED2"}`,borderRadius:14,padding:20,gridColumn:"1/-1",transition:"border-color 0.15s"}}>
           <label style={{display:"flex",alignItems:"center",gap:10,cursor:"pointer",userSelect:"none"}}>
             <input type="checkbox" checked={parcelado} onChange={e=>{
               setParcelado(e.target.checked);
@@ -660,16 +660,16 @@ export default function ImportarFatura({ onSave }) {
                 setTimeout(gerarParcelas, 0);
               }
             }}
-              style={{width:18,height:18,accentColor:"#1a1a2e",cursor:"pointer"}}/>
-            <span style={{fontSize:13,fontWeight:700,color:"#1a1a2e"}}>💳 Pagamento parcelado</span>
-            <span style={{fontSize:11,color:"#888"}}>Cada parcela é uma linha independente em Contas a Pagar e Fluxo Futuro.</span>
+              style={{width:18,height:18,accentColor:"#091C2A",cursor:"pointer"}}/>
+            <span style={{fontSize:13,fontWeight:700,color:"#091C2A"}}>💳 Pagamento parcelado</span>
+            <span style={{fontSize:11,color:"#7E8388"}}>Cada parcela é uma linha independente em Contas a Pagar e Fluxo Futuro.</span>
           </label>
 
           {parcelado && (
             <div style={{marginTop:16,display:"flex",flexDirection:"column",gap:14}}>
               {/* Gerador automático */}
-              <div style={{background:"#f8f9fc",borderRadius:10,padding:12,display:"flex",flexWrap:"wrap",alignItems:"flex-end",gap:10}}>
-                <div style={{fontSize:11,color:"#666",fontFamily:"monospace",flexBasis:"100%",marginBottom:4}}>
+              <div style={{background:"#FAF6F0",borderRadius:10,padding:12,display:"flex",flexWrap:"wrap",alignItems:"flex-end",gap:10}}>
+                <div style={{fontSize:11,color:"#5C6166",fontFamily: "var(--fonte-numero)",flexBasis:"100%",marginBottom:4}}>
                   🪄 GERAR AUTOMATICAMENTE (depois podes editar tudo abaixo)
                 </div>
                 <div style={fieldWrap}>
@@ -694,28 +694,28 @@ export default function ImportarFatura({ onSave }) {
                   </div>
                 )}
                 <button onClick={gerarParcelas} type="button"
-                  style={{background:"#1a1a2e",color:"#fff",border:"none",padding:"9px 16px",borderRadius:8,fontSize:12,fontWeight:700,cursor:"pointer"}}>
+                  style={{background:"#091C2A",color:"#fff",border:"none",padding:"9px 16px",borderRadius:8,fontSize:12,fontWeight:700,cursor:"pointer"}}>
                   ⚡ Gerar / Refazer
                 </button>
               </div>
 
               {/* Tabela editável */}
               {parcelasArr.length > 0 && (
-                <div style={{border:"1px solid #e8e8e8",borderRadius:10,overflow:"hidden"}}>
+                <div style={{border:"1px solid #E3D9CC",borderRadius:10,overflow:"hidden"}}>
                   <table style={{width:"100%",borderCollapse:"collapse",fontSize:12}}>
                     <thead>
-                      <tr style={{background:"#f8f9fc"}}>
-                        <th style={{padding:"10px 8px",textAlign:"left",color:"#888",fontWeight:600,fontFamily:"monospace",fontSize:10,letterSpacing:0.5,width:50}}>#</th>
-                        <th style={{padding:"10px 8px",textAlign:"left",color:"#888",fontWeight:600,fontFamily:"monospace",fontSize:10,letterSpacing:0.5}}>Data vencimento</th>
-                        <th style={{padding:"10px 8px",textAlign:"right",color:"#888",fontWeight:600,fontFamily:"monospace",fontSize:10,letterSpacing:0.5}}>Valor</th>
-                        <th style={{padding:"10px 8px",textAlign:"left",color:"#888",fontWeight:600,fontFamily:"monospace",fontSize:10,letterSpacing:0.5}}>Observação</th>
+                      <tr style={{background:"#FAF6F0"}}>
+                        <th style={{padding:"10px 8px",textAlign:"left",color:"#7E8388",fontWeight:600,fontFamily: "var(--fonte-numero)",fontSize:10,letterSpacing:0.5,width:50}}>#</th>
+                        <th style={{padding:"10px 8px",textAlign:"left",color:"#7E8388",fontWeight:600,fontFamily: "var(--fonte-numero)",fontSize:10,letterSpacing:0.5}}>Data vencimento</th>
+                        <th style={{padding:"10px 8px",textAlign:"right",color:"#7E8388",fontWeight:600,fontFamily: "var(--fonte-numero)",fontSize:10,letterSpacing:0.5}}>Valor</th>
+                        <th style={{padding:"10px 8px",textAlign:"left",color:"#7E8388",fontWeight:600,fontFamily: "var(--fonte-numero)",fontSize:10,letterSpacing:0.5}}>Observação</th>
                         <th style={{width:40}}></th>
                       </tr>
                     </thead>
                     <tbody>
                       {parcelasArr.map((p, i) => (
-                        <tr key={i} style={{borderTop:i>0?"1px solid #f0f0f0":"none"}}>
-                          <td style={{padding:"6px 8px",color:"#888",fontFamily:"monospace"}}>{i+1}/{parcelasArr.length}</td>
+                        <tr key={i} style={{borderTop:i>0?"1px solid #E7DED2":"none"}}>
+                          <td style={{padding:"6px 8px",color:"#7E8388",fontFamily: "var(--fonte-numero)"}}>{i+1}/{parcelasArr.length}</td>
                           <td style={{padding:"6px 8px"}}>
                             <input type="date" value={p.data}
                               onChange={e=>updateParcela(i, {data: e.target.value})}
@@ -724,7 +724,7 @@ export default function ImportarFatura({ onSave }) {
                           <td style={{padding:"6px 8px"}}>
                             <input type="number" step="0.01" value={p.valor}
                               onChange={e=>updateParcela(i, {valor: e.target.value})}
-                              style={{...inputStyle,padding:"6px 8px",fontSize:12,textAlign:"right",fontWeight:700,fontFamily:"monospace"}}/>
+                              style={{...inputStyle,padding:"6px 8px",fontSize:12,textAlign:"right",fontWeight:700,fontFamily: "var(--fonte-numero)"}}/>
                           </td>
                           <td style={{padding:"6px 8px"}}>
                             <input type="text" value={p.obs} placeholder="ex: 30% adiantado, 40% à entrega…"
@@ -733,22 +733,22 @@ export default function ImportarFatura({ onSave }) {
                           </td>
                           <td style={{padding:"6px 8px",textAlign:"center"}}>
                             <button onClick={()=>removeParcela(i)} type="button"
-                              style={{background:"#fef2f2",border:"1px solid #fecaca",color:"#dc2626",padding:"4px 8px",borderRadius:6,fontSize:11,cursor:"pointer"}}>✕</button>
+                              style={{background:"#FBEDEB",border:"1px solid #EFCFC9",color:"#A93226",padding:"4px 8px",borderRadius:6,fontSize:11,cursor:"pointer"}}>✕</button>
                           </td>
                         </tr>
                       ))}
                     </tbody>
                     <tfoot>
-                      <tr style={{background:"#fafafa",borderTop:"2px solid #e8e8e8"}}>
-                        <td colSpan={2} style={{padding:"10px 8px",fontSize:11,color:"#888",fontFamily:"monospace"}}>
+                      <tr style={{background:"#FBF7F1",borderTop:"2px solid #E3D9CC"}}>
+                        <td colSpan={2} style={{padding:"10px 8px",fontSize:11,color:"#7E8388",fontFamily: "var(--fonte-numero)"}}>
                           Σ {parcelasArr.length} parcela(s)
                           {parseFloat(valorTotal) > 0 && Math.abs(totalParcelas - parseFloat(valorTotal)) > 0.01 && (
-                            <span style={{color:"#dc2626",marginLeft:8}}>
+                            <span style={{color:"#A93226",marginLeft:8}}>
                               · diferença vs total fatura: {fmt(totalParcelas - parseFloat(valorTotal))}
                             </span>
                           )}
                         </td>
-                        <td style={{padding:"10px 8px",textAlign:"right",fontWeight:800,fontFamily:"monospace",color:"#1a1a2e"}}>{fmt(totalParcelas)}</td>
+                        <td style={{padding:"10px 8px",textAlign:"right",fontWeight:800,fontFamily: "var(--fonte-numero)",color:"#091C2A"}}>{fmt(totalParcelas)}</td>
                         <td colSpan={2}></td>
                       </tr>
                     </tfoot>
@@ -757,7 +757,7 @@ export default function ImportarFatura({ onSave }) {
               )}
 
               <button onClick={addParcela} type="button"
-                style={{alignSelf:"flex-start",background:"none",border:"1px dashed #6B7C93",color:"#6B7C93",padding:"8px 16px",borderRadius:8,fontSize:12,fontWeight:700,cursor:"pointer"}}>
+                style={{alignSelf:"flex-start",background:"none",border:"1px dashed #BAA685",color:"#BAA685",padding:"8px 16px",borderRadius:8,fontSize:12,fontWeight:700,cursor:"pointer"}}>
                 + Adicionar parcela
               </button>
             </div>
@@ -765,8 +765,8 @@ export default function ImportarFatura({ onSave }) {
         </div>
 
         {/* Descrição & Notas */}
-        <div style={{background:"#fff",border:"1px solid #f0f0f0",borderRadius:14,padding:20,gridColumn:"1/-1"}}>
-          <div style={{fontSize:13,fontWeight:700,color:"#1a1a2e",marginBottom:14}}>📝 Descrição & Notas</div>
+        <div style={{background:"#fff",border:"1px solid #E7DED2",borderRadius:14,padding:20,gridColumn:"1/-1"}}>
+          <div style={{fontSize:13,fontWeight:700,color:"#091C2A",marginBottom:14}}>📝 Descrição & Notas</div>
           <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
             <div style={fieldWrap}>
               <label style={labelStyle}>Descrição do Serviço</label>
@@ -783,8 +783,8 @@ export default function ImportarFatura({ onSave }) {
 
         {/* Preview do ficheiro */}
         {fileDataURL && (
-          <div style={{background:"#fff",border:"1px solid #f0f0f0",borderRadius:14,padding:20,gridColumn:"1/-1"}}>
-            <div style={{fontSize:13,fontWeight:700,color:"#1a1a2e",marginBottom:12}}>📎 Documento Anexado — {file?.name}</div>
+          <div style={{background:"#fff",border:"1px solid #E7DED2",borderRadius:14,padding:20,gridColumn:"1/-1"}}>
+            <div style={{fontSize:13,fontWeight:700,color:"#091C2A",marginBottom:12}}>📎 Documento Anexado — {file?.name}</div>
             {fileDataURL.startsWith("data:application/pdf")
               ? <iframe src={fileDataURL} style={{width:"100%",height:400,border:"none",borderRadius:8}}/>
               : <img src={fileDataURL} alt="Fatura" style={{maxWidth:"100%",maxHeight:400,objectFit:"contain",borderRadius:8}}/>
@@ -793,11 +793,11 @@ export default function ImportarFatura({ onSave }) {
         )}
       </div>
 
-      {erro&&<div style={{background:"#fef2f2",border:"1px solid #fecaca",borderRadius:10,padding:"12px 16px",color:"#dc2626",fontSize:13}}>⚠️ {erro}</div>}
+      {erro&&<div style={{background:"#FBEDEB",border:"1px solid #EFCFC9",borderRadius:10,padding:"12px 16px",color:"#A93226",fontSize:13}}>⚠️ {erro}</div>}
 
       <div style={{display:"flex",justifyContent:"space-between"}}>
-        <button onClick={reset} disabled={saving} style={{background:"none",border:"1px solid #eee",padding:"12px 24px",borderRadius:10,fontSize:14,color:"#888",cursor:saving?"default":"pointer"}}>← Voltar</button>
-        <button onClick={handleSave} disabled={saving} style={{background:saving?"#9ca3af":"#16a34a",color:"#fff",border:"none",padding:"12px 36px",borderRadius:10,fontSize:14,fontWeight:700,cursor:saving?"default":"pointer"}}>
+        <button onClick={reset} disabled={saving} style={{background:"none",border:"1px solid #EFE8DE",padding:"12px 24px",borderRadius:10,fontSize:14,color:"#7E8388",cursor:saving?"default":"pointer"}}>← Voltar</button>
+        <button onClick={handleSave} disabled={saving} style={{background:saving?"#B2B6B9":"#091C2A",color:"#fff",border:"none",padding:"12px 36px",borderRadius:10,fontSize:14,fontWeight:700,cursor:saving?"default":"pointer"}}>
           {saving ? "⏳ A guardar..." : (parcelado ? `💾 Guardar ${parcelasArr.length} parcelas em Contas a Pagar` : "💾 Guardar & Adicionar a Contas a Pagar")}
         </button>
       </div>
@@ -809,23 +809,23 @@ export default function ImportarFatura({ onSave }) {
   return (
     <div style={{textAlign:"center",padding:"60px 0"}}>
       <div style={{fontSize:64,marginBottom:20}}>{r.ok ? "✅" : "⚠️"}</div>
-      <div style={{fontSize:22,fontWeight:700,color:r.ok?"#1a1a2e":"#b91c1c",fontFamily:"Georgia,serif",marginBottom:8}}>
+      <div style={{fontSize:22,fontWeight:700,color:r.ok?"#091C2A":"#8E2A20",fontFamily: "var(--fonte-titulo)",marginBottom:8}}>
         {r.ok ? (r.inserted > 1 ? `${r.inserted} parcelas guardadas!` : "Fatura guardada!") : "Erro a guardar"}
       </div>
-      <div style={{fontSize:14,color:"#888",marginBottom:12}}>
+      <div style={{fontSize:14,color:"#7E8388",marginBottom:12}}>
         <strong>{fornNome||"Fornecedor"}</strong> · {fmt(parcelado ? totalParcelas : (parseFloat(valorTotal)||0))}
       </div>
-      <div style={{display:"inline-block",background:"#f0f4ff",color:"#4a6fa5",fontSize:13,padding:"4px 16px",borderRadius:20,fontFamily:"monospace",marginBottom:r.error?16:32}}>
+      <div style={{display:"inline-block",background:"#EDF1F5",color:"#2C4A63",fontSize:13,padding:"4px 16px",borderRadius:20,fontFamily: "var(--fonte-numero)",marginBottom:r.error?16:32}}>
         {categoria} · {EMPRESAS_LIST.find(e=>e.id===empresa)?.nome||empresa}
       </div>
       {r.error ? (
-        <div style={{background:"#fef2f2",border:"1px solid #fecaca",color:"#991b1b",padding:"12px 16px",borderRadius:10,fontSize:12,fontFamily:"monospace",marginBottom:24,maxWidth:700,marginLeft:"auto",marginRight:"auto",textAlign:"left"}}>
+        <div style={{background:"#FBEDEB",border:"1px solid #EFCFC9",color:"#8E2A20",padding:"12px 16px",borderRadius:10,fontSize:12,fontFamily: "var(--fonte-numero)",marginBottom:24,maxWidth:700,marginLeft:"auto",marginRight:"auto",textAlign:"left"}}>
           {r.error}
         </div>
       ) : (
-        <div style={{fontSize:13,color:"#16a34a",marginBottom:24}}>✓ {r.inserted > 1 ? `${r.inserted} parcelas adicionadas` : "Adicionada"} às Contas a Pagar</div>
+        <div style={{fontSize:13,color:"#1F7A54",marginBottom:24}}>✓ {r.inserted > 1 ? `${r.inserted} parcelas adicionadas` : "Adicionada"} às Contas a Pagar</div>
       )}
-      <button onClick={reset} style={{background:"#1a1a2e",color:"#fff",border:"none",padding:"12px 28px",borderRadius:10,fontSize:14,fontWeight:700,cursor:"pointer"}}>
+      <button onClick={reset} style={{background:"#091C2A",color:"#fff",border:"none",padding:"12px 28px",borderRadius:10,fontSize:14,fontWeight:700,cursor:"pointer"}}>
         + Importar outra fatura
       </button>
     </div>

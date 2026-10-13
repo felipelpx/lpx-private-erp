@@ -3,8 +3,9 @@ import { fmtEUR, fmtData } from "./formato.js";
 import {
   planearObra, planearAplicacao, gastoEmObra, sugerirAvenca, planoDesatualizado,
   compararPrazos, categoriasDoMotor, classificacaoDe, temObra, rotuloMes,
-  PLANO_VAZIO, TIPOS, ROTULO_TIPO,
+  obraRealizada, fundingLibertado, PLANO_VAZIO, TIPOS, ROTULO_TIPO,
 } from "./obra.js";
+import { useMovimentosPeriodo } from "./hooks.js";
 import { hojeISO, arred2 } from "./iva.js";
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -16,26 +17,26 @@ import { hojeISO, arred2 } from "./iva.js";
 // este género de automatismo costuma correr mal.
 // ─────────────────────────────────────────────────────────────────────────────
 
-const COR = { tinta: "#1a1a2e", cinza: "#8a8f99", alerta: "#dc2626",
-              bom: "#15803d", banco: "#4a6fa5", aviso: "#b45309" };
+const COR = { tinta: "#091C2A", cinza: "#6E7378", alerta: "#A93226",
+              bom: "#1B6A49", banco: "#2C4A63", aviso: "#96702A" };
 
 const Rotulo = ({ children, dica }) => (
-  <div title={dica} style={{ fontSize: 10, color: "#aaa", textTransform: "uppercase",
-                             fontFamily: "monospace", letterSpacing: "0.06em", marginBottom: 4 }}>
+  <div title={dica} style={{ fontSize: 10, color: "#9DA2A6", textTransform: "uppercase",
+                             fontFamily: "var(--fonte-numero)", letterSpacing: "0.06em", marginBottom: 4 }}>
     {children}
   </div>
 );
 
 const campo = {
-  width: "100%", boxSizing: "border-box", background: "#f8f8f8",
-  border: "1px solid #e8e8e8", borderRadius: 8, padding: "9px 11px",
+  width: "100%", boxSizing: "border-box", background: "#F9F5EF",
+  border: "1px solid #E3D9CC", borderRadius: 8, padding: "9px 11px",
   fontSize: 13, outline: "none",
 };
 
 const Caixa = ({ titulo, children, nota }) => (
-  <div style={{ border: "1px solid #f0f0f0", borderRadius: 12, padding: "14px 16px" }}>
+  <div style={{ border: "1px solid #E7DED2", borderRadius: 12, padding: "14px 16px" }}>
     <div style={{ fontSize: 12, fontWeight: 700, color: COR.tinta, marginBottom: nota ? 2 : 10 }}>{titulo}</div>
-    {nota && <div style={{ fontSize: 10.5, color: "#aaa", marginBottom: 10, lineHeight: 1.5 }}>{nota}</div>}
+    {nota && <div style={{ fontSize: 10.5, color: "#9DA2A6", marginBottom: 10, lineHeight: 1.5 }}>{nota}</div>}
     <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>{children}</div>
   </div>
 );
@@ -48,15 +49,15 @@ function Numero({ rotulo, valor, onMudar, sufixo = "€", dica, sugestao, onSuge
       <Rotulo dica={dica}>{rotulo}</Rotulo>
       <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
         <input type="number" value={valor ?? ""} onChange={e => onMudar(e.target.value)}
-          style={{ ...campo, textAlign: "right", fontFamily: "monospace" }} />
-        <span style={{ fontSize: 11, color: "#aaa", fontFamily: "monospace", minWidth: 16 }}>{sufixo}</span>
+          style={{ ...campo, textAlign: "right", fontFamily: "var(--fonte-numero)" }} />
+        <span style={{ fontSize: 11, color: "#9DA2A6", fontFamily: "var(--fonte-numero)", minWidth: 16 }}>{sufixo}</span>
       </div>
       {sugestao != null && (
         <button onClick={() => onSugestao(sugestao.valor)}
-          title={`Média do que já pagaste nesta rubrica, em ${sugestao.meses} ${sugestao.meses === 1 ? "mês" : "meses"} com fatura`}
-          style={{ marginTop: 5, background: "#f0f4ff", border: "none", color: COR.banco,
+          title={sugestao.rotulo || `Média do que já pagaste nesta rubrica, em ${sugestao.meses} ${sugestao.meses === 1 ? "mês" : "meses"} com fatura`}
+          style={{ marginTop: 5, background: "#EDF1F5", border: "none", color: COR.banco,
                    padding: "3px 9px", borderRadius: 6, fontSize: 10.5, cursor: "pointer" }}>
-          usar {fmtEUR(sugestao.valor)} (média das faturas)
+          usar {fmtEUR(sugestao.valor)} {sugestao.rotulo ? `(${sugestao.rotulo})` : "(média das faturas)"}
         </button>
       )}
     </div>
@@ -64,11 +65,12 @@ function Numero({ rotulo, valor, onMudar, sufixo = "€", dica, sugestao, onSuge
 }
 
 const nomeDoTipo = (t) => ROTULO_TIPO[t] || t;
+const num = (v) => { const n = Number(v); return Number.isFinite(n) ? n : 0; };
 
 // ─── O ecrã ──────────────────────────────────────────────────────────────────
 export default function ModalPlanoObra({
   empresa, grupo = "LPX", nomeEmpresa, plano: planoGravado,
-  faturas = [], pagamentos = [], currentUser,
+  faturas = [], pagamentos = [], contaIds = [], currentUser,
   onGuardar, onAplicar, onFechar, hoje = hojeISO(),
 }) {
   const [f, setF] = useState(() => ({ ...PLANO_VAZIO, ...(planoGravado || {}), empresa }));
@@ -83,10 +85,24 @@ export default function ModalPlanoObra({
   const catFisc = classificacaoDe("fiscalizacao", grupo).categoria;
   const catCso  = classificacaoDe("cso", grupo).categoria;
 
-  // O que já se gastou sai das faturas reais — nunca se escreve à mão.
-  const gasto = useMemo(
-    () => gastoEmObra(faturas, { empresa, categorias: [catObra], taxaIva: f.taxa_iva_obra }),
-    [faturas, empresa, catObra, f.taxa_iva_obra]);
+  // O extrato do projeto: é dele que sai o que já foi pago e o funding que o
+  // banco já libertou. Sem ele, continua tudo a funcionar pelas faturas.
+  const { movimentos, loading: movLoading } = useMovimentosPeriodo(contaIds);
+
+  const realizado = useMemo(
+    () => obraRealizada(movimentos, faturas, {
+      empresa, categorias: [catObra], taxaIva: f.taxa_iva_obra }),
+    [movimentos, faturas, empresa, catObra, f.taxa_iva_obra]);
+
+  const bancoJaLibertou = useMemo(
+    () => fundingLibertado(movimentos, {
+      categorias: [classificacaoDe("funding", grupo).categoria, "Funding banco"],
+      subcategorias: grupo === "HDG" ? [classificacaoDe("funding", grupo).subcategoria] : [],
+    }), [movimentos, grupo]);
+
+  // O que consome o budget é o que já foi INCORRIDO, pago ou não: uma fatura
+  // por pagar já está no fluxo, prevê-la outra vez contaria duas vezes.
+  const gasto = realizado.jaIncorrido;
 
   const sugFisc = useMemo(
     () => sugerirAvenca(faturas, { empresa, categorias: [catFisc] }), [faturas, empresa, catFisc]);
@@ -149,25 +165,25 @@ export default function ModalPlanoObra({
                     maxHeight: "92vh", display: "flex", flexDirection: "column" }}>
 
         {/* ── Cabeçalho ─────────────────────────────────────────────────── */}
-        <div style={{ padding: "18px 24px", borderBottom: "1px solid #f0f0f0",
+        <div style={{ padding: "18px 24px", borderBottom: "1px solid #E7DED2",
                       display: "flex", alignItems: "center", gap: 12 }}>
           <div>
-            <div style={{ fontSize: 17, fontWeight: 700, color: COR.tinta, fontFamily: "Georgia,serif" }}>
+            <div style={{ fontSize: 17, fontWeight: 700, color: COR.tinta, fontFamily: "var(--fonte-titulo)" }}>
               Plano de obra — {nomeEmpresa || empresa}
             </div>
-            <div style={{ fontSize: 11, color: "#aaa", marginTop: 3 }}>
+            <div style={{ fontSize: 11, color: "#9DA2A6", marginTop: 3 }}>
               Tudo o que está agarrado ao prazo. Mudar a data de fim recalcula o fluxo.
             </div>
           </div>
           {desatualizado && (
             <span title="Entraram faturas de obra desde o último recálculo: as previsões já não batem certo com o que falta gastar."
-              style={{ background: "#fef3c7", color: COR.aviso, fontSize: 10.5, fontWeight: 700,
-                       padding: "4px 10px", borderRadius: 20, fontFamily: "monospace" }}>
+              style={{ background: "#F6ECD6", color: COR.aviso, fontSize: 10.5, fontWeight: 700,
+                       padding: "4px 10px", borderRadius: 20, fontFamily: "var(--fonte-numero)" }}>
               desatualizado
             </span>
           )}
           <button onClick={onFechar} style={{ marginLeft: "auto", background: "none", border: "none",
-                                              fontSize: 20, cursor: "pointer", color: "#bbb" }}>✕</button>
+                                              fontSize: 20, cursor: "pointer", color: "#B2B6B9" }}>✕</button>
         </div>
 
         {/* ── Corpo ─────────────────────────────────────────────────────── */}
@@ -189,6 +205,29 @@ export default function ModalPlanoObra({
                     onChange={e => muda("data_fim")(e.target.value)} />
                 </div>
               </div>
+
+              {/* Obra a decorrer: o ERP já tem os números, não se escrevem. */}
+              {realizado.primeiroGasto && !f.data_inicio && (
+                <button onClick={() => muda("data_inicio")(realizado.primeiroGasto)}
+                  title="Procura no projeto o primeiro gasto de obra e usa essa data como início"
+                  style={{ background: "#EDF1F5", border: "none", color: "#2C4A63", padding: "8px 12px",
+                           borderRadius: 8, fontSize: 11.5, cursor: "pointer", fontWeight: 600,
+                           textAlign: "left", lineHeight: 1.5 }}>
+                  Obra já iniciada — procurar no projeto
+                  <div style={{ fontWeight: 400, fontSize: 10.5, opacity: 0.8, marginTop: 2 }}>
+                    Primeiro gasto de obra: {fmtData(realizado.primeiroGasto)}
+                  </div>
+                </button>
+              )}
+              {realizado.primeiroGasto && f.data_inicio &&
+               f.data_inicio.slice(0, 10) !== realizado.primeiroGasto && (
+                <div style={{ fontSize: 10.5, color: "#9DA2A6", lineHeight: 1.5 }}>
+                  O primeiro gasto de obra no projeto é de {fmtData(realizado.primeiroGasto)}.{" "}
+                  <button onClick={() => muda("data_inicio")(realizado.primeiroGasto)}
+                    style={{ background: "none", border: "none", color: COR.banco, cursor: "pointer",
+                             padding: 0, fontSize: 10.5, textDecoration: "underline" }}>usar essa data</button>
+                </div>
+              )}
             </Caixa>
 
             <Caixa titulo="Obra" nota="O budget é sem IVA. A fatura do empreiteiro sai pela base; o IVA é autoliquidado e entregue no apuramento do trimestre.">
@@ -196,9 +235,14 @@ export default function ModalPlanoObra({
                 onMudar={muda("budget_obra")} />
               <Numero rotulo="Taxa de IVA da obra" sufixo="%" valor={f.taxa_iva_obra}
                 onMudar={muda("taxa_iva_obra")} />
-              <div style={{ background: "#f8f9fc", borderRadius: 9, padding: "10px 12px", fontSize: 11.5 }}>
-                <Linha k="Já faturado (sem IVA)" v={fmtEUR(gasto)}
-                  dica={`Soma da base das faturas de ${catObra} desta empresa. Vem do Contas a Pagar — não se escreve aqui.`} />
+              <div style={{ background: "#FAF6F0", borderRadius: 9, padding: "10px 12px", fontSize: 11.5 }}>
+                <Linha k="Já pago (extrato)" v={movLoading ? "a ler..." : fmtEUR(realizado.pagoExtrato)}
+                  dica={`${realizado.nMovimentos} movimentos de ${catObra} no extrato do projeto. É o que saiu mesmo da conta.`} />
+                <Linha k="Faturado por pagar" v={fmtEUR(realizado.porPagar)}
+                  dica="Faturas de obra já registadas no Contas a Pagar e ainda por liquidar. Já estão no fluxo." />
+                <div style={{ height: 1, background: "#E7DED2", margin: "6px 0" }} />
+                <Linha k="Incorrido (consome o budget)" v={fmtEUR(gasto)}
+                  dica={`${realizado.nFaturas} faturas de ${catObra}, pagas ou não. Prever outra vez o que já está faturado contaria duas vezes.`} />
                 <Linha k="Falta gastar" v={fmtEUR(resumo.porGastar)} forte />
               </div>
               <label style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer", fontSize: 12 }}>
@@ -209,12 +253,20 @@ export default function ModalPlanoObra({
               </label>
             </Caixa>
 
-            <Caixa titulo="Avenças mensais" nota="Cobradas enquanto a obra durar. Esticar o prazo custa mais meses destas.">
-              <Numero rotulo="Fiscalização / mês" valor={f.fiscalizacao_mensal}
+            <Caixa titulo="Avenças mensais" nota="Cobradas enquanto a obra durar, e com IVA: ao contrário da empreitada, estes serviços não são autoliquidados. Esticar o prazo custa mais meses destas.">
+              <Numero rotulo="Fiscalização / mês (sem IVA)" valor={f.fiscalizacao_mensal}
                 onMudar={muda("fiscalizacao_mensal")}
                 sugestao={sugFisc} onSugestao={muda("fiscalizacao_mensal")} />
-              <Numero rotulo="CSO / mês" valor={f.cso_mensal} onMudar={muda("cso_mensal")}
+              <Numero rotulo="CSO / mês (sem IVA)" valor={f.cso_mensal} onMudar={muda("cso_mensal")}
                 sugestao={sugCso} onSugestao={muda("cso_mensal")} />
+              <Numero rotulo="Taxa de IVA destes serviços" sufixo="%" valor={f.taxa_iva_servicos}
+                onMudar={muda("taxa_iva_servicos")} />
+              {(num(f.fiscalizacao_mensal) > 0 || num(f.cso_mensal) > 0) && (
+                <div style={{ fontSize: 11, color: "#7E8388", fontFamily: "var(--fonte-numero)" }}>
+                  Sai por mês: {fmtEUR((num(f.fiscalizacao_mensal) + num(f.cso_mensal))
+                    * (1 + num(f.taxa_iva_servicos) / 100))} com IVA
+                </div>
+              )}
             </Caixa>
 
             <Caixa titulo="Financiamento" nota="Dois pagamentos, duas libertações: a base no vencimento da fatura, o IVA no dia 25 do apuramento. Os juros correm sobre o saldo médio do mês.">
@@ -229,8 +281,17 @@ export default function ModalPlanoObra({
               </div>
               <Numero rotulo="Dívida já libertada hoje" valor={f.divida_inicial}
                 onMudar={muda("divida_inicial")}
-                dica="O que o banco já libertou (o tranche do terreno, por exemplo). É sobre isto que começam a contar os juros." />
-              <div style={{ fontSize: 11, color: "#888", fontFamily: "monospace" }}>
+                dica="O que o banco já libertou. É sobre isto que começam a contar os juros."
+                sugestao={bancoJaLibertou.total > 0
+                  ? { valor: bancoJaLibertou.total, meses: bancoJaLibertou.n, rotulo: "do extrato" } : null}
+                onSugestao={muda("divida_inicial")} />
+              {bancoJaLibertou.total > 0 && (
+                <div style={{ fontSize: 10.5, color: "#9DA2A6", lineHeight: 1.5, marginTop: -4 }}>
+                  {bancoJaLibertou.n} {bancoJaLibertou.n === 1 ? "libertação encontrada" : "libertações encontradas"} no
+                  extrato{bancoJaLibertou.ultimo ? `, a última a ${fmtData(bancoJaLibertou.ultimo)}` : ""}.
+                </div>
+              )}
+              <div style={{ fontSize: 11, color: "#7E8388", fontFamily: "var(--fonte-numero)" }}>
                 Taxa all-in: {arred2((Number(f.euribor) || 0) + (Number(f.spread) || 0))}% ao ano
               </div>
             </Caixa>
@@ -239,8 +300,8 @@ export default function ModalPlanoObra({
           {/* Pré-visualização */}
           <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
             {avisos.length > 0 && (
-              <div style={{ background: "#fffbeb", border: "1px solid #fde68a", borderRadius: 10,
-                            padding: "11px 14px", fontSize: 11.5, color: "#92400e", lineHeight: 1.7 }}>
+              <div style={{ background: "#FBF6EC", border: "1px solid #E3CE9F", borderRadius: 10,
+                            padding: "11px 14px", fontSize: 11.5, color: "#7A5A22", lineHeight: 1.7 }}>
                 {avisos.map((a, i) => <div key={i}>{a}</div>)}
               </div>
             )}
@@ -254,14 +315,14 @@ export default function ModalPlanoObra({
                 nota="inicial + libertações de base e de IVA" />
             </div>
 
-            <div style={{ border: "1px solid #f0f0f0", borderRadius: 12, overflow: "hidden" }}>
+            <div style={{ border: "1px solid #E7DED2", borderRadius: 12, overflow: "hidden" }}>
               <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
                 <thead>
-                  <tr style={{ background: "#fafbfc" }}>
+                  <tr style={{ background: "#F9F4EC" }}>
                     {["O que o motor vai lançar", "Linhas", "Por mês", "Total"].map((h, i) => (
                       <th key={h} style={{ padding: "9px 14px", textAlign: i === 0 ? "left" : "right",
-                                           color: "#aaa", fontSize: 9.5, textTransform: "uppercase",
-                                           fontFamily: "monospace", borderBottom: "1px solid #f0f0f0" }}>{h}</th>
+                                           color: "#9DA2A6", fontSize: 9.5, textTransform: "uppercase",
+                                           fontFamily: "var(--fonte-numero)", borderBottom: "1px solid #E7DED2" }}>{h}</th>
                     ))}
                   </tr>
                 </thead>
@@ -272,18 +333,18 @@ export default function ModalPlanoObra({
                     const total = resumo.totais[t];
                     const entrada = ls[0].tipo === "entrada";
                     return (
-                      <tr key={t} style={{ borderBottom: "1px solid #fafafa" }}>
+                      <tr key={t} style={{ borderBottom: "1px solid #FBF7F1" }}>
                         <td style={{ padding: "8px 14px" }}>
                           {nomeDoTipo(t)}
-                          {entrada && <span style={{ marginLeft: 6, background: "#dcfce7", color: COR.bom,
-                            fontSize: 8.5, fontFamily: "monospace", fontWeight: 700,
+                          {entrada && <span style={{ marginLeft: 6, background: "#E2EFE8", color: COR.bom,
+                            fontSize: 8.5, fontFamily: "var(--fonte-numero)", fontWeight: 700,
                             padding: "1px 5px", borderRadius: 3 }}>entrada</span>}
                         </td>
-                        <td style={{ padding: "8px 14px", textAlign: "right", color: "#888", fontFamily: "monospace" }}>{ls.length}</td>
-                        <td style={{ padding: "8px 14px", textAlign: "right", fontFamily: "monospace", color: "#888" }}>
+                        <td style={{ padding: "8px 14px", textAlign: "right", color: "#7E8388", fontFamily: "var(--fonte-numero)" }}>{ls.length}</td>
+                        <td style={{ padding: "8px 14px", textAlign: "right", fontFamily: "var(--fonte-numero)", color: "#7E8388" }}>
                           {ls.length ? fmtEUR(Math.abs(total) / ls.length) : "—"}
                         </td>
-                        <td style={{ padding: "8px 14px", textAlign: "right", fontFamily: "monospace",
+                        <td style={{ padding: "8px 14px", textAlign: "right", fontFamily: "var(--fonte-numero)",
                                      fontWeight: 700, color: entrada ? COR.bom : COR.tinta }}>
                           {entrada ? "+" : ""}{fmtEUR(Math.abs(total))}
                         </td>
@@ -291,17 +352,17 @@ export default function ModalPlanoObra({
                     );
                   })}
                   {linhas.length === 0 && (
-                    <tr><td colSpan={4} style={{ padding: 26, textAlign: "center", color: "#ccc", fontSize: 12 }}>
+                    <tr><td colSpan={4} style={{ padding: 26, textAlign: "center", color: "#C4C7CA", fontSize: 12 }}>
                       Preenche o prazo e o budget para ver o plano.
                     </td></tr>
                   )}
                   {linhas.length > 0 && (
                     <tr style={{ background: COR.tinta }}>
                       <td style={{ padding: "9px 14px", color: "#fff", fontWeight: 700 }}>Custo total até ao fim da obra</td>
-                      <td style={{ padding: "9px 14px", textAlign: "right", color: "#8b93a3", fontFamily: "monospace" }}>{linhas.length}</td>
+                      <td style={{ padding: "9px 14px", textAlign: "right", color: "#8B98A3", fontFamily: "var(--fonte-numero)" }}>{linhas.length}</td>
                       <td />
-                      <td style={{ padding: "9px 14px", textAlign: "right", color: "#fca5a5",
-                                   fontFamily: "monospace", fontWeight: 800 }}>{fmtEUR(resumo.custoTotal)}</td>
+                      <td style={{ padding: "9px 14px", textAlign: "right", color: "#D99A91",
+                                   fontFamily: "var(--fonte-numero)", fontWeight: 800 }}>{fmtEUR(resumo.custoTotal)}</td>
                     </tr>
                   )}
                 </tbody>
@@ -310,18 +371,18 @@ export default function ModalPlanoObra({
 
             {/* E se o prazo escorregar? */}
             {linhas.length > 0 && (
-              <div style={{ border: "1px solid #f0f0f0", borderRadius: 12, padding: "13px 16px" }}>
+              <div style={{ border: "1px solid #E7DED2", borderRadius: 12, padding: "13px 16px" }}>
                 <div style={{ fontSize: 12, fontWeight: 700, color: COR.tinta, marginBottom: 3 }}>
                   E se a obra escorregar?
                 </div>
-                <div style={{ fontSize: 10.5, color: "#aaa", marginBottom: 10, lineHeight: 1.5 }}>
+                <div style={{ fontSize: 10.5, color: "#9DA2A6", marginBottom: 10, lineHeight: 1.5 }}>
                   Experimenta uma data de fim diferente. Não grava nada — é só para ver o custo.
                 </div>
                 <input type="date" value={simular} onChange={e => setSimular(e.target.value)}
                   style={{ ...campo, width: 180 }} />
                 {comparacao && (
-                  <div style={{ marginTop: 10, background: comparacao.custoAMais > 0 ? "#fef2f2" : "#f0fdf4",
-                                border: `1px solid ${comparacao.custoAMais > 0 ? "#fecaca" : "#bbf7d0"}`,
+                  <div style={{ marginTop: 10, background: comparacao.custoAMais > 0 ? "#FBEDEB" : "#EFF5F1",
+                                border: `1px solid ${comparacao.custoAMais > 0 ? "#EFCFC9" : "#C9E3D5"}`,
                                 borderRadius: 10, padding: "11px 14px" }}>
                     <div style={{ fontSize: 13, color: comparacao.custoAMais > 0 ? COR.alerta : COR.bom,
                                   fontWeight: 700 }}>
@@ -330,13 +391,13 @@ export default function ModalPlanoObra({
                       {comparacao.custoAMais > 0 ? "+" : ""}{fmtEUR(comparacao.custoAMais)} de custo
                     </div>
                     <div style={{ display: "flex", gap: 16, flexWrap: "wrap", marginTop: 7,
-                                  fontSize: 11, color: "#777", fontFamily: "monospace" }}>
+                                  fontSize: 11, color: "#6E7378", fontFamily: "var(--fonte-numero)" }}>
                       {[["fiscalização", "fiscalizacao"], ["CSO", "cso"],
                         ["juros", "juros"], ["avaliações", "comissao"], ["obra", "obra"]].map(([r, k]) => (
                         <span key={k}>{r} {comparacao.diferencas[k] > 0 ? "+" : ""}{fmtEUR(comparacao.diferencas[k])}</span>
                       ))}
                     </div>
-                    <div style={{ fontSize: 10.5, color: "#999", marginTop: 7, lineHeight: 1.5 }}>
+                    <div style={{ fontSize: 10.5, color: "#8E9398", marginTop: 7, lineHeight: 1.5 }}>
                       A obra em si não muda — é o mesmo budget diluído por mais meses. O que custa
                       são as avenças e os juros a correrem mais tempo.
                     </div>
@@ -348,10 +409,10 @@ export default function ModalPlanoObra({
         </div>
 
         {/* ── Rodapé: o que vai acontecer ───────────────────────────────── */}
-        <div style={{ borderTop: "1px solid #f0f0f0", padding: "14px 24px" }}>
+        <div style={{ borderTop: "1px solid #E7DED2", padding: "14px 24px" }}>
           {!confirmar ? (
             <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
-              <div style={{ fontSize: 11.5, color: "#888", lineHeight: 1.6 }}>
+              <div style={{ fontSize: 11.5, color: "#7E8388", lineHeight: 1.6 }}>
                 Aplicar cria <strong style={{ color: COR.tinta }}>{aplicacao.resumo.criar} previsões</strong>
                 {aplicacao.idsAApagar.length > 0 && <>
                   {" e apaga "}
@@ -361,17 +422,17 @@ export default function ModalPlanoObra({
               </div>
               <div style={{ marginLeft: "auto", display: "flex", gap: 8 }}>
                 <button onClick={onFechar}
-                  style={{ background: "none", border: "1px solid #e8e8e8", borderRadius: 8,
-                           padding: "9px 16px", fontSize: 12, color: "#777", cursor: "pointer" }}>Cancelar</button>
+                  style={{ background: "none", border: "1px solid #E3D9CC", borderRadius: 8,
+                           padding: "9px 16px", fontSize: 12, color: "#6E7378", cursor: "pointer" }}>Cancelar</button>
                 <button onClick={guardarSoInputs} disabled={aGravar}
                   title="Guarda os valores sem mexer no Fluxo Futuro"
-                  style={{ background: "#f4f5f7", border: "none", borderRadius: 8, padding: "9px 16px",
-                           fontSize: 12, color: "#555", cursor: "pointer", fontWeight: 600 }}>
+                  style={{ background: "#F6F0E8", border: "none", borderRadius: 8, padding: "9px 16px",
+                           fontSize: 12, color: "#4A5055", cursor: "pointer", fontWeight: 600 }}>
                   Guardar sem aplicar
                 </button>
                 <button onClick={() => setConfirmar(true)} disabled={!podeAplicar}
-                  style={{ background: podeAplicar ? COR.tinta : "#e8e8e8",
-                           color: podeAplicar ? "#fff" : "#aaa", border: "none", borderRadius: 8,
+                  style={{ background: podeAplicar ? COR.tinta : "#E3D9CC",
+                           color: podeAplicar ? "#fff" : "#9DA2A6", border: "none", borderRadius: 8,
                            padding: "9px 22px", fontSize: 12, fontWeight: 700,
                            cursor: podeAplicar ? "pointer" : "default" }}>
                   Recalcular o fluxo
@@ -390,16 +451,16 @@ export default function ModalPlanoObra({
 
 const Linha = ({ k, v, forte, dica }) => (
   <div title={dica} style={{ display: "flex", justifyContent: "space-between", padding: "2px 0" }}>
-    <span style={{ color: "#888" }}>{k}</span>
-    <span style={{ fontFamily: "monospace", fontWeight: forte ? 700 : 400, color: COR.tinta }}>{v}</span>
+    <span style={{ color: "#7E8388" }}>{k}</span>
+    <span style={{ fontFamily: "var(--fonte-numero)", fontWeight: forte ? 700 : 400, color: COR.tinta }}>{v}</span>
   </div>
 );
 
 const Cartao = ({ rotulo, valor, nota, cor }) => (
-  <div style={{ border: "1px solid #f0f0f0", borderRadius: 11, padding: "11px 14px" }}>
+  <div style={{ border: "1px solid #E7DED2", borderRadius: 11, padding: "11px 14px" }}>
     <Rotulo>{rotulo}</Rotulo>
-    <div style={{ fontSize: 16, fontWeight: 700, fontFamily: "monospace", color: cor || COR.tinta }}>{valor}</div>
-    {nota && <div style={{ fontSize: 9.5, color: "#bbb", marginTop: 3, lineHeight: 1.4 }}>{nota}</div>}
+    <div style={{ fontSize: 16, fontWeight: 700, fontFamily: "var(--fonte-numero)", color: cor || COR.tinta }}>{valor}</div>
+    {nota && <div style={{ fontSize: 9.5, color: "#B2B6B9", marginTop: 3, lineHeight: 1.4 }}>{nota}</div>}
   </div>
 );
 
@@ -412,7 +473,7 @@ function Confirmacao({ aplicacao, aGravar, onVoltar, onAplicar, cats }) {
     <div>
       <div style={{ display: "flex", gap: 16, flexWrap: "wrap", marginBottom: 10 }}>
         <div style={{ fontSize: 12, color: COR.tinta, fontWeight: 700 }}>Antes de aplicar:</div>
-        <div style={{ fontSize: 11.5, color: "#888" }}>
+        <div style={{ fontSize: 11.5, color: "#7E8388" }}>
           entram <strong style={{ color: COR.bom }}>{resumo.criar}</strong> previsões novas
           {" · "}saem <strong style={{ color: COR.alerta }}>{resumo.apagarManuais}</strong> previsões tuas
           {" · "}substituem-se <strong>{resumo.apagarMotor}</strong> de um recálculo anterior
@@ -421,19 +482,19 @@ function Confirmacao({ aplicacao, aGravar, onVoltar, onAplicar, cats }) {
       </div>
 
       {aApagarManuais.length > 0 && (
-        <div style={{ background: "#fef2f2", border: "1px solid #fecaca", borderRadius: 10,
+        <div style={{ background: "#FBEDEB", border: "1px solid #EFCFC9", borderRadius: 10,
                       padding: "11px 14px", marginBottom: 10, maxHeight: 150, overflowY: "auto" }}>
-          <div style={{ fontSize: 11, fontWeight: 700, color: "#b91c1c", marginBottom: 6 }}>
+          <div style={{ fontSize: 11, fontWeight: 700, color: "#8E2A20", marginBottom: 6 }}>
             Estas previsões que lançaste vão desaparecer ({fmtEUR(resumo.valorManuais)}):
           </div>
           {aApagarManuais.map(p => (
-            <div key={p.id} style={{ fontSize: 11, color: "#7f1d1d", display: "flex", gap: 10,
+            <div key={p.id} style={{ fontSize: 11, color: "#6E241C", display: "flex", gap: 10,
                                      justifyContent: "space-between", padding: "2px 0" }}>
               <span>{fmtData(p.data_inicio)} · {p.categoria} · {p.descricao || "—"}</span>
-              <span style={{ fontFamily: "monospace" }}>{fmtEUR(p.valor)}</span>
+              <span style={{ fontFamily: "var(--fonte-numero)" }}>{fmtEUR(p.valor)}</span>
             </div>
           ))}
-          <div style={{ fontSize: 10.5, color: "#991b1b", marginTop: 7, lineHeight: 1.5 }}>
+          <div style={{ fontSize: 10.5, color: "#8E2A20", marginTop: 7, lineHeight: 1.5 }}>
             Só saem previsões das categorias que o motor passa a gerir ({cats.join(", ")}),
             e só de hoje para a frente. Tudo o resto fica como está.
           </div>
@@ -442,10 +503,10 @@ function Confirmacao({ aplicacao, aGravar, onVoltar, onAplicar, cats }) {
 
       <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
         <button onClick={onVoltar} disabled={aGravar}
-          style={{ background: "none", border: "1px solid #e8e8e8", borderRadius: 8,
-                   padding: "9px 16px", fontSize: 12, color: "#777", cursor: "pointer" }}>Voltar</button>
+          style={{ background: "none", border: "1px solid #E3D9CC", borderRadius: 8,
+                   padding: "9px 16px", fontSize: 12, color: "#6E7378", cursor: "pointer" }}>Voltar</button>
         <button onClick={onAplicar} disabled={aGravar}
-          style={{ background: aGravar ? "#c9cdd4" : COR.alerta, color: "#fff", border: "none",
+          style={{ background: aGravar ? "#C4C7CA" : COR.alerta, color: "#fff", border: "none",
                    borderRadius: 8, padding: "9px 22px", fontSize: 12, fontWeight: 700,
                    cursor: aGravar ? "default" : "pointer" }}>
           {aGravar ? "A aplicar..." : "Sim, aplicar ao fluxo"}
@@ -470,13 +531,13 @@ export function BotaoPlanoObra({ empresa, plano, faturas = [], grupo = "LPX", on
       title={semPlano ? "Definir o prazo e o budget da obra deste projeto"
            : desatualizado ? "Entraram faturas de obra desde o último recálculo"
            : "Rever o plano de obra e recalcular o fluxo"}
-      style={{ background: desatualizado ? "#fef3c7" : semPlano ? "#f4f5f7" : "#eef2ff",
-               color: desatualizado ? COR.aviso : semPlano ? "#666" : "#4338ca",
+      style={{ background: desatualizado ? "#F6ECD6" : semPlano ? "#F6F0E8" : "#EDF1F5",
+               color: desatualizado ? COR.aviso : semPlano ? "#5C6166" : "#2C4A63",
                border: "none", padding: "8px 14px", borderRadius: 8, fontSize: 12,
                cursor: "pointer", fontWeight: 600, whiteSpace: "nowrap" }}>
       {desatualizado ? "⚠ Plano de obra" : "Plano de obra"}
       {!semPlano && plano.data_fim && (
-        <span style={{ marginLeft: 7, fontFamily: "monospace", fontSize: 10.5, opacity: 0.75 }}>
+        <span style={{ marginLeft: 7, fontFamily: "var(--fonte-numero)", fontSize: 10.5, opacity: 0.75 }}>
           fim {fmtData(plano.data_fim)}
         </span>
       )}

@@ -112,10 +112,10 @@ export const TIR_PROJETO = {
 };
 
 export const ESTADO_MARCO = {
-  concluido: { rotulo: "Concluído", cor: "#16a34a", fundo: "#dcfce7" },
-  curso:     { rotulo: "Em curso",  cor: "#2563eb", fundo: "#dbeafe" },
-  previsto:  { rotulo: "Previsto",  cor: "#6B7C93", fundo: "#eef1f5" },
-  risco:     { rotulo: "Em risco",  cor: "#dc2626", fundo: "#fee2e2" },
+  concluido: { rotulo: "Concluído", cor: "#1F7A54", fundo: "#E2EFE8" },
+  curso:     { rotulo: "Em curso",  cor: "#1F3A52", fundo: "#E0E9F0" },
+  previsto:  { rotulo: "Previsto",  cor: "#BAA685", fundo: "#eef1f5" },
+  risco:     { rotulo: "Em risco",  cor: "#A93226", fundo: "#F6DED9" },
 };
 
 export default CRONOGRAMAS;

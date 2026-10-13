@@ -14,12 +14,12 @@ import { fmtEUR0, fmtNum } from "./formato.js";
 // ─────────────────────────────────────────────────────────────────────────────
 
 const COR = {
-  tinta: "#1a1a2e", entrada: "#16a34a", saida: "#dc2626",
-  saldo: "#4a6fa5", texto: "#888",
+  tinta: "#091C2A", entrada: "#1F7A54", saida: "#A93226",
+  saldo: "#2C4A63", texto: "#7E8388",
 };
 
 const Vazio = ({ texto }) => (
-  <div style={{ padding: 40, textAlign: "center", color: "#ccc", fontSize: 12 }}>{texto}</div>
+  <div style={{ padding: 40, textAlign: "center", color: "#C4C7CA", fontSize: 12 }}>{texto}</div>
 );
 
 // Realizado por categoria, ao vivo a partir do ERP.
@@ -81,8 +81,8 @@ export function RealOrcado({ modelo }) {
   const temForecast = modelo.linhas.some(l => l.forecast != null);
 
   const Cel = ({ v, negrito, cor }) => (
-    <td style={{ padding: "7px 12px", textAlign: "right", fontFamily: "monospace", fontSize: 11.5,
-                 color: cor || "#555", fontWeight: negrito ? 700 : 400, whiteSpace: "nowrap" }}>
+    <td style={{ padding: "7px 12px", textAlign: "right", fontFamily: "var(--fonte-numero)", fontSize: 11.5,
+                 color: cor || "#4A5055", fontWeight: negrito ? 700 : 400, whiteSpace: "nowrap" }}>
       {v == null ? "—" : fmtEUR0(v)}
     </td>
   );
@@ -90,20 +90,20 @@ export function RealOrcado({ modelo }) {
   return (
     <div style={{ overflowX: "auto" }}>
       {!temForecast && (
-        <div style={{ background: "#fffbeb", border: "1px solid #fde68a", borderRadius: 8,
-                      padding: "10px 14px", fontSize: 11.5, color: "#92400e", marginBottom: 12, maxWidth: 820 }}>
+        <div style={{ background: "#FBF6EC", border: "1px solid #E3CE9F", borderRadius: 8,
+                      padding: "10px 14px", fontSize: 11.5, color: "#7A5A22", marginBottom: 12, maxWidth: 820 }}>
           Este projeto ainda não tem forecast no business plan — só aparece a coluna Orçado.
         </div>
       )}
 
       <table style={{ width: "100%", maxWidth: 820, borderCollapse: "collapse", fontSize: 11.5 }}>
         <thead>
-          <tr style={{ background: "#f8f9fc" }}>
-            <th style={{ padding: "9px 12px", borderBottom: "1px solid #e8eaef" }} />
+          <tr style={{ background: "#FAF6F0" }}>
+            <th style={{ padding: "9px 12px", borderBottom: "1px solid #E7DED2" }} />
             {["Orçado", "Forecast", "Δ", "Δ %"].map(h => (
-              <th key={h} style={{ padding: "9px 12px", textAlign: "right", color: "#aaa", fontSize: 9,
-                                   textTransform: "uppercase", fontFamily: "monospace",
-                                   letterSpacing: "0.06em", borderBottom: "1px solid #e8eaef" }}>{h}</th>
+              <th key={h} style={{ padding: "9px 12px", textAlign: "right", color: "#9DA2A6", fontSize: 9,
+                                   textTransform: "uppercase", fontFamily: "var(--fonte-numero)",
+                                   letterSpacing: "0.06em", borderBottom: "1px solid #E7DED2" }}>{h}</th>
             ))}
           </tr>
         </thead>
@@ -122,18 +122,18 @@ export function RealOrcado({ modelo }) {
 
             return (
               <tr key={i} style={{
-                borderBottom: sub || res ? "1px solid #e8eaef" : "1px solid #fafafa",
-                background: sub ? "#f8f9fc" : res ? "#f0f4ff" : "transparent",
+                borderBottom: sub || res ? "1px solid #E7DED2" : "1px solid #FBF7F1",
+                background: sub ? "#FAF6F0" : res ? "#EDF1F5" : "transparent",
               }}>
                 <td style={{ padding: "7px 12px", color: COR.tinta, fontWeight: sub || res ? 700 : 400,
                              paddingLeft: l.tipo === "item" ? 26 : 12 }}>{l.rotulo}</td>
                 <Cel v={orc} negrito={sub || res} />
-                <Cel v={fc} negrito={sub || res} cor={sub || res ? COR.tinta : "#555"} />
+                <Cel v={fc} negrito={sub || res} cor={sub || res ? COR.tinta : "#4A5055"} />
                 <Cel v={delta} negrito
-                     cor={delta == null ? "#ddd" : bom ? COR.entrada : COR.saida} />
-                <td style={{ padding: "7px 12px", textAlign: "right", fontFamily: "monospace", fontSize: 11,
+                     cor={delta == null ? "#D8CCBB" : bom ? COR.entrada : COR.saida} />
+                <td style={{ padding: "7px 12px", textAlign: "right", fontFamily: "var(--fonte-numero)", fontSize: 11,
                              fontWeight: sub || res ? 700 : 400,
-                             color: pctD == null ? "#ddd" : bom ? COR.entrada : COR.saida }}>
+                             color: pctD == null ? "#D8CCBB" : bom ? COR.entrada : COR.saida }}>
                   {pctD == null ? "—" : (pctD >= 0 ? "+" : "") + fmtNum(pctD, 1) + "%"}
                 </td>
               </tr>
@@ -142,7 +142,7 @@ export function RealOrcado({ modelo }) {
         </tbody>
       </table>
 
-      <div style={{ fontSize: 10.5, color: "#aaa", marginTop: 12, lineHeight: 1.6, maxWidth: 820 }}>
+      <div style={{ fontSize: 10.5, color: "#9DA2A6", marginTop: 12, lineHeight: 1.6, maxWidth: 820 }}>
         Quadro estático do business plan: <strong>Orçado</strong> contra <strong>Forecast</strong>
         {modelo.fonteForecast ? ` (${modelo.fonteForecast})` : ""}. Δ é a diferença entre os dois —
         verde quando o forecast é melhor que o orçamento, vermelho quando é pior.
@@ -161,9 +161,9 @@ export default function RealOrcadoView({ empresasVisiveis }) {
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
-      <div style={{ background: "#fff", border: "1px solid #f0f0f0", borderRadius: 12, padding: "13px 18px", display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap" }}>
+      <div style={{ background: "#fff", border: "1px solid #E7DED2", borderRadius: 12, padding: "13px 18px", display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap" }}>
         <select value={empSel} onChange={e => setEmpSel(e.target.value)}
-          style={{ background: "#fff", border: "1px solid #e8e8e8", borderRadius: 8, padding: "8px 12px", fontSize: 13, outline: "none", minWidth: 240 }}>
+          style={{ background: "#fff", border: "1px solid #E3D9CC", borderRadius: 8, padding: "8px 12px", fontSize: 13, outline: "none", minWidth: 240 }}>
           <option value="todas">Todas as empresas</option>
           {agruparPorGrupo(empresas).map(b => (
             <optgroup key={b.grupo} label={b.info.nome}>
@@ -171,18 +171,18 @@ export default function RealOrcadoView({ empresasVisiveis }) {
             </optgroup>
           ))}
         </select>
-        {loading && <span style={{ fontSize: 11, color: "#aaa", fontFamily: "monospace" }}>a carregar movimentos…</span>}
+        {loading && <span style={{ fontSize: 11, color: "#9DA2A6", fontFamily: "var(--fonte-numero)" }}>a carregar movimentos…</span>}
         <button onClick={() => window.print()}
           style={{ marginLeft: "auto", background: COR.tinta, color: "#fff", border: "none", borderRadius: 8, padding: "7px 16px", fontSize: 12, fontWeight: 600, cursor: "pointer" }}>
           Imprimir / PDF
         </button>
       </div>
 
-      <div style={{ background: "#fff", border: "1px solid #f0f0f0", borderRadius: 14, padding: 20 }}>
-        <div style={{ fontSize: 15, fontWeight: 700, color: COR.tinta, fontFamily: "Georgia,serif", marginBottom: 4 }}>
+      <div style={{ background: "#fff", border: "1px solid #E7DED2", borderRadius: 14, padding: 20 }}>
+        <div style={{ fontSize: 15, fontWeight: 700, color: COR.tinta, fontFamily: "var(--fonte-titulo)", marginBottom: 4 }}>
           Real × Orçado
         </div>
-        <div style={{ fontSize: 11, color: "#aaa", marginBottom: 16 }}>
+        <div style={{ fontSize: 11, color: "#9DA2A6", marginBottom: 16 }}>
           {empSel === "todas" ? "Todas as empresas" : empresasAtivas[0]?.nome} · realizado e a realizar calculados em tempo real a partir do ERP
         </div>
         <RealOrcado modelo={modelo} />

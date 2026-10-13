@@ -18,47 +18,47 @@ import {
 // A única coisa que se grava aqui é o pagamento do IVA ao Estado.
 // ─────────────────────────────────────────────────────────────────────────────
 
-const COR = { tinta: "#1a1a2e", cinza: "#8a8f99", linha: "#f0f0f0",
-              pagar: "#b45309", abater: "#4a6fa5", credito: "#15803d", alerta: "#dc2626" };
+const COR = { tinta: "#091C2A", cinza: "#6E7378", linha: "#E7DED2",
+              pagar: "#96702A", abater: "#2C4A63", credito: "#1B6A49", alerta: "#A93226" };
 
 const MEMORIA_EMPRESA = "lpx_iva_empresa";
 
 const Cartao = ({ children, cor }) => (
-  <div style={{ background: "#fff", border: "1px solid #f0f0f0", borderRadius: 12,
-                padding: "14px 18px", borderTop: `3px solid ${cor || "#e8e8e8"}` }}>
+  <div style={{ background: "#fff", border: "1px solid #E7DED2", borderRadius: 12,
+                padding: "14px 18px", borderTop: `3px solid ${cor || "#E3D9CC"}` }}>
     {children}
   </div>
 );
 
 const Rotulo = ({ children, dica }) => (
-  <div title={dica} style={{ fontSize: 10, color: "#aaa", textTransform: "uppercase",
-                             fontFamily: "monospace", letterSpacing: "0.07em", marginBottom: 5 }}>
+  <div title={dica} style={{ fontSize: 10, color: "#9DA2A6", textTransform: "uppercase",
+                             fontFamily: "var(--fonte-numero)", letterSpacing: "0.07em", marginBottom: 5 }}>
     {children}
   </div>
 );
 
 const Valor = ({ children, cor, tamanho = 18 }) => (
-  <div style={{ fontSize: tamanho, fontWeight: 700, color: cor || COR.tinta, fontFamily: "monospace" }}>
+  <div style={{ fontSize: tamanho, fontWeight: 700, color: cor || COR.tinta, fontFamily: "var(--fonte-numero)" }}>
     {children}
   </div>
 );
 
-const th = { padding: "9px 12px", textAlign: "left", color: "#aaa", fontSize: 10,
-             letterSpacing: "0.07em", textTransform: "uppercase", fontFamily: "monospace",
-             borderBottom: "1px solid #f0f0f0", whiteSpace: "nowrap" };
-const td = { padding: "9px 12px", fontSize: 12, color: "#333" };
-const tdNum = { ...td, fontFamily: "monospace", textAlign: "right", whiteSpace: "nowrap" };
+const th = { padding: "9px 12px", textAlign: "left", color: "#9DA2A6", fontSize: 10,
+             letterSpacing: "0.07em", textTransform: "uppercase", fontFamily: "var(--fonte-numero)",
+             borderBottom: "1px solid #E7DED2", whiteSpace: "nowrap" };
+const td = { padding: "9px 12px", fontSize: 12, color: "#23292D" };
+const tdNum = { ...td, fontFamily: "var(--fonte-numero)", textAlign: "right", whiteSpace: "nowrap" };
 
 // Valor monetário: negativo a vermelho, como pedido.
 const Euro = ({ v, forte, zeroTraco = true }) => {
   const n = Number(v) || 0;
-  if (zeroTraco && Math.abs(n) < 0.005) return <span style={{ color: "#ddd" }}>—</span>;
+  if (zeroTraco && Math.abs(n) < 0.005) return <span style={{ color: "#D8CCBB" }}>—</span>;
   return <span style={{ color: n < 0 ? COR.alerta : COR.tinta, fontWeight: forte ? 700 : 400 }}>{fmtEUR(n)}</span>;
 };
 
 const Estado = ({ chave }) => {
   const e = ESTADOS_TRIMESTRE[chave] || ESTADOS_TRIMESTRE.curso;
-  return <span style={{ background: e.fundo, color: e.cor, fontSize: 10, fontFamily: "monospace",
+  return <span style={{ background: e.fundo, color: e.cor, fontSize: 10, fontFamily: "var(--fonte-numero)",
                         fontWeight: 700, padding: "2px 9px", borderRadius: 20, whiteSpace: "nowrap" }}>{e.txt}</span>;
 };
 
@@ -71,14 +71,14 @@ const SelosIVA = ({ d }) => (
       <span title={d.tipo === "cliente"
           ? "Fatura sem IVA liquidado: continua no Contas a Receber, mas não entra no IVA a pagar."
           : "Marcada como não dedutível: fica no Contas a Pagar, mas entra no apuramento com IVA zero."}
-        style={{ marginLeft: 6, background: "#f1f5f9", color: "#64748b", fontSize: 8.5,
-                 fontFamily: "monospace", fontWeight: 700, padding: "1px 5px", borderRadius: 3 }}>
+        style={{ marginLeft: 6, background: "#F2EDE5", color: "#6E7378", fontSize: 8.5,
+                 fontFamily: "var(--fonte-numero)", fontWeight: 700, padding: "1px 5px", borderRadius: 3 }}>
         {d.tipo === "cliente" ? "sem IVA" : "não deduz"}</span>
     )}
     {d.estimado && !d.naoDeduz && (
       <span title="O IVA não foi lido da fatura: foi deduzido do total à taxa normal. Confirma a taxa aqui."
-        style={{ marginLeft: 6, background: "#fef3c7", color: "#b45309", fontSize: 8.5,
-                 fontFamily: "monospace", fontWeight: 700, padding: "1px 5px", borderRadius: 3 }}>calculado</span>
+        style={{ marginLeft: 6, background: "#F6ECD6", color: "#96702A", fontSize: 8.5,
+                 fontFamily: "var(--fonte-numero)", fontWeight: 700, padding: "1px 5px", borderRadius: 3 }}>calculado</span>
     )}
   </>
 );
@@ -98,17 +98,17 @@ function AccoesIVA({ d, onTaxa, onDeducao }) {
     <span style={{ whiteSpace: "nowrap" }}>
       <button onClick={(e) => { e.stopPropagation(); onTaxa(d); }}
         title="Corrigir a taxa de IVA deste documento"
-        style={botaoAccao("#4a6fa5", "#eff6ff")}>taxa</button>
+        style={botaoAccao("#2C4A63", "#EDF1F5")}>taxa</button>
       {d.naoDeduz ? (
         <button onClick={(e) => { e.stopPropagation(); onDeducao(d, true); }}
           title="Voltar a contar esta fatura no apuramento"
-          style={botaoAccao("#15803d", "#dcfce7")}>repor</button>
+          style={botaoAccao("#1B6A49", "#E2EFE8")}>repor</button>
       ) : (
         <button onClick={(e) => { e.stopPropagation(); onDeducao(d, false); }}
           title={cliente
             ? "Tirar do apuramento: a fatura mantém-se, mas deixa de liquidar IVA"
             : "Tirar do apuramento: a fatura mantém-se, mas deixa de deduzir IVA"}
-          style={botaoAccao("#b91c1c", "#fee2e2")}>{cliente ? "sem IVA" : "não deduz"}</button>
+          style={botaoAccao("#8E2A20", "#F6DED9")}>{cliente ? "sem IVA" : "não deduz"}</button>
       )}
     </span>
   );
@@ -122,7 +122,7 @@ function BlocoFaturas({ docs, tipo, titulo, cor, mostrarEmpresa, accoes }) {
     return (
       <div style={{ padding: "8px 0 12px" }}>
         <div style={{ fontSize: 11, fontWeight: 700, color: cor, marginBottom: 4 }}>{titulo}</div>
-        <div style={{ fontSize: 11.5, color: "#ccc" }}>Nenhuma fatura.</div>
+        <div style={{ fontSize: 11.5, color: "#C4C7CA" }}>Nenhuma fatura.</div>
       </div>
     );
   }
@@ -143,25 +143,25 @@ function BlocoFaturas({ docs, tipo, titulo, cor, mostrarEmpresa, accoes }) {
         </thead>
         <tbody>
           {linhas.map(d => (
-            <tr key={d.id} style={{ borderBottom: "1px solid #fafafa",
+            <tr key={d.id} style={{ borderBottom: "1px solid #FBF7F1",
                                     background: d.naoDeduz ? "#fbfbfc" : "#fff",
-                                    color: d.naoDeduz ? "#aaa" : undefined }}>
-              <td style={{ ...td, fontFamily: "monospace", fontSize: 11, color: "#888", padding: "7px 10px" }}>{fmtData(d.data_fatura)}</td>
+                                    color: d.naoDeduz ? "#9DA2A6" : undefined }}>
+              <td style={{ ...td, fontFamily: "var(--fonte-numero)", fontSize: 11, color: "#7E8388", padding: "7px 10px" }}>{fmtData(d.data_fatura)}</td>
               {mostrarEmpresa && <td style={{ ...td, fontSize: 11, padding: "7px 10px" }}>{nomeEmpresa(d.empresa)}</td>}
               <td style={{ ...td, padding: "7px 10px", maxWidth: 220, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
                   title={d.entidade}>{d.entidade}</td>
-              <td style={{ ...td, fontFamily: "monospace", fontSize: 11, color: "#888", padding: "7px 10px" }}>{d.documento}</td>
+              <td style={{ ...td, fontFamily: "var(--fonte-numero)", fontSize: 11, color: "#7E8388", padding: "7px 10px" }}>{d.documento}</td>
               <td style={{ ...tdNum, padding: "7px 10px" }}>{fmtEUR(d.valor_base)}</td>
               <td style={{ ...tdNum, padding: "7px 10px", fontWeight: 700 }}>
                 <Euro v={d.iva} forte />
                 <SelosIVA d={d} />
               </td>
-              <td style={{ ...td, fontSize: 10.5, color: "#aaa", padding: "7px 10px" }}
+              <td style={{ ...td, fontSize: 10.5, color: "#9DA2A6", padding: "7px 10px" }}
                   title="Informativo: o estado de pagamento não entra no apuramento">{d.estado || "—"}</td>
               {accoes && <td style={{ ...td, padding: "7px 10px", textAlign: "right" }}>{accoes(d)}</td>}
             </tr>
           ))}
-          <tr style={{ background: "#fafbfc" }}>
+          <tr style={{ background: "#F9F4EC" }}>
             <td colSpan={mostrarEmpresa ? 5 : 4} style={{ ...td, padding: "7px 10px", fontWeight: 700, fontSize: 11 }}>
               Soma
             </td>
@@ -179,12 +179,12 @@ function LinhaMes({ m, aberto, onAlternar, mostrarEmpresa, accoes, recuo = 28 })
   return (
     <>
       <tr onClick={m.semFaturas ? undefined : onAlternar}
-          style={{ borderBottom: "1px solid #fafafa", cursor: m.semFaturas ? "default" : "pointer",
-                   background: aberto ? "#f8f9ff" : "#fff" }}>
-        <td style={{ ...td, paddingLeft: recuo, color: m.semFaturas ? "#bbb" : COR.tinta }}>
+          style={{ borderBottom: "1px solid #FBF7F1", cursor: m.semFaturas ? "default" : "pointer",
+                   background: aberto ? "#FAF6F0" : "#fff" }}>
+        <td style={{ ...td, paddingLeft: recuo, color: m.semFaturas ? "#B2B6B9" : COR.tinta }}>
           {m.semFaturas ? "   " : (aberto ? "▼ " : "▶ ")}
           {NOMES_MES[m.mes - 1]}
-          {m.semFaturas && <span style={{ fontSize: 10.5, color: "#ccc", marginLeft: 8 }}>Sem faturas</span>}
+          {m.semFaturas && <span style={{ fontSize: 10.5, color: "#C4C7CA", marginLeft: 8 }}>Sem faturas</span>}
         </td>
         <td style={tdNum}><Euro v={m.aPagar} /></td>
         <td style={tdNum}><Euro v={m.aAbater} /></td>
@@ -193,7 +193,7 @@ function LinhaMes({ m, aberto, onAlternar, mostrarEmpresa, accoes, recuo = 28 })
       </tr>
       {aberto && !m.semFaturas && (
         <tr>
-          <td colSpan={7} style={{ padding: "4px 20px 10px", background: "#fcfcfd" }}>
+          <td colSpan={7} style={{ padding: "4px 20px 10px", background: "#FDFAF6" }}>
             <BlocoFaturas docs={m.docs} tipo="cliente" titulo="Faturas emitidas a clientes (IVA a pagar)"
                           cor={COR.pagar} mostrarEmpresa={mostrarEmpresa} accoes={accoes} />
             <BlocoFaturas docs={m.docs} tipo="fornecedor" titulo="Faturas de fornecedores (IVA a abater)"
@@ -301,11 +301,11 @@ export default function IVAView({ currentUser, empresasVisiveis = [], onCriarPre
 
   const semTabela = /vw_iva_documentos|does not exist|schema cache/i.test(error || "");
   if (semTabela) return (
-    <div style={{ background: "#fff", border: "1px solid #fde68a", borderRadius: 12, padding: 32, textAlign: "center" }}>
+    <div style={{ background: "#fff", border: "1px solid #E3CE9F", borderRadius: 12, padding: 32, textAlign: "center" }}>
       <div style={{ fontSize: 30, marginBottom: 10 }}>🧾</div>
       <div style={{ fontSize: 15, fontWeight: 600, color: COR.tinta }}>Falta a base do apuramento de IVA</div>
-      <div style={{ color: "#888", fontSize: 12.5, marginTop: 8, maxWidth: 520, margin: "8px auto 0", lineHeight: 1.6 }}>
-        Corre <code style={{ background: "#f4f5f7", padding: "1px 5px", borderRadius: 4 }}>supabase/migracao-v14-iva.sql</code> no
+      <div style={{ color: "#7E8388", fontSize: 12.5, marginTop: 8, maxWidth: 520, margin: "8px auto 0", lineHeight: 1.6 }}>
+        Corre <code style={{ background: "#F6F0E8", padding: "1px 5px", borderRadius: 4 }}>supabase/migracao-v14-iva.sql</code> no
         SQL Editor do Supabase e recarrega a página.
       </div>
     </div>
@@ -336,13 +336,13 @@ export default function IVAView({ currentUser, empresasVisiveis = [], onCriarPre
     <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
 
       {/* ── Filtros ────────────────────────────────────────────────────────── */}
-      <div style={{ background: "#fff", border: "1px solid #f0f0f0", borderRadius: 14,
+      <div style={{ background: "#fff", border: "1px solid #E7DED2", borderRadius: 14,
                     padding: "16px 20px", display: "flex", gap: 14, alignItems: "flex-end", flexWrap: "wrap" }}>
         <div>
-          <div style={{ fontSize: 15, fontWeight: 700, color: COR.tinta, fontFamily: "Georgia,serif" }}>
+          <div style={{ fontSize: 15, fontWeight: 700, color: COR.tinta, fontFamily: "var(--fonte-titulo)" }}>
             Apuramento de IVA
           </div>
-          <div style={{ fontSize: 11, color: "#aaa", marginTop: 3 }}>
+          <div style={{ fontSize: 11, color: "#9DA2A6", marginTop: 3 }}>
             Conta a data de emissão da fatura, não a do pagamento.
           </div>
         </div>
@@ -351,7 +351,7 @@ export default function IVAView({ currentUser, empresasVisiveis = [], onCriarPre
           <div>
             <Rotulo>Empresa</Rotulo>
             <select value={empSel} onChange={e => setEmpSel(e.target.value)}
-              style={{ border: "1px solid #e8e8e8", borderRadius: 8, padding: "7px 10px", fontSize: 12, minWidth: 210 }}>
+              style={{ border: "1px solid #E3D9CC", borderRadius: 8, padding: "7px 10px", fontSize: 12, minWidth: 210 }}>
               <option value="todas">Todas (consolidado, só para consulta)</option>
               {agruparPorGrupo(empresas).map(b => (
                 <optgroup key={b.grupo} label={b.info.nome}>
@@ -363,17 +363,17 @@ export default function IVAView({ currentUser, empresasVisiveis = [], onCriarPre
           <div>
             <Rotulo>Ano</Rotulo>
             <select value={anoSel ?? ""} onChange={e => setAnoSel(Number(e.target.value))}
-              style={{ border: "1px solid #e8e8e8", borderRadius: 8, padding: "7px 10px", fontSize: 12 }}>
+              style={{ border: "1px solid #E3D9CC", borderRadius: 8, padding: "7px 10px", fontSize: 12 }}>
               {anos.length === 0 && <option value="">—</option>}
               {anos.map(a => <option key={a} value={a}>{a}</option>)}
             </select>
           </div>
           <div>
             <Rotulo>Trimestre</Rotulo>
-            <div style={{ display: "flex", background: "#f4f5f7", borderRadius: 8, padding: 2, gap: 2 }}>
+            <div style={{ display: "flex", background: "#F6F0E8", borderRadius: 8, padding: 2, gap: 2 }}>
               {["todos", ...TRIMESTRES].map(t => (
                 <button key={t} onClick={() => setTriSel(t)}
-                  style={{ background: triSel === t ? COR.tinta : "transparent", color: triSel === t ? "#fff" : "#777",
+                  style={{ background: triSel === t ? COR.tinta : "transparent", color: triSel === t ? "#fff" : "#6E7378",
                            border: "none", padding: "5px 11px", borderRadius: 6, fontSize: 11, fontWeight: 600, cursor: "pointer" }}>
                   {t === "todos" ? "Todos" : `${t}T`}
                 </button>
@@ -381,7 +381,7 @@ export default function IVAView({ currentUser, empresasVisiveis = [], onCriarPre
             </div>
           </div>
           <button onClick={exportar} disabled={exportando}
-            style={{ background: exportando ? "#e8e8e8" : "#16a34a", color: exportando ? "#999" : "#fff",
+            style={{ background: exportando ? "#E3D9CC" : "#091C2A", color: exportando ? "#8E9398" : "#fff",
                      border: "none", padding: "8px 14px", borderRadius: 8, fontSize: 12,
                      cursor: exportando ? "default" : "pointer", fontWeight: 600 }}>
             {exportando ? "A gerar..." : "⬇ Excel"}
@@ -389,11 +389,11 @@ export default function IVAView({ currentUser, empresasVisiveis = [], onCriarPre
         </div>
       </div>
 
-      {loading && <div style={{ padding: 30, textAlign: "center", color: "#ccc", fontSize: 12 }}>A carregar...</div>}
+      {loading && <div style={{ padding: 30, textAlign: "center", color: "#C4C7CA", fontSize: 12 }}>A carregar...</div>}
 
       {!loading && apuramento.linhas.length === 0 && (
-        <div style={{ background: "#fff", border: "1px solid #f0f0f0", borderRadius: 14, padding: 40,
-                      textAlign: "center", color: "#aaa", fontSize: 12.5, lineHeight: 1.7 }}>
+        <div style={{ background: "#fff", border: "1px solid #E7DED2", borderRadius: 14, padding: 40,
+                      textAlign: "center", color: "#9DA2A6", fontSize: 12.5, lineHeight: 1.7 }}>
           Sem faturas no período escolhido.<br />
           O IVA a abater vem das faturas do Contas a Pagar; o IVA a pagar vem das faturas
           emitidas que registares no Contas a Receber.
@@ -418,37 +418,37 @@ export default function IVAView({ currentUser, empresasVisiveis = [], onCriarPre
                 {fmtEUR(Math.abs(apuramento.total.saldo))}
               </Valor>
             </Cartao>
-            <Cartao cor="#64748b">
+            <Cartao cor="#6E7378">
               <Rotulo>Próxima data limite</Rotulo>
               {proximo ? (
                 <>
                   <Valor>{fmtData(proximo.dataLimite)}</Valor>
-                  <div style={{ fontSize: 11, color: "#888", marginTop: 3, fontFamily: "monospace" }}>
+                  <div style={{ fontSize: 11, color: "#7E8388", marginTop: 3, fontFamily: "var(--fonte-numero)" }}>
                     {proximo.rotulo} · {fmtEUR(proximo.saldo)}
                   </div>
                 </>
               ) : (
-                <div style={{ fontSize: 12.5, color: "#bbb", marginTop: 4 }}>Nada por liquidar</div>
+                <div style={{ fontSize: 12.5, color: "#B2B6B9", marginTop: 4 }}>Nada por liquidar</div>
               )}
             </Cartao>
           </div>
 
           {/* ── Resumo trimestral / por mês ────────────────────────────────── */}
-          <div style={{ background: "#fff", border: "1px solid #f0f0f0", borderRadius: 14, overflow: "hidden" }}>
-            <div style={{ padding: "14px 20px", borderBottom: "1px solid #f0f0f0",
+          <div style={{ background: "#fff", border: "1px solid #E7DED2", borderRadius: 14, overflow: "hidden" }}>
+            <div style={{ padding: "14px 20px", borderBottom: "1px solid #E7DED2",
                           display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
               <div>
-                <div style={{ fontWeight: 700, color: COR.tinta, fontSize: 13, fontFamily: "Georgia,serif" }}>
+                <div style={{ fontWeight: 700, color: COR.tinta, fontSize: 13, fontFamily: "var(--fonte-titulo)" }}>
                   {vista === "trimestre" ? "Resumo trimestral" : `Os 12 meses de ${anoSel || ""}`}
                 </div>
-                <div style={{ fontSize: 10.5, color: "#aaa", marginTop: 2 }}>
+                <div style={{ fontSize: 10.5, color: "#9DA2A6", marginTop: 2 }}>
                   Abre um {vista === "trimestre" ? "trimestre e depois um mês" : "mês"} para ver as faturas que o compõem.
                 </div>
               </div>
-              <div style={{ marginLeft: "auto", display: "flex", background: "#f4f5f7", borderRadius: 8, padding: 2, gap: 2 }}>
+              <div style={{ marginLeft: "auto", display: "flex", background: "#F6F0E8", borderRadius: 8, padding: 2, gap: 2 }}>
                 {[["trimestre", "Por trimestre"], ["mes", "Por mês"]].map(([k, r]) => (
                   <button key={k} onClick={() => setVista(k)}
-                    style={{ background: vista === k ? COR.tinta : "transparent", color: vista === k ? "#fff" : "#777",
+                    style={{ background: vista === k ? COR.tinta : "transparent", color: vista === k ? "#fff" : "#6E7378",
                              border: "none", padding: "5px 13px", borderRadius: 6, fontSize: 11, fontWeight: 600, cursor: "pointer" }}>
                     {r}
                   </button>
@@ -459,7 +459,7 @@ export default function IVAView({ currentUser, empresasVisiveis = [], onCriarPre
             <div style={{ overflowX: "auto" }}>
               <table style={{ width: "100%", borderCollapse: "collapse" }}>
                 <thead>
-                  <tr style={{ background: "#fafbfc" }}>
+                  <tr style={{ background: "#F9F4EC" }}>
                     {["Período", "IVA a pagar", "IVA a abater", "Saldo", "Data limite", "Estado", ""].map((h, i) => (
                       <th key={h + i} style={{ ...th, textAlign: i >= 1 && i <= 3 ? "right" : "left" }}>{h}</th>
                     ))}
@@ -473,31 +473,31 @@ export default function IVAView({ currentUser, empresasVisiveis = [], onCriarPre
                     return (
                       <React.Fragment key={chave}>
                         <tr onClick={() => alternar(chave)}
-                            style={{ borderBottom: "1px solid #f4f4f6", cursor: "pointer",
-                                     background: abertos[chave] ? "#f8f9ff" : "#fff" }}>
-                          <td style={{ ...td, fontWeight: 700, fontFamily: "monospace" }}>
+                            style={{ borderBottom: "1px solid #EFE9E1", cursor: "pointer",
+                                     background: abertos[chave] ? "#FAF6F0" : "#fff" }}>
+                          <td style={{ ...td, fontWeight: 700, fontFamily: "var(--fonte-numero)" }}>
                             {abertos[chave] ? "▼ " : "▶ "}{t.rotulo}
                           </td>
                           <td style={tdNum}><Euro v={t.aPagar} /></td>
                           <td style={tdNum}><Euro v={t.aAbater} /></td>
                           <td style={tdNum}><Euro v={t.saldo} forte /></td>
-                          <td style={{ ...td, fontFamily: "monospace", fontSize: 11, color: "#888" }}>{fmtData(t.dataLimite)}</td>
+                          <td style={{ ...td, fontFamily: "var(--fonte-numero)", fontSize: 11, color: "#7E8388" }}>{fmtData(t.dataLimite)}</td>
                           <td style={td}><Estado chave={est} /></td>
                           <td style={{ ...td, textAlign: "right", whiteSpace: "nowrap" }}>
                             <button onClick={(e) => { e.stopPropagation(); setTriDetalhe({ ano: t.ano, trimestre: t.trimestre }); }}
                               title="Filtrar o detalhe por fatura por este trimestre"
-                              style={{ background: "#f0f4ff", border: "none", color: "#4a6fa5", padding: "4px 9px",
+                              style={{ background: "#EDF1F5", border: "none", color: "#2C4A63", padding: "4px 9px",
                                        borderRadius: 6, fontSize: 10.5, cursor: "pointer", marginRight: 5 }}>detalhe</button>
                             {podeEditar && (est === "pago"
                               ? <button onClick={(e) => { e.stopPropagation();
                                     if (confirm(`Anular o pagamento de ${t.rotulo}?`)) anularPagamento(pag.empresa, t.ano, t.trimestre); }}
-                                  style={{ background: "none", border: "1px solid #f0f0f0", color: "#bbb", padding: "4px 9px",
+                                  style={{ background: "none", border: "1px solid #E7DED2", color: "#B2B6B9", padding: "4px 9px",
                                            borderRadius: 6, fontSize: 10.5, cursor: "pointer" }}>anular</button>
                               : <button onClick={(e) => { e.stopPropagation(); setAPagar(t); }}
                                   disabled={empSel === "todas"}
                                   title={empSel === "todas" ? "Escolhe uma empresa: o IVA paga-se por NIF" : "Registar o pagamento ao Estado"}
-                                  style={{ background: empSel === "todas" ? "#f4f5f7" : "#dcfce7", border: "none",
-                                           color: empSel === "todas" ? "#ccc" : "#15803d", padding: "4px 9px", borderRadius: 6,
+                                  style={{ background: empSel === "todas" ? "#F6F0E8" : "#E2EFE8", border: "none",
+                                           color: empSel === "todas" ? "#C4C7CA" : "#1B6A49", padding: "4px 9px", borderRadius: 6,
                                            fontSize: 10.5, cursor: empSel === "todas" ? "default" : "pointer", fontWeight: 600 }}>
                                   marcar pago</button>
                             )}
@@ -510,7 +510,7 @@ export default function IVAView({ currentUser, empresasVisiveis = [], onCriarPre
                             mostrarEmpresa={mostrarEmpresa} accoes={accoesLinha} />
                         ))}
                         {abertos[chave] && (
-                          <tr style={{ background: "#f4f5f7" }}>
+                          <tr style={{ background: "#F6F0E8" }}>
                             <td style={{ ...td, paddingLeft: 28, fontWeight: 700, fontSize: 11 }}>Subtotal {t.rotulo}</td>
                             <td style={tdNum}><Euro v={t.aPagar} forte zeroTraco={false} /></td>
                             <td style={tdNum}><Euro v={t.aAbater} forte zeroTraco={false} /></td>
@@ -529,14 +529,14 @@ export default function IVAView({ currentUser, empresasVisiveis = [], onCriarPre
                       mostrarEmpresa={mostrarEmpresa} accoes={accoesLinha} recuo={12} />
                   ))}
 
-                  <tr style={{ background: "#1a1a2e" }}>
+                  <tr style={{ background: "#091C2A" }}>
                     <td style={{ ...td, color: "#fff", fontWeight: 700 }}>Total</td>
                     <td style={{ ...tdNum, color: "#fff", fontWeight: 700 }}>{fmtEUR(apuramento.total.aPagar)}</td>
                     <td style={{ ...tdNum, color: "#fff", fontWeight: 700 }}>{fmtEUR(apuramento.total.aAbater)}</td>
-                    <td style={{ ...tdNum, color: apuramento.total.saldo >= 0 ? "#fca5a5" : "#86efac", fontWeight: 800 }}>
+                    <td style={{ ...tdNum, color: apuramento.total.saldo >= 0 ? "#D99A91" : "#7FBE9C", fontWeight: 800 }}>
                       {fmtEUR(apuramento.total.saldo)}
                     </td>
-                    <td colSpan={3} style={{ ...td, color: "#8b93a3", fontSize: 10.5 }}>
+                    <td colSpan={3} style={{ ...td, color: "#8B98A3", fontSize: 10.5 }}>
                       {apuramento.total.saldo >= 0 ? "a entregar ao Estado" : "crédito a favor da empresa"}
                     </td>
                   </tr>
@@ -546,26 +546,26 @@ export default function IVAView({ currentUser, empresasVisiveis = [], onCriarPre
           </div>
 
           {/* ── Detalhe por fatura ─────────────────────────────────────────── */}
-          <div style={{ background: "#fff", border: "1px solid #f0f0f0", borderRadius: 14, overflow: "hidden" }}>
-            <div style={{ padding: "14px 20px", borderBottom: "1px solid #f0f0f0",
+          <div style={{ background: "#fff", border: "1px solid #E7DED2", borderRadius: 14, overflow: "hidden" }}>
+            <div style={{ padding: "14px 20px", borderBottom: "1px solid #E7DED2",
                           display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
-              <div style={{ fontWeight: 700, color: COR.tinta, fontSize: 13, fontFamily: "Georgia,serif" }}>
+              <div style={{ fontWeight: 700, color: COR.tinta, fontSize: 13, fontFamily: "var(--fonte-titulo)" }}>
                 Detalhe por fatura
-                <span style={{ fontWeight: 400, color: "#aaa", fontSize: 11, marginLeft: 8, fontFamily: "monospace" }}>
+                <span style={{ fontWeight: 400, color: "#9DA2A6", fontSize: 11, marginLeft: 8, fontFamily: "var(--fonte-numero)" }}>
                   {detalhe.length} documentos
                 </span>
               </div>
               {triDetalhe && (
                 <button onClick={() => setTriDetalhe(null)}
-                  style={{ background: "#eef2ff", border: "none", color: "#4338ca", padding: "4px 11px",
+                  style={{ background: "#EDF1F5", border: "none", color: "#2C4A63", padding: "4px 11px",
                            borderRadius: 20, fontSize: 11, cursor: "pointer", fontWeight: 600 }}>
                   {rotuloTrimestre(triDetalhe.ano, triDetalhe.trimestre)} ✕
                 </button>
               )}
-              <div style={{ marginLeft: "auto", display: "flex", background: "#f4f5f7", borderRadius: 8, padding: 2, gap: 2 }}>
+              <div style={{ marginLeft: "auto", display: "flex", background: "#F6F0E8", borderRadius: 8, padding: 2, gap: 2 }}>
                 {[["todos", "Todos"], ["cliente", "Clientes"], ["fornecedor", "Fornecedores"]].map(([k, r]) => (
                   <button key={k} onClick={() => setTipoDetalhe(k)}
-                    style={{ background: tipoDetalhe === k ? COR.tinta : "transparent", color: tipoDetalhe === k ? "#fff" : "#777",
+                    style={{ background: tipoDetalhe === k ? COR.tinta : "transparent", color: tipoDetalhe === k ? "#fff" : "#6E7378",
                              border: "none", padding: "5px 12px", borderRadius: 6, fontSize: 11, fontWeight: 600, cursor: "pointer" }}>
                     {r}
                   </button>
@@ -575,7 +575,7 @@ export default function IVAView({ currentUser, empresasVisiveis = [], onCriarPre
 
             <div style={{ overflowX: "auto", maxHeight: 520, overflowY: "auto" }}>
               <table style={{ width: "100%", borderCollapse: "collapse" }}>
-                <thead style={{ position: "sticky", top: 0, background: "#fafbfc", zIndex: 1 }}>
+                <thead style={{ position: "sticky", top: 0, background: "#F9F4EC", zIndex: 1 }}>
                   <tr>
                     {["Tipo", "Data", ...(mostrarEmpresa ? ["Empresa"] : []), "Cliente / Fornecedor",
                       "N.º", "Sem IVA", "Taxa", "IVA", "Mês", "Trim.",
@@ -586,33 +586,33 @@ export default function IVAView({ currentUser, empresasVisiveis = [], onCriarPre
                 </thead>
                 <tbody>
                   {detalhe.map(d => (
-                    <tr key={d.id} style={{ borderBottom: "1px solid #fafafa",
+                    <tr key={d.id} style={{ borderBottom: "1px solid #FBF7F1",
                                             background: d.naoDeduz ? "#fbfbfc"
                                                       : d.estimado ? "#fffdf5" : "#fff",
-                                            color: d.naoDeduz ? "#aaa" : undefined }}>
+                                            color: d.naoDeduz ? "#9DA2A6" : undefined }}>
                       <td style={td}>
-                        <span style={{ background: d.tipo === "cliente" ? "#fef3c7" : "#eff6ff",
-                                       color: d.tipo === "cliente" ? "#b45309" : "#1d4ed8",
-                                       fontSize: 9.5, fontFamily: "monospace", fontWeight: 700,
+                        <span style={{ background: d.tipo === "cliente" ? "#F6ECD6" : "#EDF1F5",
+                                       color: d.tipo === "cliente" ? "#96702A" : "#1F3A52",
+                                       fontSize: 9.5, fontFamily: "var(--fonte-numero)", fontWeight: 700,
                                        padding: "2px 7px", borderRadius: 3 }}>
                           {d.tipo === "cliente" ? "cliente" : "fornec."}
                         </span>
                       </td>
-                      <td style={{ ...td, fontFamily: "monospace", fontSize: 11, color: "#888" }}>{fmtData(d.data_fatura)}</td>
+                      <td style={{ ...td, fontFamily: "var(--fonte-numero)", fontSize: 11, color: "#7E8388" }}>{fmtData(d.data_fatura)}</td>
                       {mostrarEmpresa && <td style={{ ...td, fontSize: 11 }}>{nomeEmpresa(d.empresa)}</td>}
                       <td style={{ ...td, maxWidth: 240, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
                           title={d.entidade}>{d.entidade}</td>
-                      <td style={{ ...td, fontFamily: "monospace", fontSize: 11, color: "#888" }}>{d.documento}</td>
+                      <td style={{ ...td, fontFamily: "var(--fonte-numero)", fontSize: 11, color: "#7E8388" }}>{d.documento}</td>
                       <td style={tdNum}>{fmtEUR(d.valor_base)}</td>
-                      <td style={{ ...tdNum, color: "#888", fontSize: 11 }}>
+                      <td style={{ ...tdNum, color: "#7E8388", fontSize: 11 }}>
                         {d.taxa_iva != null ? `${fmtNum(d.taxa_iva, 0)}%` : "—"}
                       </td>
                       <td style={{ ...tdNum, fontWeight: 700 }}>
                         <Euro v={d.iva} forte />
                         <SelosIVA d={d} />
                       </td>
-                      <td style={{ ...td, fontSize: 11, color: "#888" }}>{NOMES_MES[d.mes - 1]}</td>
-                      <td style={{ ...td, fontFamily: "monospace", fontSize: 11, color: "#888" }}>
+                      <td style={{ ...td, fontSize: 11, color: "#7E8388" }}>{NOMES_MES[d.mes - 1]}</td>
+                      <td style={{ ...td, fontFamily: "var(--fonte-numero)", fontSize: 11, color: "#7E8388" }}>
                         {rotuloTrimestre(d.ano, d.trimestre)}
                       </td>
                       {accoesLinha && <td style={{ ...td, textAlign: "right" }}>{accoesLinha(d)}</td>}
@@ -624,8 +624,8 @@ export default function IVAView({ currentUser, empresasVisiveis = [], onCriarPre
           </div>
 
           {apuramento.linhas.some(d => d.estimado && !d.naoDeduz) && (
-            <div style={{ background: "#fffbeb", border: "1px solid #fde68a", borderRadius: 12,
-                          padding: "12px 16px", fontSize: 11.5, color: "#92400e", lineHeight: 1.6 }}>
+            <div style={{ background: "#FBF6EC", border: "1px solid #E3CE9F", borderRadius: 12,
+                          padding: "12px 16px", fontSize: 11.5, color: "#7A5A22", lineHeight: 1.6 }}>
               {(() => {
                 const n = apuramento.linhas.filter(d => d.estimado && !d.naoDeduz).length;
                 return (
@@ -645,8 +645,8 @@ export default function IVAView({ currentUser, empresasVisiveis = [], onCriarPre
           )}
 
           {apuramento.linhas.some(d => d.naoDeduz) && (
-            <div style={{ background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: 12,
-                          padding: "12px 16px", fontSize: 11.5, color: "#475569", lineHeight: 1.6 }}>
+            <div style={{ background: "#f8fafc", border: "1px solid #E3D9CC", borderRadius: 12,
+                          padding: "12px 16px", fontSize: 11.5, color: "#4A5055", lineHeight: 1.6 }}>
               {(() => {
                 const fora = apuramento.linhas.filter(d => d.naoDeduz);
                 const perdido = arred2(fora.reduce((s, d) =>
@@ -710,10 +710,10 @@ function ModalTaxa({ doc, onFechar, onGuardar }) {
       style={{ position: "fixed", inset: 0, background: "rgba(10,10,15,0.55)", display: "flex",
                alignItems: "center", justifyContent: "center", zIndex: 300, padding: 20 }}>
       <div style={{ background: "#fff", borderRadius: 14, padding: 24, width: "100%", maxWidth: 430 }}>
-        <div style={{ fontSize: 16, fontWeight: 700, color: COR.tinta, fontFamily: "Georgia,serif" }}>
+        <div style={{ fontSize: 16, fontWeight: 700, color: COR.tinta, fontFamily: "var(--fonte-titulo)" }}>
           Taxa de IVA
         </div>
-        <div style={{ fontSize: 11.5, color: "#888", marginTop: 6, lineHeight: 1.6 }}>
+        <div style={{ fontSize: 11.5, color: "#7E8388", marginTop: 6, lineHeight: 1.6 }}>
           {doc.entidade} · {doc.documento}<br />
           {fmtData(doc.data_fatura)} · total do documento <strong style={{ color: COR.tinta }}>{fmtEUR(totalDoc)}</strong>
         </div>
@@ -724,40 +724,40 @@ function ModalTaxa({ doc, onFechar, onGuardar }) {
             {TAXAS_IVA.map(t => (
               <button key={t.taxa} onClick={() => setTaxa(t.taxa)}
                 title={t.nota}
-                style={{ flex: 1, minWidth: 74, background: taxa === t.taxa ? COR.tinta : "#f4f5f7",
-                         color: taxa === t.taxa ? "#fff" : "#555", border: "none", borderRadius: 9,
+                style={{ flex: 1, minWidth: 74, background: taxa === t.taxa ? COR.tinta : "#F6F0E8",
+                         color: taxa === t.taxa ? "#fff" : "#4A5055", border: "none", borderRadius: 9,
                          padding: "10px 6px", cursor: "pointer", fontWeight: 700, fontSize: 13 }}>
                 {t.rotulo}
                 <div style={{ fontSize: 9, fontWeight: 400, marginTop: 2,
-                              color: taxa === t.taxa ? "#b9bfca" : "#999" }}>{t.nota}</div>
+                              color: taxa === t.taxa ? "#A7AFB8" : "#8E9398" }}>{t.nota}</div>
               </button>
             ))}
           </div>
         </div>
 
-        <div style={{ marginTop: 16, background: "#f8f9fc", borderRadius: 10, padding: "12px 14px",
+        <div style={{ marginTop: 16, background: "#FAF6F0", borderRadius: 10, padding: "12px 14px",
                       display: "flex", justifyContent: "space-between", fontSize: 12.5 }}>
           <div>
-            <div style={{ fontSize: 10, color: "#aaa", fontFamily: "monospace" }}>SEM IVA</div>
-            <div style={{ fontFamily: "monospace", fontWeight: 700, color: COR.tinta }}>{fmtEUR(previsto.base)}</div>
+            <div style={{ fontSize: 10, color: "#9DA2A6", fontFamily: "var(--fonte-numero)" }}>SEM IVA</div>
+            <div style={{ fontFamily: "var(--fonte-numero)", fontWeight: 700, color: COR.tinta }}>{fmtEUR(previsto.base)}</div>
           </div>
           <div style={{ textAlign: "right" }}>
-            <div style={{ fontSize: 10, color: "#aaa", fontFamily: "monospace" }}>IVA</div>
-            <div style={{ fontFamily: "monospace", fontWeight: 700, color: COR.abater }}>{fmtEUR(previsto.iva)}</div>
+            <div style={{ fontSize: 10, color: "#9DA2A6", fontFamily: "var(--fonte-numero)" }}>IVA</div>
+            <div style={{ fontFamily: "var(--fonte-numero)", fontWeight: 700, color: COR.abater }}>{fmtEUR(previsto.iva)}</div>
           </div>
         </div>
-        <div style={{ fontSize: 10.5, color: "#aaa", marginTop: 8, lineHeight: 1.5 }}>
+        <div style={{ fontSize: 10.5, color: "#9DA2A6", marginTop: 8, lineHeight: 1.5 }}>
           A base e o IVA são recalculados a partir do total. Se o total estiver errado,
           corrige-o primeiro na fatura, no Contas a Pagar.
         </div>
 
         <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", marginTop: 18 }}>
           <button onClick={onFechar}
-            style={{ background: "none", border: "1px solid #e8e8e8", borderRadius: 8, padding: "8px 16px",
-                     fontSize: 12, color: "#777", cursor: "pointer" }}>Cancelar</button>
+            style={{ background: "none", border: "1px solid #E3D9CC", borderRadius: 8, padding: "8px 16px",
+                     fontSize: 12, color: "#6E7378", cursor: "pointer" }}>Cancelar</button>
           <button disabled={aGuardar}
             onClick={async () => { setAGuardar(true); await onGuardar(taxa); setAGuardar(false); }}
-            style={{ background: aGuardar ? "#c9cdd4" : "#1a1a2e", color: "#fff", border: "none",
+            style={{ background: aGuardar ? "#C4C7CA" : "#091C2A", color: "#fff", border: "none",
                      borderRadius: 8, padding: "8px 20px", fontSize: 12, fontWeight: 600,
                      cursor: aGuardar ? "default" : "pointer" }}>
             {aGuardar ? "A guardar..." : "Guardar taxa"}
@@ -779,10 +779,10 @@ function ModalPagamento({ trimestre: t, empresa, currentUser, onFechar, onGuarda
       style={{ position: "fixed", inset: 0, background: "rgba(10,10,15,0.55)", display: "flex",
                alignItems: "center", justifyContent: "center", zIndex: 300, padding: 20 }}>
       <div style={{ background: "#fff", borderRadius: 14, padding: 24, width: "100%", maxWidth: 440 }}>
-        <div style={{ fontSize: 16, fontWeight: 700, color: COR.tinta, fontFamily: "Georgia,serif" }}>
+        <div style={{ fontSize: 16, fontWeight: 700, color: COR.tinta, fontFamily: "var(--fonte-titulo)" }}>
           Registar pagamento do IVA — {t.rotulo}
         </div>
-        <div style={{ fontSize: 11.5, color: "#888", marginTop: 6, lineHeight: 1.6 }}>
+        <div style={{ fontSize: 11.5, color: "#7E8388", marginTop: 6, lineHeight: 1.6 }}>
           {nomeEmpresa(empresa)} · apurado {fmtEUR(t.saldo)} · data limite {fmtData(t.dataLimite)}
         </div>
 
@@ -791,15 +791,15 @@ function ModalPagamento({ trimestre: t, empresa, currentUser, onFechar, onGuarda
           <div key={rot} style={{ marginTop: 12 }}>
             <Rotulo>{rot}</Rotulo>
             <input type={tipo} value={v} onChange={e => set(e.target.value)}
-              style={{ width: "100%", boxSizing: "border-box", border: "1px solid #e8e8e8",
+              style={{ width: "100%", boxSizing: "border-box", border: "1px solid #E3D9CC",
                        borderRadius: 9, padding: "9px 11px", fontSize: 13 }} />
           </div>
         ))}
 
         <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", marginTop: 18 }}>
           <button onClick={onFechar}
-            style={{ background: "none", border: "1px solid #e8e8e8", borderRadius: 8, padding: "8px 16px",
-                     fontSize: 12, color: "#777", cursor: "pointer" }}>Cancelar</button>
+            style={{ background: "none", border: "1px solid #E3D9CC", borderRadius: 8, padding: "8px 16px",
+                     fontSize: 12, color: "#6E7378", cursor: "pointer" }}>Cancelar</button>
           <button disabled={aGuardar}
             onClick={async () => {
               setAGuardar(true);
@@ -811,7 +811,7 @@ function ModalPagamento({ trimestre: t, empresa, currentUser, onFechar, onGuarda
               });
               setAGuardar(false);
             }}
-            style={{ background: aGuardar ? "#c9cdd4" : "#16a34a", color: "#fff", border: "none",
+            style={{ background: aGuardar ? "#C4C7CA" : "#091C2A", color: "#fff", border: "none",
                      borderRadius: 8, padding: "8px 20px", fontSize: 12, fontWeight: 600,
                      cursor: aGuardar ? "default" : "pointer" }}>
             {aGuardar ? "A guardar..." : "Registar pagamento"}

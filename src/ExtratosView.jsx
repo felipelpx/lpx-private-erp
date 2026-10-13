@@ -7,7 +7,7 @@ import { agruparPorGrupo, GRUPOS_INFO, EMPRESAS as EMPRESAS_TODAS } from "./empr
 import { CATEGORIAS_HDG, subcategoriasHDG, subcategoriaValida, categoriaNoPlanoHDG } from "./categoriasHDG.js";
 import { ModalQuestionar } from "./Questoes.jsx";
 
-const BANCO_COLORS = {"Millennium":"#e84393","BNI":"#0057b7","BB Americas":"#c8a500","Eurobic":"#e74c3c","Revolut":"#6772e5","CGD":"#00a859","NovoBanco":"#ff6200","Banco Invest":"#1e3a6e","BAE":"#6c3483","BCP":"#002fa7","Miami":"#0891b2","Cartao 7449":"#f59e0b","Caixa Livre":"#8b5cf6"};
+const BANCO_COLORS = {"Millennium":"#e84393","BNI":"#0057b7","BB Americas":"#c8a500","Eurobic":"#e74c3c","Revolut":"#6772e5","CGD":"#00a859","NovoBanco":"#ff6200","Banco Invest":"#1e3a6e","BAE":"#6c3483","BCP":"#002fa7","Miami":"#0891b2","Cartao 7449":"#C19A4A","Caixa Livre":"#6E5E8E"};
 
 const fmtN = (v) => fmtEUR(v);
 
@@ -17,9 +17,9 @@ const fmtN = (v) => fmtEUR(v);
 // sempre se a alteração foi persistida.
 // ────────────────────────────────────────────────────────────────────────────
 function StatusBadge({ status }) {
-  if (status === "saving") return <span title="A guardar..." style={{ display: "inline-block", width: 6, height: 6, borderRadius: "50%", background: "#f59e0b", marginLeft: 6 }} />;
-  if (status === "saved") return <span title="Guardado" style={{ display: "inline-block", width: 6, height: 6, borderRadius: "50%", background: "#16a34a", marginLeft: 6 }} />;
-  if (status === "error") return <span title="Erro a guardar — tenta novamente" style={{ display: "inline-block", width: 6, height: 6, borderRadius: "50%", background: "#dc2626", marginLeft: 6 }} />;
+  if (status === "saving") return <span title="A guardar..." style={{ display: "inline-block", width: 6, height: 6, borderRadius: "50%", background: "#C19A4A", marginLeft: 6 }} />;
+  if (status === "saved") return <span title="Guardado" style={{ display: "inline-block", width: 6, height: 6, borderRadius: "50%", background:"#091C2A", marginLeft: 6 }} />;
+  if (status === "error") return <span title="Erro a guardar — tenta novamente" style={{ display: "inline-block", width: 6, height: 6, borderRadius: "50%", background: "#A93226", marginLeft: 6 }} />;
   return null;
 }
 
@@ -68,7 +68,7 @@ function EditableCategoria({ initialValue, movId, onSave, disabled, opcoes = CAT
         value={val}
         disabled={disabled}
         onChange={handleChange}
-        style={{ background: val ? "#f0f4ff" : "#f8f8f8", color: val ? "#4a6fa5" : "#aaa", border: `1px solid ${status === "error" ? "#dc2626" : "#eee"}`, borderRadius: 6, padding: "3px 6px", fontSize: 10, fontFamily: "monospace", cursor: "pointer", outline: "none", maxWidth: 160 }}
+        style={{ background: val ? "#EDF1F5" : "#F9F5EF", color: val ? "#2C4A63" : "#9DA2A6", border: `1px solid ${status === "error" ? "#A93226" : "#EFE8DE"}`, borderRadius: 6, padding: "3px 6px", fontSize: 10, fontFamily: "var(--fonte-numero)", cursor: "pointer", outline: "none", maxWidth: 160 }}
       >
         <option value="">-- sem categoria --</option>
         {/* O valor que já está gravado aparece mesmo que não pertença a esta
@@ -131,9 +131,9 @@ function EditableSubcategoria({ initialValue, categoria, movId, onSave, disabled
   return (
     <span style={{ display: "inline-flex", alignItems: "center" }}>
       <select value={val} disabled={disabled} onChange={handleChange}
-        style={{ background: val ? "#f5f3ff" : "#f8f8f8", color: val ? "#6d28d9" : "#aaa",
-                 border: `1px solid ${status === "error" ? "#dc2626" : "#eee"}`, borderRadius: 6,
-                 padding: "3px 6px", fontSize: 10, fontFamily: "monospace", cursor: "pointer",
+        style={{ background: val ? "#f5f3ff" : "#F9F5EF", color: val ? "#4E3F6B" : "#9DA2A6",
+                 border: `1px solid ${status === "error" ? "#A93226" : "#EFE8DE"}`, borderRadius: 6,
+                 padding: "3px 6px", fontSize: 10, fontFamily: "var(--fonte-numero)", cursor: "pointer",
                  outline: "none", maxWidth: 190 }}>
         <option value="">-- sem subcategoria --</option>
         {val && !opcoes.includes(val) && <option value={val}>{val} (fora do plano)</option>}
@@ -222,7 +222,7 @@ function EditableDetalhes({ initialValue, movId, onSave, disabled }) {
         disabled={disabled}
         onChange={handleChange}
         onBlur={handleBlur}
-        style={{ background: "transparent", border: "none", borderBottom: `1px solid ${status === "error" ? "#dc2626" : "#eee"}`, padding: "2px 4px", fontSize: 11, color: "#888", outline: "none", width: "100%", fontFamily: "inherit" }}
+        style={{ background: "transparent", border: "none", borderBottom: `1px solid ${status === "error" ? "#A93226" : "#EFE8DE"}`, padding: "2px 4px", fontSize: 11, color: "#7E8388", outline: "none", width: "100%", fontFamily: "inherit" }}
         placeholder="—"
       />
       <StatusBadge status={status} />
@@ -333,37 +333,37 @@ function CaixaDinamicoBar({
   // ─── Modo COMPACTO ──────────────────────────────────────────────────────
   if (!expanded) {
     return (
-      <div style={{ background: "#1a1a2e", borderRadius: 10, padding: "14px 20px", display: "flex", flexWrap: "wrap", justifyContent: "space-between", alignItems: "center", gap: 14 }}>
+      <div style={{ background: "#091C2A", borderRadius: 10, padding: "14px 20px", display: "flex", flexWrap: "wrap", justifyContent: "space-between", alignItems: "center", gap: 14 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 18, flexWrap: "wrap" }}>
-          <span style={{ color: "#aaa", fontSize: 13 }}>
+          <span style={{ color: "#9DA2A6", fontSize: 13 }}>
             <strong style={{ color: "#fff" }}>{checkedEmps.length}</strong> empresa(s) selecionada(s)
           </span>
           <div style={{ display: "flex", flexDirection: "column" }}>
-            <span style={{ color: "#888", fontSize: 9, fontFamily: "monospace", letterSpacing: 0.5, textTransform: "uppercase" }}>Hoje</span>
-            <span style={{ color: "#6B7C93", fontSize: 20, fontFamily: "monospace", fontWeight: 700, lineHeight: 1.1 }}>{fmtN(somaChecked)}</span>
+            <span style={{ color: "#7E8388", fontSize: 9, fontFamily: "var(--fonte-numero)", letterSpacing: 0.5, textTransform: "uppercase" }}>Hoje</span>
+            <span style={{ color: "#BAA685", fontSize: 20, fontFamily: "var(--fonte-numero)", fontWeight: 700, lineHeight: 1.1 }}>{fmtN(somaChecked)}</span>
           </div>
         </div>
 
         <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
           <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-start" }}>
-            <label style={{ color: "#888", fontSize: 9, fontFamily: "monospace", letterSpacing: 0.5, textTransform: "uppercase", marginBottom: 2 }}>Comparar com</label>
+            <label style={{ color: "#7E8388", fontSize: 9, fontFamily: "var(--fonte-numero)", letterSpacing: 0.5, textTransform: "uppercase", marginBottom: 2 }}>Comparar com</label>
             <input type="date" value={compareDate} onChange={e => setCompareDate(e.target.value)}
-              style={{ background: "#0f0f1a", color: "#fff", border: "1px solid #ffffff22", borderRadius: 6, padding: "5px 10px", fontSize: 12, fontFamily: "monospace", outline: "none", colorScheme: "dark" }} />
+              style={{ background: "#071320", color: "#fff", border: "1px solid #ffffff22", borderRadius: 6, padding: "5px 10px", fontSize: 12, fontFamily: "var(--fonte-numero)", outline: "none", colorScheme: "dark" }} />
           </div>
 
           <div style={{ display: "flex", flexDirection: "column" }}>
-            <span style={{ color: "#888", fontSize: 9, fontFamily: "monospace", letterSpacing: 0.5, textTransform: "uppercase" }}>
+            <span style={{ color: "#7E8388", fontSize: 9, fontFamily: "var(--fonte-numero)", letterSpacing: 0.5, textTransform: "uppercase" }}>
               Saldo a {compareDate}
             </span>
-            <span style={{ color: "#bbb", fontSize: 17, fontFamily: "monospace", fontWeight: 600, lineHeight: 1.1 }}>
+            <span style={{ color: "#B2B6B9", fontSize: 17, fontFamily: "var(--fonte-numero)", fontWeight: 600, lineHeight: 1.1 }}>
               {loadingHist ? "…" : fmtN(somaHistorica || 0)}
             </span>
           </div>
 
           {diffAbs !== null && !loadingHist && (
             <div style={{ display: "flex", flexDirection: "column", borderLeft: "1px solid #ffffff22", paddingLeft: 14 }}>
-              <span style={{ color: "#888", fontSize: 9, fontFamily: "monospace", letterSpacing: 0.5, textTransform: "uppercase" }}>Variação</span>
-              <span style={{ color: diffAbs >= 0 ? "#22c55e" : "#ef4444", fontSize: 17, fontFamily: "monospace", fontWeight: 700, lineHeight: 1.1 }}>
+              <span style={{ color: "#7E8388", fontSize: 9, fontFamily: "var(--fonte-numero)", letterSpacing: 0.5, textTransform: "uppercase" }}>Variação</span>
+              <span style={{ color: diffAbs >= 0 ? "#2A8A61" : "#B8402F", fontSize: 17, fontFamily: "var(--fonte-numero)", fontWeight: 700, lineHeight: 1.1 }}>
                 {diffAbs >= 0 ? "+" : ""}{fmtN(diffAbs)}
                 {diffPct !== null && (
                   <span style={{ fontSize: 11, marginLeft: 6, opacity: 0.8 }}>
@@ -376,7 +376,7 @@ function CaixaDinamicoBar({
 
           <button onClick={() => setExpanded(true)}
             title="Abrir vista detalhada por empresa"
-            style={{ background: "#6B7C93", color: "#1a1a2e", border: "none", padding: "8px 14px", borderRadius: 6, fontSize: 11, cursor: "pointer", fontWeight: 700, marginLeft: 4 }}>
+            style={{ background: "#BAA685", color: "#091C2A", border: "none", padding: "8px 14px", borderRadius: 6, fontSize: 11, cursor: "pointer", fontWeight: 700, marginLeft: 4 }}>
             📊 Ver detalhado
           </button>
 
@@ -391,12 +391,12 @@ function CaixaDinamicoBar({
 
   // ─── Modo EXPANDIDO ─────────────────────────────────────────────────────
   return (
-    <div style={{ background: "linear-gradient(135deg, #1a1a2e 0%, #2a2a4e 100%)", borderRadius: 14, padding: "20px 24px", color: "#fff", boxShadow: "0 8px 24px rgba(0,0,0,0.15)" }}>
+    <div style={{ background: "linear-gradient(135deg, #091C2A 0%, #0E2537 100%)", borderRadius: 14, padding: "20px 24px", color: "#fff", boxShadow: "0 8px 24px rgba(0,0,0,0.15)" }}>
       {/* Header */}
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 18, flexWrap: "wrap", gap: 12 }}>
         <div>
-          <div style={{ fontSize: 18, fontWeight: 700, color: "#6B7C93", fontFamily: "Georgia, serif" }}>Caixa Único Dinâmico</div>
-          <div style={{ fontSize: 12, color: "#888", marginTop: 4 }}>Selecione as SPV's para criar sua visualização personalizada</div>
+          <div style={{ fontSize: 18, fontWeight: 700, color: "#BAA685", fontFamily: "var(--fonte-titulo)" }}>Caixa Único Dinâmico</div>
+          <div style={{ fontSize: 12, color: "#7E8388", marginTop: 4 }}>Selecione as SPV's para criar sua visualização personalizada</div>
         </div>
         <button onClick={() => setExpanded(false)}
           style={{ background: "#ffffff15", color: "#fff", border: "1px solid #ffffff22", padding: "8px 16px", borderRadius: 8, fontSize: 12, cursor: "pointer", fontWeight: 600 }}>
@@ -407,14 +407,14 @@ function CaixaDinamicoBar({
       {/* Seletores de datas */}
       <div style={{ display: "flex", gap: 24, marginBottom: 18, paddingBottom: 18, borderBottom: "1px solid #ffffff15", flexWrap: "wrap" }}>
         <div>
-          <label style={{ display: "block", color: "#888", fontSize: 9, fontFamily: "monospace", letterSpacing: 0.5, textTransform: "uppercase", marginBottom: 5 }}>Selecione a Data Anterior</label>
+          <label style={{ display: "block", color: "#7E8388", fontSize: 9, fontFamily: "var(--fonte-numero)", letterSpacing: 0.5, textTransform: "uppercase", marginBottom: 5 }}>Selecione a Data Anterior</label>
           <input type="date" value={compareDate} onChange={e => setCompareDate(e.target.value)}
-            style={{ background: "#0f0f1a", color: "#fff", border: "1px solid #ffffff22", borderRadius: 6, padding: "8px 12px", fontSize: 13, fontFamily: "monospace", outline: "none", colorScheme: "dark" }} />
+            style={{ background: "#071320", color: "#fff", border: "1px solid #ffffff22", borderRadius: 6, padding: "8px 12px", fontSize: 13, fontFamily: "var(--fonte-numero)", outline: "none", colorScheme: "dark" }} />
         </div>
         <div>
-          <label style={{ display: "block", color: "#888", fontSize: 9, fontFamily: "monospace", letterSpacing: 0.5, textTransform: "uppercase", marginBottom: 5 }}>Selecione a Data Atual</label>
+          <label style={{ display: "block", color: "#7E8388", fontSize: 9, fontFamily: "var(--fonte-numero)", letterSpacing: 0.5, textTransform: "uppercase", marginBottom: 5 }}>Selecione a Data Atual</label>
           <input type="date" value={dataAtual} onChange={e => setDataAtual(e.target.value)}
-            style={{ background: "#0f0f1a", color: "#fff", border: "1px solid #ffffff22", borderRadius: 6, padding: "8px 12px", fontSize: 13, fontFamily: "monospace", outline: "none", colorScheme: "dark" }} />
+            style={{ background: "#071320", color: "#fff", border: "1px solid #ffffff22", borderRadius: 6, padding: "8px 12px", fontSize: 13, fontFamily: "var(--fonte-numero)", outline: "none", colorScheme: "dark" }} />
         </div>
       </div>
 
@@ -433,9 +433,9 @@ function CaixaDinamicoBar({
                   { label: "Valor Variação", sub: "€" },
                   { label: "% Variação", sub: "%" },
                 ].map((h, i) => (
-                  <th key={i} style={{ padding: "12px 16px", textAlign: i >= 3 ? "right" : "left", color: "#888", fontSize: 10, letterSpacing: "0.07em", textTransform: "uppercase", fontFamily: "monospace", borderBottom: "1px solid #ffffff15" }}>
+                  <th key={i} style={{ padding: "12px 16px", textAlign: i >= 3 ? "right" : "left", color: "#7E8388", fontSize: 10, letterSpacing: "0.07em", textTransform: "uppercase", fontFamily: "var(--fonte-numero)", borderBottom: "1px solid #ffffff15" }}>
                     <div>{h.label}</div>
-                    {h.sub && <div style={{ fontSize: 9, color: "#555", marginTop: 2, fontWeight: 400 }}>{h.sub}</div>}
+                    {h.sub && <div style={{ fontSize: 9, color: "#4A5055", marginTop: 2, fontWeight: 400 }}>{h.sub}</div>}
                   </th>
                 ))}
               </tr>
@@ -443,30 +443,30 @@ function CaixaDinamicoBar({
             <tbody>
               {linhasTabela.length === 0 && (
                 <tr>
-                  <td colSpan={7} style={{ padding: 30, textAlign: "center", color: "#666" }}>
+                  <td colSpan={7} style={{ padding: 30, textAlign: "center", color: "#5C6166" }}>
                     Seleciona uma ou mais empresas em cima para comparar
                   </td>
                 </tr>
               )}
               {linhasTabela.map(l => {
-                const varColor = l.variacaoAbs > 0 ? "#22c55e" : l.variacaoAbs < 0 ? "#ef4444" : "#888";
+                const varColor = l.variacaoAbs > 0 ? "#2A8A61" : l.variacaoAbs < 0 ? "#B8402F" : "#7E8388";
                 return (
                   <tr key={l.id} style={{ borderBottom: "1px solid #ffffff08" }}>
-                    <td style={{ padding: "10px 16px", color: "#aaa", fontFamily: "monospace" }}>{l.nipc || "—"}</td>
+                    <td style={{ padding: "10px 16px", color: "#9DA2A6", fontFamily: "var(--fonte-numero)" }}>{l.nipc || "—"}</td>
                     <td style={{ padding: "10px 16px", color: "#fff" }}>{l.nome}</td>
                     <td style={{ padding: "10px 16px" }}>
-                      <span style={{ background: "#ffffff10", color: "#bbb", padding: "3px 10px", borderRadius: 12, fontSize: 10, fontFamily: "monospace" }}>{l.projeto}</span>
+                      <span style={{ background: "#ffffff10", color: "#B2B6B9", padding: "3px 10px", borderRadius: 12, fontSize: 10, fontFamily: "var(--fonte-numero)" }}>{l.projeto}</span>
                     </td>
-                    <td style={{ padding: "10px 16px", color: l.valorAnterior < 0 ? "#ef4444" : "#22c55e", fontFamily: "monospace", fontWeight: 600, textAlign: "right" }}>
+                    <td style={{ padding: "10px 16px", color: l.valorAnterior < 0 ? "#B8402F" : "#2A8A61", fontFamily: "var(--fonte-numero)", fontWeight: 600, textAlign: "right" }}>
                       {loadingHist ? "…" : fmtN(l.valorAnterior)}
                     </td>
-                    <td style={{ padding: "10px 16px", color: l.valorAtual < 0 ? "#ef4444" : "#22c55e", fontFamily: "monospace", fontWeight: 600, textAlign: "right" }}>
+                    <td style={{ padding: "10px 16px", color: l.valorAtual < 0 ? "#B8402F" : "#2A8A61", fontFamily: "var(--fonte-numero)", fontWeight: 600, textAlign: "right" }}>
                       {loadingAtual ? "…" : fmtN(l.valorAtual)}
                     </td>
-                    <td style={{ padding: "10px 16px", color: varColor, fontFamily: "monospace", fontWeight: 700, textAlign: "right" }}>
+                    <td style={{ padding: "10px 16px", color: varColor, fontFamily: "var(--fonte-numero)", fontWeight: 700, textAlign: "right" }}>
                       {loadingHist || loadingAtual ? "…" : (l.variacaoAbs >= 0 ? "+" : "") + fmtN(l.variacaoAbs)}
                     </td>
-                    <td style={{ padding: "10px 16px", color: varColor, fontFamily: "monospace", fontWeight: 700, textAlign: "right" }}>
+                    <td style={{ padding: "10px 16px", color: varColor, fontFamily: "var(--fonte-numero)", fontWeight: 700, textAlign: "right" }}>
                       {loadingHist || loadingAtual ? "…" : (l.variacaoPct === null ? "—" : fmtPctSinal(l.variacaoPct))}
                     </td>
                   </tr>
@@ -474,19 +474,19 @@ function CaixaDinamicoBar({
               })}
               {linhasTabela.length > 0 && (
                 <tr style={{ background: "#ffffff10", borderTop: "1px solid #ffffff22" }}>
-                  <td style={{ padding: "12px 16px", fontWeight: 700, color: "#6B7C93", fontFamily: "monospace", fontSize: 11, textTransform: "uppercase", letterSpacing: "0.05em" }} colSpan={3}>
+                  <td style={{ padding: "12px 16px", fontWeight: 700, color: "#BAA685", fontFamily: "var(--fonte-numero)", fontSize: 11, textTransform: "uppercase", letterSpacing: "0.05em" }} colSpan={3}>
                     ⚪ Totalização
                   </td>
-                  <td style={{ padding: "12px 16px", color: totaisTabela.anterior < 0 ? "#ef4444" : "#22c55e", fontFamily: "monospace", fontWeight: 800, textAlign: "right" }}>
+                  <td style={{ padding: "12px 16px", color: totaisTabela.anterior < 0 ? "#B8402F" : "#2A8A61", fontFamily: "var(--fonte-numero)", fontWeight: 800, textAlign: "right" }}>
                     {fmtN(totaisTabela.anterior)}
                   </td>
-                  <td style={{ padding: "12px 16px", color: totaisTabela.atual < 0 ? "#ef4444" : "#22c55e", fontFamily: "monospace", fontWeight: 800, textAlign: "right" }}>
+                  <td style={{ padding: "12px 16px", color: totaisTabela.atual < 0 ? "#B8402F" : "#2A8A61", fontFamily: "var(--fonte-numero)", fontWeight: 800, textAlign: "right" }}>
                     {fmtN(totaisTabela.atual)}
                   </td>
-                  <td style={{ padding: "12px 16px", color: totaisTabela.variacaoAbs >= 0 ? "#22c55e" : "#ef4444", fontFamily: "monospace", fontWeight: 800, textAlign: "right" }}>
+                  <td style={{ padding: "12px 16px", color: totaisTabela.variacaoAbs >= 0 ? "#2A8A61" : "#B8402F", fontFamily: "var(--fonte-numero)", fontWeight: 800, textAlign: "right" }}>
                     {(totaisTabela.variacaoAbs >= 0 ? "+" : "") + fmtN(totaisTabela.variacaoAbs)}
                   </td>
-                  <td style={{ padding: "12px 16px", color: totaisTabela.variacaoAbs >= 0 ? "#22c55e" : "#ef4444", fontFamily: "monospace", fontWeight: 800, textAlign: "right" }}>
+                  <td style={{ padding: "12px 16px", color: totaisTabela.variacaoAbs >= 0 ? "#2A8A61" : "#B8402F", fontFamily: "var(--fonte-numero)", fontWeight: 800, textAlign: "right" }}>
                     {totalVarPct === null ? "—" : fmtPctSinal(totalVarPct)}
                   </td>
                 </tr>
@@ -1562,10 +1562,10 @@ function GerarApresentacaoModal({ empresasEnriquecidas, onClose }) {
         style={{ background: "#fff", borderRadius: 12, width: "min(900px, 100%)", maxHeight: "92vh", display: "flex", flexDirection: "column", overflow: "hidden", boxShadow: "0 20px 60px rgba(0,0,0,0.4)" }}>
 
         {/* Header */}
-        <div style={{ padding: "18px 24px", borderBottom: "1px solid #eee", background: "linear-gradient(135deg, #1a1a2e 0%, #16213e 100%)", color: "#fff", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+        <div style={{ padding: "18px 24px", borderBottom: "1px solid #EFE8DE", background: "linear-gradient(135deg, #091C2A 0%, #0E2537 100%)", color: "#fff", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
           <div>
-            <div style={{ fontSize: 17, fontWeight: 700, fontFamily: "Georgia,serif" }}>📊 Gerar Apresentação</div>
-            <div style={{ fontSize: 11, color: "#6B7C93", marginTop: 3, fontFamily: "monospace", letterSpacing: 0.5 }}>VARIAÇÃO DE CAIXA + MOVIMENTAÇÕES DO PERÍODO</div>
+            <div style={{ fontSize: 17, fontWeight: 700, fontFamily: "var(--fonte-titulo)" }}>📊 Gerar Apresentação</div>
+            <div style={{ fontSize: 11, color: "#BAA685", marginTop: 3, fontFamily: "var(--fonte-numero)", letterSpacing: 0.5 }}>VARIAÇÃO DE CAIXA + MOVIMENTAÇÕES DO PERÍODO</div>
           </div>
           <button onClick={onClose} disabled={gerando}
             style={{ background: "#ffffff22", color: "#fff", border: "none", padding: "6px 14px", borderRadius: 8, fontSize: 12, fontWeight: 600, cursor: gerando ? "not-allowed" : "pointer" }}>
@@ -1578,15 +1578,15 @@ function GerarApresentacaoModal({ empresasEnriquecidas, onClose }) {
 
           {/* Modo */}
           <div style={{ marginBottom: 22 }}>
-            <div style={{ fontSize: 11, color: "#888", fontFamily: "monospace", letterSpacing: 0.5, textTransform: "uppercase", marginBottom: 8 }}>Tipo de apresentação</div>
+            <div style={{ fontSize: 11, color: "#7E8388", fontFamily: "var(--fonte-numero)", letterSpacing: 0.5, textTransform: "uppercase", marginBottom: 8 }}>Tipo de apresentação</div>
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
               <button onClick={() => trocaModo("mensal")} disabled={gerando}
                 style={{
-                  background: modo === "mensal" ? "#1a1a2e" : "#fafafa",
-                  color: modo === "mensal" ? "#6B7C93" : "#888",
-                  border: `2px solid ${modo === "mensal" ? "#1a1a2e" : "#e5e5e5"}`,
+                  background: modo === "mensal" ? "#091C2A" : "#FBF7F1",
+                  color: modo === "mensal" ? "#BAA685" : "#7E8388",
+                  border: `2px solid ${modo === "mensal" ? "#091C2A" : "#E3D9CC"}`,
                   padding: "14px 16px", borderRadius: 10, cursor: gerando ? "not-allowed" : "pointer",
-                  fontWeight: 700, textAlign: "left", fontFamily: "'DM Sans', sans-serif",
+                  fontWeight: 700, textAlign: "left", fontFamily: "var(--fonte-titulo)",
                 }}>
                 <div style={{ fontSize: 14, marginBottom: 3 }}>📅 Mensal (detalhado)</div>
                 <div style={{ fontSize: 10, fontWeight: 500, opacity: 0.85, letterSpacing: 0.3 }}>
@@ -1595,11 +1595,11 @@ function GerarApresentacaoModal({ empresasEnriquecidas, onClose }) {
               </button>
               <button onClick={() => trocaModo("anual")} disabled={gerando}
                 style={{
-                  background: modo === "anual" ? "#1a1a2e" : "#fafafa",
-                  color: modo === "anual" ? "#6B7C93" : "#888",
-                  border: `2px solid ${modo === "anual" ? "#1a1a2e" : "#e5e5e5"}`,
+                  background: modo === "anual" ? "#091C2A" : "#FBF7F1",
+                  color: modo === "anual" ? "#BAA685" : "#7E8388",
+                  border: `2px solid ${modo === "anual" ? "#091C2A" : "#E3D9CC"}`,
                   padding: "14px 16px", borderRadius: 10, cursor: gerando ? "not-allowed" : "pointer",
-                  fontWeight: 700, textAlign: "left", fontFamily: "'DM Sans', sans-serif",
+                  fontWeight: 700, textAlign: "left", fontFamily: "var(--fonte-titulo)",
                 }}>
                 <div style={{ fontSize: 14, marginBottom: 3 }}>📈 Anual (resumo agregado)</div>
                 <div style={{ fontSize: 10, fontWeight: 500, opacity: 0.85, letterSpacing: 0.3 }}>
@@ -1611,20 +1611,20 @@ function GerarApresentacaoModal({ empresasEnriquecidas, onClose }) {
 
           {/* Período */}
           <div style={{ marginBottom: 22 }}>
-            <div style={{ fontSize: 11, color: "#888", fontFamily: "monospace", letterSpacing: 0.5, textTransform: "uppercase", marginBottom: 8 }}>1. Período</div>
+            <div style={{ fontSize: 11, color: "#7E8388", fontFamily: "var(--fonte-numero)", letterSpacing: 0.5, textTransform: "uppercase", marginBottom: 8 }}>1. Período</div>
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
               <div>
-                <div style={{ fontSize: 10, color: "#aaa", fontFamily: "monospace", marginBottom: 4 }}>DATA INICIAL (saldo de referência anterior)</div>
+                <div style={{ fontSize: 10, color: "#9DA2A6", fontFamily: "var(--fonte-numero)", marginBottom: 4 }}>DATA INICIAL (saldo de referência anterior)</div>
                 <input type="date" value={dataInicio} onChange={e => setDataInicio(e.target.value)} disabled={gerando}
-                  style={{ width: "100%", padding: "10px 12px", border: "1px solid #ddd", borderRadius: 8, fontSize: 13, fontFamily: "monospace" }} />
+                  style={{ width: "100%", padding: "10px 12px", border: "1px solid #D8CCBB", borderRadius: 8, fontSize: 13, fontFamily: "var(--fonte-numero)" }} />
               </div>
               <div>
-                <div style={{ fontSize: 10, color: "#aaa", fontFamily: "monospace", marginBottom: 4 }}>DATA FINAL</div>
+                <div style={{ fontSize: 10, color: "#9DA2A6", fontFamily: "var(--fonte-numero)", marginBottom: 4 }}>DATA FINAL</div>
                 <input type="date" value={dataFim} onChange={e => setDataFim(e.target.value)} disabled={gerando}
-                  style={{ width: "100%", padding: "10px 12px", border: "1px solid #ddd", borderRadius: 8, fontSize: 13, fontFamily: "monospace" }} />
+                  style={{ width: "100%", padding: "10px 12px", border: "1px solid #D8CCBB", borderRadius: 8, fontSize: 13, fontFamily: "var(--fonte-numero)" }} />
               </div>
             </div>
-            <div style={{ fontSize: 11, color: "#888", marginTop: 6, fontStyle: "italic" }}>
+            <div style={{ fontSize: 11, color: "#7E8388", marginTop: 6, fontStyle: "italic" }}>
               {modo === "mensal"
                 ? "O slide de variação compara os saldos a estas duas datas. Os slides de movimentações incluem tudo o que passou entre elas."
                 : "Modo anual: um slide-síntese por empresa com saldos positivos, negativos e gráfico mensal — sem detalhe de lançamentos."}
@@ -1634,21 +1634,21 @@ function GerarApresentacaoModal({ empresasEnriquecidas, onClose }) {
           {/* Empresas */}
           <div style={{ marginBottom: 22 }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
-              <div style={{ fontSize: 11, color: "#888", fontFamily: "monospace", letterSpacing: 0.5, textTransform: "uppercase" }}>2. Empresas ({empSel.length}/{empresasEnriquecidas.length})</div>
+              <div style={{ fontSize: 11, color: "#7E8388", fontFamily: "var(--fonte-numero)", letterSpacing: 0.5, textTransform: "uppercase" }}>2. Empresas ({empSel.length}/{empresasEnriquecidas.length})</div>
               <div style={{ display: "flex", gap: 8 }}>
                 <button onClick={() => setEmpSel(empresasEnriquecidas.map(e => e.id))} disabled={gerando}
-                  style={{ background: "#f0f4ff", border: "none", padding: "4px 10px", borderRadius: 6, fontSize: 10, cursor: "pointer", color: "#4a6fa5", fontWeight: 600 }}>Todas</button>
+                  style={{ background: "#EDF1F5", border: "none", padding: "4px 10px", borderRadius: 6, fontSize: 10, cursor: "pointer", color: "#2C4A63", fontWeight: 600 }}>Todas</button>
                 <button onClick={() => setEmpSel([])} disabled={gerando}
-                  style={{ background: "#fff0f0", border: "none", padding: "4px 10px", borderRadius: 6, fontSize: 10, cursor: "pointer", color: "#a54a4a", fontWeight: 600 }}>Nenhuma</button>
+                  style={{ background: "#FBEDEB", border: "none", padding: "4px 10px", borderRadius: 6, fontSize: 10, cursor: "pointer", color: "#A93226", fontWeight: 600 }}>Nenhuma</button>
               </div>
             </div>
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(180px, 1fr))", gap: 6 }}>
               {empresasEnriquecidas.map(emp => {
                 const checked = empSel.includes(emp.id);
                 return (
-                  <label key={emp.id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 10px", background: checked ? "#f0f4ff" : "#fafafa", borderRadius: 7, cursor: gerando ? "not-allowed" : "pointer", border: `1px solid ${checked ? "#c7d2fe" : "#eee"}` }}>
+                  <label key={emp.id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 10px", background: checked ? "#EDF1F5" : "#FBF7F1", borderRadius: 7, cursor: gerando ? "not-allowed" : "pointer", border: `1px solid ${checked ? "#CBDAE5" : "#EFE8DE"}` }}>
                     <input type="checkbox" checked={checked} onChange={() => toggleEmp(emp.id)} disabled={gerando} style={{ margin: 0 }} />
-                    <span style={{ fontSize: 12, fontWeight: 600, color: "#1a1a2e", flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{emp.nome}</span>
+                    <span style={{ fontSize: 12, fontWeight: 600, color: "#091C2A", flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{emp.nome}</span>
                   </label>
                 );
               })}
@@ -1658,29 +1658,29 @@ function GerarApresentacaoModal({ empresasEnriquecidas, onClose }) {
           {/* Contas (dentro das empresas seleccionadas) */}
           <div style={{ marginBottom: 22 }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
-              <div style={{ fontSize: 11, color: "#888", fontFamily: "monospace", letterSpacing: 0.5, textTransform: "uppercase" }}>3. Contas ({[...contaSel].filter(id => empresasEnriquecidas.some(e => empSel.includes(e.id) && e.contas.some(c => c.id === id))).length} incluídas)</div>
+              <div style={{ fontSize: 11, color: "#7E8388", fontFamily: "var(--fonte-numero)", letterSpacing: 0.5, textTransform: "uppercase" }}>3. Contas ({[...contaSel].filter(id => empresasEnriquecidas.some(e => empSel.includes(e.id) && e.contas.some(c => c.id === id))).length} incluídas)</div>
               <div style={{ display: "flex", gap: 8 }}>
                 <button onClick={() => {
                   const s = new Set();
                   empresasEnriquecidas.forEach(e => e.contas.forEach(c => s.add(c.id)));
                   setContaSel(s);
                 }} disabled={gerando}
-                  style={{ background: "#f0f4ff", border: "none", padding: "4px 10px", borderRadius: 6, fontSize: 10, cursor: "pointer", color: "#4a6fa5", fontWeight: 600 }}>Todas</button>
+                  style={{ background: "#EDF1F5", border: "none", padding: "4px 10px", borderRadius: 6, fontSize: 10, cursor: "pointer", color: "#2C4A63", fontWeight: 600 }}>Todas</button>
                 <button onClick={() => setContaSel(new Set())} disabled={gerando}
-                  style={{ background: "#fff0f0", border: "none", padding: "4px 10px", borderRadius: 6, fontSize: 10, cursor: "pointer", color: "#a54a4a", fontWeight: 600 }}>Nenhuma</button>
+                  style={{ background: "#FBEDEB", border: "none", padding: "4px 10px", borderRadius: 6, fontSize: 10, cursor: "pointer", color: "#A93226", fontWeight: 600 }}>Nenhuma</button>
               </div>
             </div>
-            <div style={{ maxHeight: 200, overflow: "auto", background: "#fafafa", border: "1px solid #eee", borderRadius: 8, padding: 8 }}>
+            <div style={{ maxHeight: 200, overflow: "auto", background: "#FBF7F1", border: "1px solid #EFE8DE", borderRadius: 8, padding: 8 }}>
               {empresasEnriquecidas.filter(e => empSel.includes(e.id)).map(emp => (
                 <div key={emp.id} style={{ marginBottom: 8 }}>
-                  <div style={{ fontSize: 10, fontWeight: 700, color: "#1a1a2e", textTransform: "uppercase", fontFamily: "monospace", marginBottom: 4, letterSpacing: 0.5 }}>{emp.nome}</div>
+                  <div style={{ fontSize: 10, fontWeight: 700, color: "#091C2A", textTransform: "uppercase", fontFamily: "var(--fonte-numero)", marginBottom: 4, letterSpacing: 0.5 }}>{emp.nome}</div>
                   <div style={{ display: "flex", flexWrap: "wrap", gap: 6, paddingLeft: 8 }}>
                     {emp.contas.map(c => {
                       const checked = contaSel.has(c.id);
                       return (
-                        <label key={c.id} style={{ display: "flex", alignItems: "center", gap: 5, padding: "4px 9px", background: checked ? "#e0e7ff" : "#fff", borderRadius: 5, cursor: gerando ? "not-allowed" : "pointer", border: `1px solid ${checked ? "#a5b4fc" : "#eee"}`, fontSize: 10 }}>
+                        <label key={c.id} style={{ display: "flex", alignItems: "center", gap: 5, padding: "4px 9px", background: checked ? "#E0E9F0" : "#fff", borderRadius: 5, cursor: gerando ? "not-allowed" : "pointer", border: `1px solid ${checked ? "#a5b4fc" : "#EFE8DE"}`, fontSize: 10 }}>
                           <input type="checkbox" checked={checked} onChange={() => toggleConta(c.id)} disabled={gerando} style={{ margin: 0, width: 12, height: 12 }} />
-                          <span style={{ fontFamily: "monospace", color: "#1a1a2e", fontWeight: 600 }}>{c.banco}</span>
+                          <span style={{ fontFamily: "var(--fonte-numero)", color: "#091C2A", fontWeight: 600 }}>{c.banco}</span>
                         </label>
                       );
                     })}
@@ -1688,36 +1688,36 @@ function GerarApresentacaoModal({ empresasEnriquecidas, onClose }) {
                 </div>
               ))}
               {empSel.length === 0 && (
-                <div style={{ textAlign: "center", color: "#aaa", fontSize: 12, padding: 20, fontStyle: "italic" }}>Selecciona pelo menos uma empresa para escolher contas.</div>
+                <div style={{ textAlign: "center", color: "#9DA2A6", fontSize: 12, padding: 20, fontStyle: "italic" }}>Selecciona pelo menos uma empresa para escolher contas.</div>
               )}
             </div>
           </div>
 
           {/* Erro */}
           {erro && (
-            <div style={{ background: "#fee2e2", color: "#991b1b", padding: 12, borderRadius: 8, fontSize: 12, marginBottom: 12, fontWeight: 600 }}>
+            <div style={{ background: "#F6DED9", color: "#8E2A20", padding: 12, borderRadius: 8, fontSize: 12, marginBottom: 12, fontWeight: 600 }}>
               ⚠️ {erro}
             </div>
           )}
           {progresso && (
-            <div style={{ background: "#fef3c7", color: "#92400e", padding: 12, borderRadius: 8, fontSize: 12, marginBottom: 12, fontFamily: "monospace" }}>
+            <div style={{ background: "#F6ECD6", color: "#7A5A22", padding: 12, borderRadius: 8, fontSize: 12, marginBottom: 12, fontFamily: "var(--fonte-numero)" }}>
               ⏳ {progresso}
             </div>
           )}
         </div>
 
         {/* Footer */}
-        <div style={{ padding: "16px 24px", borderTop: "1px solid #eee", background: "#fafafa", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-          <div style={{ fontSize: 11, color: "#888", fontFamily: "monospace" }}>
+        <div style={{ padding: "16px 24px", borderTop: "1px solid #EFE8DE", background: "#FBF7F1", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+          <div style={{ fontSize: 11, color: "#7E8388", fontFamily: "var(--fonte-numero)" }}>
             {contasParaProcessar.length} conta{contasParaProcessar.length === 1 ? "" : "s"} vão ser processadas
           </div>
           <div style={{ display: "flex", gap: 10 }}>
             <button onClick={onClose} disabled={gerando}
-              style={{ background: "#eee", border: "none", padding: "10px 16px", borderRadius: 7, fontSize: 12, cursor: gerando ? "not-allowed" : "pointer", fontWeight: 600 }}>
+              style={{ background: "#EFE8DE", border: "none", padding: "10px 16px", borderRadius: 7, fontSize: 12, cursor: gerando ? "not-allowed" : "pointer", fontWeight: 600 }}>
               Cancelar
             </button>
             <button onClick={gerar} disabled={gerando || contasParaProcessar.length === 0}
-              style={{ background: gerando ? "#888" : "#1a1a2e", color: "#6B7C93", border: "none", padding: "10px 20px", borderRadius: 7, fontSize: 12, cursor: (gerando || contasParaProcessar.length === 0) ? "not-allowed" : "pointer", fontWeight: 700, letterSpacing: 0.5 }}>
+              style={{ background: gerando ? "#7E8388" : "#091C2A", color: "#BAA685", border: "none", padding: "10px 20px", borderRadius: 7, fontSize: 12, cursor: (gerando || contasParaProcessar.length === 0) ? "not-allowed" : "pointer", fontWeight: 700, letterSpacing: 0.5 }}>
               {gerando ? "A gerar…" : (modo === "anual" ? "📈 Gerar PPTX Anual →" : "📅 Gerar PPTX Mensal →")}
             </button>
           </div>
@@ -1776,14 +1776,14 @@ export default function ExtratosView({ EMPRESAS, extrato, caixaUnico, setCaixaUn
 
   const estadoFatura = (m) => {
     const v = Number(m.valor) || 0;
-    if (v >= 0) return { tipo: "na", txt: "—", cor: "#ddd", fundo: "transparent" };
+    if (v >= 0) return { tipo: "na", txt: "—", cor: "#D8CCBB", fundo: "transparent" };
     if (/internal transfer|transferência interna/i.test(m.categoria || "")) {
-      return { tipo: "na", txt: "interna", cor: "#bbb", fundo: "transparent" };
+      return { tipo: "na", txt: "interna", cor: "#B2B6B9", fundo: "transparent" };
     }
     const manual = m.fatura_estado || (m.fatura_ok === true ? "ok" : m.fatura_ok === false ? "pendente" : null);
-    if (manual === "ok")       return { tipo: "ok",   txt: "✓ OK",     cor: "#15803d", fundo: "#dcfce7" };
-    if (manual === "pendente") return { tipo: "pend", txt: "pendente", cor: "#b45309", fundo: "#fef3c7" };
-    if (manual === "sem")      return { tipo: "sem",  txt: "não terá", cor: "#64748b", fundo: "#f1f5f9" };
+    if (manual === "ok")       return { tipo: "ok",   txt: "✓ OK",     cor: "#1B6A49", fundo: "#E2EFE8" };
+    if (manual === "pendente") return { tipo: "pend", txt: "pendente", cor: "#96702A", fundo: "#F6ECD6" };
+    if (manual === "sem")      return { tipo: "sem",  txt: "não terá", cor: "#6E7378", fundo: "#F2EDE5" };
 
     const alvo = Math.abs(v);
     const dm = new Date(String(m.data || "").slice(0, 10) + "T00:00:00").getTime();
@@ -1794,8 +1794,8 @@ export default function ExtratosView({ EMPRESAS, extrato, caixaUnico, setCaixaUn
       return Math.abs(new Date(String(df).slice(0, 10) + "T00:00:00").getTime() - dm) <= 45 * 86400000;
     });
     return achou
-      ? { tipo: "auto", txt: "✓ auto",   cor: "#0369a1", fundo: "#e0f2fe" }
-      : { tipo: "pend", txt: "pendente", cor: "#b45309", fundo: "#fef3c7" };
+      ? { tipo: "auto", txt: "✓ auto",   cor: "#2C4A63", fundo: "#E6EDF3" }
+      : { tipo: "pend", txt: "pendente", cor: "#96702A", fundo: "#F6ECD6" };
   };
 
   // Ciclo ao clicar: automático → OK → pendente → não terá → automático
@@ -2031,7 +2031,7 @@ export default function ExtratosView({ EMPRESAS, extrato, caixaUnico, setCaixaUn
   }, [movCounts, caixaUnico]);
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 16, fontFamily: "'DM Sans', sans-serif" }}>
+    <div style={{ display: "flex", flexDirection: "column", gap: 16, fontFamily: "var(--fonte-titulo)" }}>
 
       {/* Soma selecionados + comparação histórica */}
       {somaChecked !== null && (
@@ -2051,23 +2051,23 @@ export default function ExtratosView({ EMPRESAS, extrato, caixaUnico, setCaixaUn
       )}
 
       {/* Header */}
-      <div style={{ background: "#fff", border: "1px solid #f0f0f0", borderRadius: 12, padding: "14px 20px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+      <div style={{ background: "#fff", border: "1px solid #E7DED2", borderRadius: 12, padding: "14px 20px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
         <div>
-          <div style={{ fontSize: 15, fontWeight: 700, color: "#1a1a2e", fontFamily: "Georgia,serif" }}>Extratos — Caixa Único</div>
-          <div style={{ fontSize: 12, color: "#aaa", marginTop: 2 }}>Últimos 12 meses · Contas ativas (à esquerda de "Não Usuais")</div>
+          <div style={{ fontSize: 15, fontWeight: 700, color: "#091C2A", fontFamily: "var(--fonte-titulo)" }}>Extratos — Caixa Único</div>
+          <div style={{ fontSize: 12, color: "#9DA2A6", marginTop: 2 }}>Últimos 12 meses · Contas ativas (à esquerda de "Não Usuais")</div>
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
           <button onClick={() => setShowApresentacao(true)}
             title="Gerar apresentação PPTX com variação de caixa e movimentos"
-            style={{ background: "#1a1a2e", border: "none", color: "#6B7C93", padding: "8px 14px", borderRadius: 7, fontSize: 11, cursor: "pointer", fontWeight: 700, letterSpacing: 0.3 }}>
+            style={{ background: "#091C2A", border: "none", color: "#BAA685", padding: "8px 14px", borderRadius: 7, fontSize: 11, cursor: "pointer", fontWeight: 700, letterSpacing: 0.3 }}>
             📊 Gerar Apresentação
           </button>
           <button onClick={() => { reloadSaldos?.(); reload?.(); }}
             title="Atualizar saldos e movimentos"
-            style={{ background: "#f0f4ff", border: "none", color: "#4a6fa5", padding: "6px 12px", borderRadius: 7, fontSize: 11, cursor: "pointer", fontWeight: 600 }}>
+            style={{ background: "#EDF1F5", border: "none", color: "#2C4A63", padding: "6px 12px", borderRadius: 7, fontSize: 11, cursor: "pointer", fontWeight: 600 }}>
             🔄 Atualizar
           </button>
-          <div style={{ fontSize: 12, color: "#6B7C93", fontFamily: "monospace", fontWeight: 700 }}>
+          <div style={{ fontSize: 12, color: "#BAA685", fontFamily: "var(--fonte-numero)", fontWeight: 700 }}>
             {totalMovsGlobal > 0 ? fmtInt(totalMovsGlobal) + " movimentos" : "A carregar..."}
           </div>
         </div>
@@ -2085,15 +2085,15 @@ export default function ExtratosView({ EMPRESAS, extrato, caixaUnico, setCaixaUn
       {agruparPorGrupo(empresasEnriquecidas).map(bloco => (
       <div key={bloco.grupo} style={{ display: "flex", flexDirection: "column", gap: 10 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-          <span style={{ background: bloco.info.cor, color: "#fff", fontSize: 11, fontWeight: 800, padding: "3px 12px", borderRadius: 6, fontFamily: "monospace", letterSpacing: "0.08em" }}>
+          <span style={{ background: bloco.info.cor, color: "#fff", fontSize: 11, fontWeight: 800, padding: "3px 12px", borderRadius: 6, fontFamily: "var(--fonte-numero)", letterSpacing: "0.08em" }}>
             {bloco.info.nome}
           </span>
-          <span style={{ fontSize: 11, color: "#bbb", fontFamily: "monospace" }}>
+          <span style={{ fontSize: 11, color: "#B2B6B9", fontFamily: "var(--fonte-numero)" }}>
             {bloco.empresas.length} {bloco.empresas.length === 1 ? "empresa" : "empresas"}
             {"  ·  "}
             {fmtN(bloco.empresas.reduce((s, e) => s + e.contas.reduce((t, c) => t + c.saldo, 0), 0))}
           </span>
-          <div style={{ flex: 1, height: 1, background: "#eee" }} />
+          <div style={{ flex: 1, height: 1, background: "#EFE8DE" }} />
         </div>
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))", gap: 14 }}>
         {bloco.empresas.map(emp => {
@@ -2103,7 +2103,7 @@ export default function ExtratosView({ EMPRESAS, extrato, caixaUnico, setCaixaUn
           const checked = checkedEmps.includes(emp.id);
           const isPositive = total >= 0;
           // Cor da borda em função do saldo
-          const accentColor = isPositive ? "#16a34a" : "#dc2626";
+          const accentColor = isPositive ? "#1F7A54" : "#A93226";
 
           return (
             <div key={emp.id} style={{ position: "relative" }}>
@@ -2113,13 +2113,13 @@ export default function ExtratosView({ EMPRESAS, extrato, caixaUnico, setCaixaUn
                 onClick={e => { e.stopPropagation(); e.preventDefault(); toggleCheck(emp.id); }}
                 style={{
                   position: "absolute", top: 10, right: 10, width: 18, height: 18,
-                  border: `2px solid ${checked ? "#6B7C93" : "#d0d0d0"}`, borderRadius: 4,
-                  background: checked ? "#1a1a2e" : "#fff",
+                  border: `2px solid ${checked ? "#BAA685" : "#d0d0d0"}`, borderRadius: 4,
+                  background: checked ? "#091C2A" : "#fff",
                   display: "flex", alignItems: "center", justifyContent: "center",
                   cursor: "pointer", zIndex: 10, transition: "all 0.15s"
                 }}
               >
-                {checked && <span style={{ color: "#6B7C93", fontSize: 11, fontWeight: 700, lineHeight: 1 }}>✓</span>}
+                {checked && <span style={{ color: "#BAA685", fontSize: 11, fontWeight: 700, lineHeight: 1 }}>✓</span>}
               </div>
 
               {/* Card body */}
@@ -2127,9 +2127,9 @@ export default function ExtratosView({ EMPRESAS, extrato, caixaUnico, setCaixaUn
                 onClick={() => openEmp(emp)}
                 style={{
                   background: active
-                    ? "linear-gradient(135deg, #1a1a2e 0%, #2a2a4e 100%)"
+                    ? "linear-gradient(135deg, #091C2A 0%, #0E2537 100%)"
                     : "#fff",
-                  border: active ? "1px solid #1a1a2e" : "1px solid #ececec",
+                  border: active ? "1px solid #091C2A" : "1px solid #EDE5DA",
                   borderRadius: 14,
                   padding: "16px 18px",
                   cursor: "pointer",
@@ -2150,7 +2150,7 @@ export default function ExtratosView({ EMPRESAS, extrato, caixaUnico, setCaixaUn
                 }}
                 onMouseLeave={e => {
                   if (!active) {
-                    e.currentTarget.style.borderColor = "#ececec";
+                    e.currentTarget.style.borderColor = "#EDE5DA";
                     e.currentTarget.style.transform = "translateY(0)";
                     e.currentTarget.style.boxShadow = "0 1px 3px rgba(0,0,0,0.04)";
                   }
@@ -2159,7 +2159,7 @@ export default function ExtratosView({ EMPRESAS, extrato, caixaUnico, setCaixaUn
                 {/* Faixa colorida lateral */}
                 <div style={{
                   position: "absolute", left: 0, top: 0, bottom: 0, width: 3,
-                  background: active ? "#6B7C93" : accentColor,
+                  background: active ? "#BAA685" : accentColor,
                   opacity: active ? 1 : 0.7,
                 }} />
 
@@ -2168,10 +2168,10 @@ export default function ExtratosView({ EMPRESAS, extrato, caixaUnico, setCaixaUn
                   <div style={{
                     fontSize: 13,
                     fontWeight: 700,
-                    color: active ? "#6B7C93" : "#1a1a2e",
+                    color: active ? "#BAA685" : "#091C2A",
                     marginBottom: 2,
                     paddingRight: 24,
-                    fontFamily: "Georgia, serif",
+                    fontFamily: "var(--fonte-titulo)",
                     letterSpacing: -0.2,
                   }}>
                     {emp.nome}
@@ -2180,8 +2180,8 @@ export default function ExtratosView({ EMPRESAS, extrato, caixaUnico, setCaixaUn
                   {/* NIPC */}
                   <div style={{
                     fontSize: 9,
-                    color: active ? "#888" : "#bbb",
-                    fontFamily: "monospace",
+                    color: active ? "#7E8388" : "#B2B6B9",
+                    fontFamily: "var(--fonte-numero)",
                     marginBottom: 12,
                     letterSpacing: "0.05em",
                   }}>
@@ -2192,7 +2192,7 @@ export default function ExtratosView({ EMPRESAS, extrato, caixaUnico, setCaixaUn
                   <div style={{
                     fontSize: 18,
                     fontWeight: 800,
-                    fontFamily: "monospace",
+                    fontFamily: "var(--fonte-numero)",
                     color: active ? "#fff" : accentColor,
                     marginBottom: 12,
                     letterSpacing: -0.5,
@@ -2207,7 +2207,7 @@ export default function ExtratosView({ EMPRESAS, extrato, caixaUnico, setCaixaUn
                     alignItems: "center",
                     gap: 6,
                     paddingTop: 8,
-                    borderTop: `1px solid ${active ? "#ffffff15" : "#f5f5f5"}`,
+                    borderTop: `1px solid ${active ? "#ffffff15" : "#F7F2EA"}`,
                   }}>
                     <div style={{ display: "flex", gap: 3, flexWrap: "wrap", flex: 1, minWidth: 0 }}>
                       {emp.contas.slice(0, 3).map(c => (
@@ -2215,9 +2215,9 @@ export default function ExtratosView({ EMPRESAS, extrato, caixaUnico, setCaixaUn
                           fontSize: 8,
                           padding: "2px 6px",
                           borderRadius: 4,
-                          fontFamily: "monospace",
-                          background: active ? "#ffffff15" : "#f5f5f5",
-                          color: active ? "#ddd" : "#888",
+                          fontFamily: "var(--fonte-numero)",
+                          background: active ? "#ffffff15" : "#F7F2EA",
+                          color: active ? "#D8CCBB" : "#7E8388",
                           fontWeight: 600,
                           letterSpacing: "0.03em",
                           textTransform: "uppercase",
@@ -2230,8 +2230,8 @@ export default function ExtratosView({ EMPRESAS, extrato, caixaUnico, setCaixaUn
                         <span style={{
                           fontSize: 8,
                           padding: "2px 6px",
-                          color: active ? "#888" : "#bbb",
-                          fontFamily: "monospace",
+                          color: active ? "#7E8388" : "#B2B6B9",
+                          fontFamily: "var(--fonte-numero)",
                         }}>
                           +{emp.contas.length - 3}
                         </span>
@@ -2240,8 +2240,8 @@ export default function ExtratosView({ EMPRESAS, extrato, caixaUnico, setCaixaUn
                     {nMovs > 0 && (
                       <span style={{
                         fontSize: 10,
-                        color: active ? "#6B7C93" : "#16a34a",
-                        fontFamily: "monospace",
+                        color: active ? "#BAA685" : "#1F7A54",
+                        fontFamily: "var(--fonte-numero)",
                         fontWeight: 700,
                         whiteSpace: "nowrap",
                       }}>
@@ -2260,30 +2260,30 @@ export default function ExtratosView({ EMPRESAS, extrato, caixaUnico, setCaixaUn
 
       {/* Contas */}
       {activeEmp && (
-        <div style={{ background: "#fff", border: "2px solid #1a1a2e", borderRadius: 14, padding: 20 }}>
+        <div style={{ background: "#fff", border: "2px solid #091C2A", borderRadius: 14, padding: 20 }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
-            <div style={{ fontSize: 14, fontWeight: 700, color: "#1a1a2e", fontFamily: "Georgia,serif" }}>{activeEmp.nome} — Seleciona a Conta</div>
-            <button onClick={() => { setActiveEmp(null); setActiveConta(null); }} style={{ background: "none", border: "none", color: "#bbb", cursor: "pointer", fontSize: 18 }}>✕</button>
+            <div style={{ fontSize: 14, fontWeight: 700, color: "#091C2A", fontFamily: "var(--fonte-titulo)" }}>{activeEmp.nome} — Seleciona a Conta</div>
+            <button onClick={() => { setActiveEmp(null); setActiveConta(null); }} style={{ background: "none", border: "none", color: "#B2B6B9", cursor: "pointer", fontSize: 18 }}>✕</button>
           </div>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(240px, 1fr))", gap: 10 }}>
             {activeEmp.contas.map(conta => {
               const active = activeConta && activeConta.id === conta.id;
-              const color = BANCO_COLORS[conta.banco] || "#888";
+              const color = BANCO_COLORS[conta.banco] || "#7E8388";
               const nM = conta.movCount || 0;
               return (
                 <div key={conta.id} onClick={() => openConta(conta)}
-                  style={{ background: active ? "#f0f4ff" : "#fafafa", border: "2px solid " + (active ? "#3b82f6" : "#f0f0f0"), borderRadius: 10, padding: "14px 16px", cursor: "pointer", transition: "all 0.15s" }}>
+                  style={{ background: active ? "#EDF1F5" : "#FBF7F1", border: "2px solid " + (active ? "#2C4A63" : "#E7DED2"), borderRadius: 10, padding: "14px 16px", cursor: "pointer", transition: "all 0.15s" }}>
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
                     <div style={{ flex: 1 }}>
-                      <span style={{ background: color + "18", color: color, border: "1px solid " + color + "33", fontSize: 11, padding: "2px 10px", borderRadius: 4, fontFamily: "monospace", fontWeight: 600 }}>{conta.banco}</span>
-                      {conta.sheet && <div style={{ fontSize: 9, color: "#ccc", fontFamily: "monospace", marginTop: 5 }}>Aba: {conta.sheet}</div>}
-                      {conta.iban && <div style={{ fontSize: 10, color: "#bbb", fontFamily: "monospace", marginTop: 3 }}>{conta.iban}</div>}
-                      <div style={{ fontSize: 13, fontWeight: 700, fontFamily: "monospace", color: conta.saldo < 0 ? "#dc2626" : "#1a1a2e", marginTop: 6 }}>{fmtN(conta.saldo)}</div>
-                      <div style={{ fontSize: 10, marginTop: 4, fontFamily: "monospace", color: nM > 0 ? "#16a34a" : "#ccc" }}>
+                      <span style={{ background: color + "18", color: color, border: "1px solid " + color + "33", fontSize: 11, padding: "2px 10px", borderRadius: 4, fontFamily: "var(--fonte-numero)", fontWeight: 600 }}>{conta.banco}</span>
+                      {conta.sheet && <div style={{ fontSize: 9, color: "#C4C7CA", fontFamily: "var(--fonte-numero)", marginTop: 5 }}>Aba: {conta.sheet}</div>}
+                      {conta.iban && <div style={{ fontSize: 10, color: "#B2B6B9", fontFamily: "var(--fonte-numero)", marginTop: 3 }}>{conta.iban}</div>}
+                      <div style={{ fontSize: 13, fontWeight: 700, fontFamily: "var(--fonte-numero)", color: conta.saldo < 0 ? "#A93226" : "#091C2A", marginTop: 6 }}>{fmtN(conta.saldo)}</div>
+                      <div style={{ fontSize: 10, marginTop: 4, fontFamily: "var(--fonte-numero)", color: nM > 0 ? "#1F7A54" : "#C4C7CA" }}>
                         {nM > 0 ? "📋 " + nM + " movimentos" : "Sem movimentos"}
                       </div>
                     </div>
-                    <span style={{ color: active ? "#3b82f6" : "#ccc", fontSize: 20 }}>›</span>
+                    <span style={{ color: active ? "#2C4A63" : "#C4C7CA", fontSize: 20 }}>›</span>
                   </div>
                 </div>
               );
@@ -2294,61 +2294,61 @@ export default function ExtratosView({ EMPRESAS, extrato, caixaUnico, setCaixaUn
 
       {/* Movimentos */}
       {activeConta && (
-        <div style={{ background: "#fff", border: "1px solid #f0f0f0", borderRadius: 14, overflow: "hidden" }}>
-          <div style={{ padding: "16px 20px", borderBottom: "1px solid #f0f0f0", background: "#f8f9fc", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+        <div style={{ background: "#fff", border: "1px solid #E7DED2", borderRadius: 14, overflow: "hidden" }}>
+          <div style={{ padding: "16px 20px", borderBottom: "1px solid #E7DED2", background: "#FAF6F0", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
             <div>
-              <div style={{ fontSize: 14, fontWeight: 700, color: "#1a1a2e" }}>Movimentos — {activeEmp.nome} · {activeConta.banco}</div>
-              {activeConta.sheet && <div style={{ fontSize: 10, color: "#bbb", fontFamily: "monospace", marginTop: 2 }}>Aba origem: {activeConta.sheet}</div>}
+              <div style={{ fontSize: 14, fontWeight: 700, color: "#091C2A" }}>Movimentos — {activeEmp.nome} · {activeConta.banco}</div>
+              {activeConta.sheet && <div style={{ fontSize: 10, color: "#B2B6B9", fontFamily: "var(--fonte-numero)", marginTop: 2 }}>Aba origem: {activeConta.sheet}</div>}
             </div>
             <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
               <button onClick={handleExportarExcel} disabled={exportando} title="Exportar para Excel o período selecionado"
-                style={{ background: exportando ? "#e8e8e8" : "#16a34a", color: exportando ? "#999" : "#fff", border: "none", padding: "5px 12px", borderRadius: 7, fontSize: 11, cursor: exportando ? "default" : "pointer", fontWeight: 600 }}>
+                style={{ background: exportando ? "#E3D9CC" : "#091C2A", color: exportando ? "#8E9398" : "#fff", border: "none", padding: "5px 12px", borderRadius: 7, fontSize: 11, cursor: exportando ? "default" : "pointer", fontWeight: 600 }}>
                 {exportando ? "A gerar..." : "⬇ Exportar Excel"}
               </button>
               {podeEditarMov && (
                 <button onClick={() => setEditingMov({ data: new Date().toISOString().slice(0,10), movimento: "", valor: 0, saldo: 0, categoria: "", detalhes: "", _isNew: true, _contaId: activeConta.id, _empId: activeEmp.id })}
-                  style={{ background: "#1a1a2e", color: "#6B7C93", border: "none", padding: "5px 12px", borderRadius: 7, fontSize: 11, cursor: "pointer", fontWeight: 600 }}>
+                  style={{ background: "#091C2A", color: "#BAA685", border: "none", padding: "5px 12px", borderRadius: 7, fontSize: 11, cursor: "pointer", fontWeight: 600 }}>
                   + Nova Linha
                 </button>
               )}
-              <button onClick={() => setActiveConta(null)} style={{ background: "none", border: "none", color: "#bbb", cursor: "pointer", fontSize: 18 }}>✕</button>
+              <button onClick={() => setActiveConta(null)} style={{ background: "none", border: "none", color: "#B2B6B9", cursor: "pointer", fontSize: 18 }}>✕</button>
             </div>
           </div>
 
           {allMovs.length === 0 ? (
-            <div style={{ textAlign: "center", padding: "48px 0", color: "#ccc" }}>
+            <div style={{ textAlign: "center", padding: "48px 0", color: "#C4C7CA" }}>
               <div style={{ fontSize: 32, marginBottom: 10 }}>📄</div>
               <div style={{ fontSize: 14 }}>Nenhum movimento nesta conta</div>
             </div>
           ) : (
             <div>
               {/* Filters */}
-              <div style={{ display: "flex", gap: 10, padding: "12px 20px", borderBottom: "1px solid #f5f5f5", flexWrap: "wrap" }}>
+              <div style={{ display: "flex", gap: 10, padding: "12px 20px", borderBottom: "1px solid #F7F2EA", flexWrap: "wrap" }}>
                 <input value={descFilter} onChange={e => { setDescFilter(e.target.value); setPage(1); }} placeholder="Filtrar descrição..."
-                  style={{ flex: 2, minWidth: 160, background: "#f8f8f8", border: "1px solid #eee", borderRadius: 8, padding: "7px 12px", fontSize: 12, outline: "none" }} />
+                  style={{ flex: 2, minWidth: 160, background: "#F9F5EF", border: "1px solid #EFE8DE", borderRadius: 8, padding: "7px 12px", fontSize: 12, outline: "none" }} />
                 <select value={catFilter || "Todas"} onChange={e => { setCatFilter(e.target.value); setPage(1); }}
-                  style={{ flex: 1, minWidth: 140, background: "#f8f8f8", border: "1px solid #eee", borderRadius: 8, padding: "7px 12px", fontSize: 12, outline: "none" }}>
+                  style={{ flex: 1, minWidth: 140, background: "#F9F5EF", border: "1px solid #EFE8DE", borderRadius: 8, padding: "7px 12px", fontSize: 12, outline: "none" }}>
                   {cats.map(c => <option key={c}>{c}</option>)}
                 </select>
               </div>
 
               {/* Período — filtra a tabela e delimita a exportação para Excel */}
-              <div style={{ display: "flex", gap: 8, alignItems: "center", padding: "10px 20px", borderBottom: "1px solid #f5f5f5", flexWrap: "wrap", background: "#fcfcfd" }}>
-                <span style={{ fontSize: 10, color: "#aaa", fontFamily: "monospace", textTransform: "uppercase", letterSpacing: "0.07em" }}>Período</span>
+              <div style={{ display: "flex", gap: 8, alignItems: "center", padding: "10px 20px", borderBottom: "1px solid #F7F2EA", flexWrap: "wrap", background: "#FDFAF6" }}>
+                <span style={{ fontSize: 10, color: "#9DA2A6", fontFamily: "var(--fonte-numero)", textTransform: "uppercase", letterSpacing: "0.07em" }}>Período</span>
                 <input type="date" value={dataDe} max={dataAte || undefined}
                   onChange={e => { setDataDe(e.target.value); setPage(1); }}
-                  style={{ background: "#f8f8f8", border: "1px solid #eee", borderRadius: 8, padding: "6px 10px", fontSize: 12, outline: "none", fontFamily: "monospace" }} />
-                <span style={{ color: "#ccc", fontSize: 12 }}>até</span>
+                  style={{ background: "#F9F5EF", border: "1px solid #EFE8DE", borderRadius: 8, padding: "6px 10px", fontSize: 12, outline: "none", fontFamily: "var(--fonte-numero)" }} />
+                <span style={{ color: "#C4C7CA", fontSize: 12 }}>até</span>
                 <input type="date" value={dataAte} min={dataDe || undefined}
                   onChange={e => { setDataAte(e.target.value); setPage(1); }}
-                  style={{ background: "#f8f8f8", border: "1px solid #eee", borderRadius: 8, padding: "6px 10px", fontSize: 12, outline: "none", fontFamily: "monospace" }} />
+                  style={{ background: "#F9F5EF", border: "1px solid #EFE8DE", borderRadius: 8, padding: "6px 10px", fontSize: 12, outline: "none", fontFamily: "var(--fonte-numero)" }} />
                 {[["mes", "Este mês"], ["mesAnterior", "Mês anterior"], ["ano", "Este ano"], ["tudo", "Tudo"]].map(([k, label]) => (
                   <button key={k} onClick={() => definirPeriodo(k)}
-                    style={{ background: "#fff", border: "1px solid #e8e8e8", borderRadius: 7, padding: "5px 11px", fontSize: 11, color: "#666", cursor: "pointer" }}>
+                    style={{ background: "#fff", border: "1px solid #E3D9CC", borderRadius: 7, padding: "5px 11px", fontSize: 11, color: "#5C6166", cursor: "pointer" }}>
                     {label}
                   </button>
                 ))}
-                <span style={{ marginLeft: "auto", fontSize: 11, color: "#888", fontFamily: "monospace" }}>
+                <span style={{ marginLeft: "auto", fontSize: 11, color: "#7E8388", fontFamily: "var(--fonte-numero)" }}>
                   {filtered.length} mov. · {(dataDe || dataAte) ? "período filtrado" : "histórico completo"}
                 </span>
               </div>
@@ -2357,9 +2357,9 @@ export default function ExtratosView({ EMPRESAS, extrato, caixaUnico, setCaixaUn
               <div style={{ overflowX: "auto" }}>
                 <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
                   <thead>
-                    <tr style={{ background: "#fafafa" }}>
+                    <tr style={{ background: "#FBF7F1" }}>
                       {["Data", "Descrição", "Valor", "Saldo", "Fatura", "Categoria", ...(ehHDG?["Subcategoria"]:[]), ehHDG?"Observações":"Detalhes", "?", ...(podeEditarMov?["Ações"]:[])].map(h => (
-                        <th key={h} style={{ padding: "9px 16px", textAlign: "left", color: "#aaa", fontSize: 10, letterSpacing: "0.07em", textTransform: "uppercase", fontFamily: "monospace", borderBottom: "1px solid #f0f0f0", whiteSpace: "nowrap" }}>{h}</th>
+                        <th key={h} style={{ padding: "9px 16px", textAlign: "left", color: "#9DA2A6", fontSize: 10, letterSpacing: "0.07em", textTransform: "uppercase", fontFamily: "var(--fonte-numero)", borderBottom: "1px solid #E7DED2", whiteSpace: "nowrap" }}>{h}</th>
                       ))}
                     </tr>
                   </thead>
@@ -2367,21 +2367,21 @@ export default function ExtratosView({ EMPRESAS, extrato, caixaUnico, setCaixaUn
                     {slice.map((m, i) => {
                       const movKey = `${m.data||m.data_str}_${m.movimento}_${m.valor}_${m.saldo}`;
                       return (
-                      <tr key={m.id || movKey} style={{ borderBottom: "1px solid #fafafa" }}
-                        onMouseEnter={e => e.currentTarget.style.background = "#f8f9fc"}
+                      <tr key={m.id || movKey} style={{ borderBottom: "1px solid #FBF7F1" }}
+                        onMouseEnter={e => e.currentTarget.style.background = "#FAF6F0"}
                         onMouseLeave={e => e.currentTarget.style.background = ""}>
-                        <td style={{ padding: "10px 16px", color: "#888", fontFamily: "monospace", whiteSpace: "nowrap" }}>{m.data || m.data_str || ""}</td>
-                        <td style={{ padding: "10px 16px", color: "#333", maxWidth: 240, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={m.movimento}>{m.movimento || ""}</td>
-                        <td style={{ padding: "10px 16px", fontFamily: "monospace", fontWeight: 700, color: m.valor >= 0 ? "#16a34a" : "#dc2626", whiteSpace: "nowrap" }}>
+                        <td style={{ padding: "10px 16px", color: "#7E8388", fontFamily: "var(--fonte-numero)", whiteSpace: "nowrap" }}>{m.data || m.data_str || ""}</td>
+                        <td style={{ padding: "10px 16px", color: "#23292D", maxWidth: 240, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={m.movimento}>{m.movimento || ""}</td>
+                        <td style={{ padding: "10px 16px", fontFamily: "var(--fonte-numero)", fontWeight: 700, color: m.valor >= 0 ? "#1F7A54" : "#A93226", whiteSpace: "nowrap" }}>
                           {m.valor >= 0 ? "+" : ""}{fmtN(m.valor)}
                         </td>
-                        <td style={{ padding: "10px 16px", color: "#666", fontFamily: "monospace", whiteSpace: "nowrap" }}>
+                        <td style={{ padding: "10px 16px", color: "#5C6166", fontFamily: "var(--fonte-numero)", whiteSpace: "nowrap" }}>
                           {m.saldo != null ? fmtN(m.saldo) : "—"}
                         </td>
                         <td style={{ padding: "6px 10px" }}>
                           {(() => {
                             const e = estadoFatura(m);
-                            if (e.tipo === "na") return <span style={{ color: e.cor, fontSize: 10, fontFamily: "monospace" }}>{e.txt}</span>;
+                            if (e.tipo === "na") return <span style={{ color: e.cor, fontSize: 10, fontFamily: "var(--fonte-numero)" }}>{e.txt}</span>;
                             return (
                               <button onClick={() => marcarFatura(m, e.tipo)}
                                 title={e.tipo === "auto"
@@ -2389,7 +2389,7 @@ export default function ExtratosView({ EMPRESAS, extrato, caixaUnico, setCaixaUn
                                   : e.tipo === "sem"
                                   ? "Marcado como pagamento sem documento. Clica para voltar ao automático."
                                   : "Clica para alternar: OK → pendente → não terá → automático."}
-                                style={{ background: e.fundo, color: e.cor, border: "none", borderRadius: 20, padding: "3px 10px", fontSize: 10, fontFamily: "monospace", fontWeight: 700, cursor: "pointer", whiteSpace: "nowrap" }}>
+                                style={{ background: e.fundo, color: e.cor, border: "none", borderRadius: 20, padding: "3px 10px", fontSize: 10, fontFamily: "var(--fonte-numero)", fontWeight: 700, cursor: "pointer", whiteSpace: "nowrap" }}>
                                 {e.txt}
                               </button>
                             );
@@ -2432,16 +2432,16 @@ export default function ExtratosView({ EMPRESAS, extrato, caixaUnico, setCaixaUn
                               return (
                                 <button onClick={() => setMovQuestionar(m)}
                                   title={qs.length ? `Já colocaste ${qs.length} questão(ões) sobre este lançamento. Clica para ver ou acrescentar.` : "Colocar uma dúvida sobre este lançamento"}
-                                  style={{ background: qs.length ? "#fef3c7" : "#f4f5f7", color: qs.length ? "#b45309" : "#8a8f99", border: "none", borderRadius: 20, padding: "3px 10px", fontSize: 11, fontWeight: 700, fontFamily: "monospace", cursor: "pointer", whiteSpace: "nowrap" }}>
+                                  style={{ background: qs.length ? "#F6ECD6" : "#F6F0E8", color: qs.length ? "#96702A" : "#6E7378", border: "none", borderRadius: 20, padding: "3px 10px", fontSize: 11, fontWeight: 700, fontFamily: "var(--fonte-numero)", cursor: "pointer", whiteSpace: "nowrap" }}>
                                   {qs.length ? `? ${qs.length}` : "?"}
                                 </button>
                               );
                             }
-                            if (!qs.length) return <span style={{ color: "#e8e8e8", fontSize: 11 }}>—</span>;
+                            if (!qs.length) return <span style={{ color: "#E3D9CC", fontSize: 11 }}>—</span>;
                             return (
                               <button onClick={() => onVerQuestoes?.()}
                                 title={`${qs.length} questão(ões) de investidor sobre este lançamento${abertas ? ` · ${abertas} por responder` : ""}`}
-                                style={{ background: abertas ? "#fef3c7" : "#f0fdf4", color: abertas ? "#b45309" : "#15803d", border: "none", borderRadius: 20, padding: "3px 10px", fontSize: 11, fontWeight: 700, fontFamily: "monospace", cursor: "pointer", whiteSpace: "nowrap" }}>
+                                style={{ background: abertas ? "#F6ECD6" : "#EFF5F1", color: abertas ? "#96702A" : "#1B6A49", border: "none", borderRadius: 20, padding: "3px 10px", fontSize: 11, fontWeight: 700, fontFamily: "var(--fonte-numero)", cursor: "pointer", whiteSpace: "nowrap" }}>
                                 {`💬 ${qs.length}`}
                               </button>
                             );
@@ -2453,10 +2453,10 @@ export default function ExtratosView({ EMPRESAS, extrato, caixaUnico, setCaixaUn
                               {m.valor < 0 && (
                                 <button onClick={() => setMatchMov(m)}
                                   title="Procurar match em Contas a Pagar / Fluxo Futuro"
-                                  style={{ background: "#fef3c7", border: "none", color: "#92400e", padding: "3px 8px", borderRadius: 5, fontSize: 10, cursor: "pointer", fontWeight: 700 }}>🔗</button>
+                                  style={{ background: "#F6ECD6", border: "none", color: "#7A5A22", padding: "3px 8px", borderRadius: 5, fontSize: 10, cursor: "pointer", fontWeight: 700 }}>🔗</button>
                               )}
                               <button onClick={() => setEditingMov({...m, _movKey: movKey, _contaId: activeConta.id, _empId: activeEmp.id})}
-                                style={{ background: "#f0f4ff", border: "none", color: "#4a6fa5", padding: "3px 8px", borderRadius: 5, fontSize: 10, cursor: "pointer" }}>✎</button>
+                                style={{ background: "#EDF1F5", border: "none", color: "#2C4A63", padding: "3px 8px", borderRadius: 5, fontSize: 10, cursor: "pointer" }}>✎</button>
                               <button onClick={async () => {
                                 if (!window.confirm("Tens a certeza que queres eliminar este movimento?")) return;
                                 if (m.id) {
@@ -2477,7 +2477,7 @@ export default function ExtratosView({ EMPRESAS, extrato, caixaUnico, setCaixaUn
                                     setActiveConta({...emp[cIdx]});
                                   }
                                 }
-                              }} style={{ background: "#fff0f0", border: "none", color: "#dc2626", padding: "3px 8px", borderRadius: 5, fontSize: 10, cursor: "pointer" }} title="Eliminar">✕</button>
+                              }} style={{ background: "#FBEDEB", border: "none", color: "#A93226", padding: "3px 8px", borderRadius: 5, fontSize: 10, cursor: "pointer" }} title="Eliminar">✕</button>
                             </div>
                           </td>
                         )}
@@ -2496,31 +2496,31 @@ export default function ExtratosView({ EMPRESAS, extrato, caixaUnico, setCaixaUn
                 const diff = Math.abs(saldoCalculado - saldoImportado);
                 const ok = diff < 0.02;
                 return (
-                  <div style={{ margin: "0 20px 12px", padding: "12px 16px", borderRadius: 10, background: ok ? "#f0fdf4" : "#fef2f2", border: `1px solid ${ok?"#bbf7d0":"#fecaca"}`, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                    <div style={{ fontSize: 12, color: ok?"#16a34a":"#dc2626", fontWeight: 600 }}>
+                  <div style={{ margin: "0 20px 12px", padding: "12px 16px", borderRadius: 10, background: ok ? "#EFF5F1" : "#FBEDEB", border: `1px solid ${ok?"#C9E3D5":"#EFCFC9"}`, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                    <div style={{ fontSize: 12, color: ok?"#1F7A54":"#A93226", fontWeight: 600 }}>
                       {ok ? "✅ Saldo auditado — movimentos conferem com o saldo importado" : "⚠️ Divergência de saldo — movimentos não conferem com o saldo importado"}
                     </div>
-                    <div style={{ display: "flex", gap: 16, fontSize: 11, fontFamily: "monospace" }}>
-                      <span style={{ color: "#888" }}>Calculado: <strong style={{ color: "#1a1a2e" }}>{fmtN(saldoCalculado)}</strong></span>
-                      <span style={{ color: "#888" }}>Importado: <strong style={{ color: "#1a1a2e" }}>{fmtN(saldoImportado)}</strong></span>
-                      {!ok && <span style={{ color: "#dc2626", fontWeight: 700 }}>Diferença: {fmtN(diff)}</span>}
+                    <div style={{ display: "flex", gap: 16, fontSize: 11, fontFamily: "var(--fonte-numero)" }}>
+                      <span style={{ color: "#7E8388" }}>Calculado: <strong style={{ color: "#091C2A" }}>{fmtN(saldoCalculado)}</strong></span>
+                      <span style={{ color: "#7E8388" }}>Importado: <strong style={{ color: "#091C2A" }}>{fmtN(saldoImportado)}</strong></span>
+                      {!ok && <span style={{ color: "#A93226", fontWeight: 700 }}>Diferença: {fmtN(diff)}</span>}
                     </div>
                   </div>
                 );
               })()}
               {/* Pagination */}
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "12px 20px", borderTop: "1px solid #f5f5f5" }}>
-                <span style={{ fontSize: 11, color: "#aaa", fontFamily: "monospace" }}>{filtered.length} registos</span>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "12px 20px", borderTop: "1px solid #F7F2EA" }}>
+                <span style={{ fontSize: 11, color: "#9DA2A6", fontFamily: "var(--fonte-numero)" }}>{filtered.length} registos</span>
                 <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                   <select value={perPage} onChange={e => { setPerPage(+e.target.value); setPage(1); }}
-                    style={{ background: "#f8f8f8", border: "1px solid #eee", borderRadius: 6, padding: "3px 8px", fontSize: 11 }}>
+                    style={{ background: "#F9F5EF", border: "1px solid #EFE8DE", borderRadius: 6, padding: "3px 8px", fontSize: 11 }}>
                     {[10, 15, 25, 50].map(n => <option key={n}>{n}</option>)}
                   </select>
                   <button onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page === 1}
-                    style={{ background: "none", border: "1px solid #eee", borderRadius: 6, padding: "3px 10px", fontSize: 12, cursor: page === 1 ? "default" : "pointer", color: page === 1 ? "#ddd" : "#555" }}>‹</button>
-                  <span style={{ fontSize: 11, color: "#888", fontFamily: "monospace" }}>Pág. {page} / {totalPages}</span>
+                    style={{ background: "none", border: "1px solid #EFE8DE", borderRadius: 6, padding: "3px 10px", fontSize: 12, cursor: page === 1 ? "default" : "pointer", color: page === 1 ? "#D8CCBB" : "#4A5055" }}>‹</button>
+                  <span style={{ fontSize: 11, color: "#7E8388", fontFamily: "var(--fonte-numero)" }}>Pág. {page} / {totalPages}</span>
                   <button onClick={() => setPage(p => Math.min(totalPages, p + 1))} disabled={page === totalPages}
-                    style={{ background: "none", border: "1px solid #eee", borderRadius: 6, padding: "3px 10px", fontSize: 12, cursor: page === totalPages ? "default" : "pointer", color: page === totalPages ? "#ddd" : "#555" }}>›</button>
+                    style={{ background: "none", border: "1px solid #EFE8DE", borderRadius: 6, padding: "3px 10px", fontSize: 12, cursor: page === totalPages ? "default" : "pointer", color: page === totalPages ? "#D8CCBB" : "#4A5055" }}>›</button>
                 </div>
               </div>
             </div>
@@ -2616,51 +2616,51 @@ export default function ExtratosView({ EMPRESAS, extrato, caixaUnico, setCaixaUn
             <div style={{ background: "#fff", borderRadius: 14, padding: 24, width: 800, maxWidth: "95vw", maxHeight: "90vh", overflowY: "auto", boxShadow: "0 20px 60px rgba(0,0,0,0.25)" }}>
               <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 14 }}>
                 <div>
-                  <h2 style={{ margin: 0, fontFamily: "Georgia, serif", fontSize: 18, color: "#1a1a2e" }}>🔗 Procurar match</h2>
-                  <div style={{ fontSize: 12, color: "#888", marginTop: 4 }}>
-                    Movimento: <strong>{matchMov.movimento}</strong> · <span style={{ color: "#dc2626", fontFamily: "monospace" }}>{fmtN(matchMov.valor)}</span> · {matchMov.data}
+                  <h2 style={{ margin: 0, fontFamily: "var(--fonte-titulo)", fontSize: 18, color: "#091C2A" }}>🔗 Procurar match</h2>
+                  <div style={{ fontSize: 12, color: "#7E8388", marginTop: 4 }}>
+                    Movimento: <strong>{matchMov.movimento}</strong> · <span style={{ color: "#A93226", fontFamily: "var(--fonte-numero)" }}>{fmtN(matchMov.valor)}</span> · {matchMov.data}
                   </div>
-                  <div style={{ fontSize: 11, color: "#aaa", marginTop: 3 }}>
-                    Só o Contas a Pagar e o Fluxo Futuro de <strong style={{ color: "#4a6fa5" }}>{activeEmp?.nome || "—"}</strong>
+                  <div style={{ fontSize: 11, color: "#9DA2A6", marginTop: 3 }}>
+                    Só o Contas a Pagar e o Fluxo Futuro de <strong style={{ color: "#2C4A63" }}>{activeEmp?.nome || "—"}</strong>
                   </div>
                 </div>
-                <button onClick={() => setMatchMov(null)} style={{ background: "none", border: "none", fontSize: 20, cursor: "pointer", color: "#aaa" }}>✕</button>
+                <button onClick={() => setMatchMov(null)} style={{ background: "none", border: "none", fontSize: 20, cursor: "pointer", color: "#9DA2A6" }}>✕</button>
               </div>
               {top.length === 0 ? (
-                <div style={{ padding: 30, textAlign: "center", color: "#888" }}>
+                <div style={{ padding: 30, textAlign: "center", color: "#7E8388" }}>
                   Nenhuma fatura nem pagamento pendente de <strong>{activeEmp?.nome || "—"}</strong> com
                   valor próximo a {fmtN(matchMov.valor)}.
-                  <div style={{ fontSize: 11, color: "#bbb", marginTop: 8 }}>
+                  <div style={{ fontSize: 11, color: "#B2B6B9", marginTop: 8 }}>
                     A procura é restrita a esta empresa — um pagamento desta conta não liquida a fatura de outra sociedade.
                   </div>
                 </div>
               ) : (
                 <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
-                  <thead style={{ background: "#fafafa" }}>
+                  <thead style={{ background: "#FBF7F1" }}>
                     <tr>
-                      <th style={{ padding: "8px 10px", textAlign: "left", fontSize: 10, color: "#666", textTransform: "uppercase", fontFamily: "monospace" }}>Score</th>
-                      <th style={{ padding: "8px 10px", textAlign: "left", fontSize: 10, color: "#666", textTransform: "uppercase", fontFamily: "monospace" }}>Tipo</th>
-                      <th style={{ padding: "8px 10px", textAlign: "left", fontSize: 10, color: "#666", textTransform: "uppercase", fontFamily: "monospace" }}>Data</th>
-                      <th style={{ padding: "8px 10px", textAlign: "left", fontSize: 10, color: "#666", textTransform: "uppercase", fontFamily: "monospace" }}>Descrição</th>
-                      <th style={{ padding: "8px 10px", textAlign: "left", fontSize: 10, color: "#666", textTransform: "uppercase", fontFamily: "monospace" }}>Empresa</th>
-                      <th style={{ padding: "8px 10px", textAlign: "right", fontSize: 10, color: "#666", textTransform: "uppercase", fontFamily: "monospace" }}>Valor</th>
+                      <th style={{ padding: "8px 10px", textAlign: "left", fontSize: 10, color: "#5C6166", textTransform: "uppercase", fontFamily: "var(--fonte-numero)" }}>Score</th>
+                      <th style={{ padding: "8px 10px", textAlign: "left", fontSize: 10, color: "#5C6166", textTransform: "uppercase", fontFamily: "var(--fonte-numero)" }}>Tipo</th>
+                      <th style={{ padding: "8px 10px", textAlign: "left", fontSize: 10, color: "#5C6166", textTransform: "uppercase", fontFamily: "var(--fonte-numero)" }}>Data</th>
+                      <th style={{ padding: "8px 10px", textAlign: "left", fontSize: 10, color: "#5C6166", textTransform: "uppercase", fontFamily: "var(--fonte-numero)" }}>Descrição</th>
+                      <th style={{ padding: "8px 10px", textAlign: "left", fontSize: 10, color: "#5C6166", textTransform: "uppercase", fontFamily: "var(--fonte-numero)" }}>Empresa</th>
+                      <th style={{ padding: "8px 10px", textAlign: "right", fontSize: 10, color: "#5C6166", textTransform: "uppercase", fontFamily: "var(--fonte-numero)" }}>Valor</th>
                       <th style={{ padding: "8px 10px" }}></th>
                     </tr>
                   </thead>
                   <tbody>
                     {top.map((sug, i) => {
-                      const corBarra = sug.score >= 100 ? "#16a34a" : sug.score >= 80 ? "#84cc16" : sug.score >= 50 ? "#f59e0b" : "#dc2626";
+                      const corBarra = sug.score >= 100 ? "#1F7A54" : sug.score >= 80 ? "#84cc16" : sug.score >= 50 ? "#C19A4A" : "#A93226";
                       return (
-                        <tr key={i} style={{ borderBottom: "1px solid #f5f5f5" }}>
-                          <td style={{ padding: "8px 10px", fontFamily: "monospace", fontWeight: 700, color: corBarra }}>{sug.score}</td>
-                          <td style={{ padding: "8px 10px", fontSize: 10, color: "#888", fontFamily: "monospace" }}>{sug.tipo === "fatura" ? "Fatura" : "Pagamento"}</td>
-                          <td style={{ padding: "8px 10px", fontFamily: "monospace", fontSize: 10 }}>{sug.data || "—"}</td>
+                        <tr key={i} style={{ borderBottom: "1px solid #F7F2EA" }}>
+                          <td style={{ padding: "8px 10px", fontFamily: "var(--fonte-numero)", fontWeight: 700, color: corBarra }}>{sug.score}</td>
+                          <td style={{ padding: "8px 10px", fontSize: 10, color: "#7E8388", fontFamily: "var(--fonte-numero)" }}>{sug.tipo === "fatura" ? "Fatura" : "Pagamento"}</td>
+                          <td style={{ padding: "8px 10px", fontFamily: "var(--fonte-numero)", fontSize: 10 }}>{sug.data || "—"}</td>
                           <td style={{ padding: "8px 10px", fontSize: 11 }}>{(sug.desc || "—").substring(0, 60)}</td>
-                          <td style={{ padding: "8px 10px", fontSize: 10, color: "#666" }}>{sug.empresa || "—"}</td>
-                          <td style={{ padding: "8px 10px", textAlign: "right", fontFamily: "monospace", color: "#dc2626", fontWeight: 600 }}>{fmtN(sug.valor)}</td>
+                          <td style={{ padding: "8px 10px", fontSize: 10, color: "#5C6166" }}>{sug.empresa || "—"}</td>
+                          <td style={{ padding: "8px 10px", textAlign: "right", fontFamily: "var(--fonte-numero)", color: "#A93226", fontWeight: 600 }}>{fmtN(sug.valor)}</td>
                           <td style={{ padding: "8px 10px" }}>
                             <button onClick={() => aplicarMatch(sug)}
-                              style={{ background: "#16a34a", color: "#fff", border: "none", padding: "5px 12px", borderRadius: 6, fontSize: 11, cursor: "pointer", fontWeight: 700 }}>
+                              style={{ background:"#091C2A", color: "#fff", border: "none", padding: "5px 12px", borderRadius: 6, fontSize: 11, cursor: "pointer", fontWeight: 700 }}>
                               ✓ Match
                             </button>
                           </td>
@@ -2670,7 +2670,7 @@ export default function ExtratosView({ EMPRESAS, extrato, caixaUnico, setCaixaUn
                   </tbody>
                 </table>
               )}
-              <div style={{ marginTop: 14, padding: "10px 14px", background: "#fef3c7", borderRadius: 8, fontSize: 11, color: "#92400e" }}>
+              <div style={{ marginTop: 14, padding: "10px 14px", background: "#F6ECD6", borderRadius: 8, fontSize: 11, color: "#7A5A22" }}>
                 💡 Score: 100 = valor exato + data muito próxima. ≥ 80 = muito provável. ≥ 50 = possível. Confere antes de aplicar.
               </div>
             </div>
@@ -2683,20 +2683,20 @@ export default function ExtratosView({ EMPRESAS, extrato, caixaUnico, setCaixaUn
           onClick={e => { if (e.target === e.currentTarget) setEditingMov(null); }}>
           <div style={{ background: "#fff", borderRadius: 14, padding: 28, width: 480, maxWidth: "95vw", boxShadow: "0 20px 60px rgba(0,0,0,0.25)" }}>
             <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 20 }}>
-              <div style={{ fontSize: 15, fontWeight: 700, color: "#1a1a2e" }}>Editar Movimento</div>
-              <button onClick={() => setEditingMov(null)} style={{ background: "none", border: "none", fontSize: 18, cursor: "pointer", color: "#aaa" }}>✕</button>
+              <div style={{ fontSize: 15, fontWeight: 700, color: "#091C2A" }}>Editar Movimento</div>
+              <button onClick={() => setEditingMov(null)} style={{ background: "none", border: "none", fontSize: 18, cursor: "pointer", color: "#9DA2A6" }}>✕</button>
             </div>
             <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
               {[["Data","data","date"],["Descrição","movimento","text"],["Valor","valor","number"],["Saldo","saldo","number"],["Categoria","categoria","text"],...(ehHDG?[["Subcategoria","subcategoria","text"]]:[]),[ehHDG?"Observações":"Detalhes","detalhes","text"]].map(([label,field,type])=>(
                 <div key={field} style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-                  <label style={{ fontSize: 10, color: "#aaa", fontFamily: "monospace", textTransform: "uppercase" }}>{label}</label>
+                  <label style={{ fontSize: 10, color: "#9DA2A6", fontFamily: "var(--fonte-numero)", textTransform: "uppercase" }}>{label}</label>
                   <input type={type} value={editingMov[field]||""} onChange={e=>setEditingMov(m=>({...m,[field]:type==="number"?parseFloat(e.target.value)||0:e.target.value}))}
-                    style={{ background: "#f8f8f8", border: "1px solid #eee", borderRadius: 8, padding: "8px 12px", fontSize: 13, outline: "none" }}/>
+                    style={{ background: "#F9F5EF", border: "1px solid #EFE8DE", borderRadius: 8, padding: "8px 12px", fontSize: 13, outline: "none" }}/>
                 </div>
               ))}
             </div>
             <div style={{ display: "flex", justifyContent: "flex-end", gap: 10, marginTop: 20 }}>
-              <button onClick={() => setEditingMov(null)} style={{ background: "#f0f0f0", color: "#666", border: "none", padding: "9px 18px", borderRadius: 8, fontSize: 13, cursor: "pointer" }}>Cancelar</button>
+              <button onClick={() => setEditingMov(null)} style={{ background: "#E7DED2", color: "#5C6166", border: "none", padding: "9px 18px", borderRadius: 8, fontSize: 13, cursor: "pointer" }}>Cancelar</button>
               <button onClick={async () => {
                 if (editingMov._isNew) {
                   const {_isNew,_movKey,_contaId,_empId,...mov} = editingMov;
@@ -2765,7 +2765,7 @@ export default function ExtratosView({ EMPRESAS, extrato, caixaUnico, setCaixaUn
                   }
                 }
                 setEditingMov(null);
-              }} style={{ background: "#1a1a2e", color: "#fff", border: "none", padding: "9px 20px", borderRadius: 8, fontSize: 13, cursor: "pointer", fontWeight: 600 }}>Guardar</button>
+              }} style={{ background: "#091C2A", color: "#fff", border: "none", padding: "9px 20px", borderRadius: 8, fontSize: 13, cursor: "pointer", fontWeight: 600 }}>Guardar</button>
             </div>
           </div>
         </div>

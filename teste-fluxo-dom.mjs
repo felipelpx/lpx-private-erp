@@ -38,6 +38,11 @@ const PLANOS = Object.freeze({ planos: [
 ], loading:false, error:null,
   guardarPlano: async (pl) => { globalThis.__planoGravado.push(pl); return { data:[pl], error:null }; } });
 export const useObraPlanos = () => PLANOS;
+const MOVS = Object.freeze({ movimentos: [
+  { data:"2026-07-15", categoria:"Obras", valor:-123000 },
+  { data:"2026-07-05", categoria:"Financiamento", subcategoria:"Inflow - Obra", valor: 250000 },
+], loading:false, reload:()=>{} });
+export const useMovimentosPeriodo = () => MOVS;
 `);
 
 writeFileSync(join(dir, "entrada.jsx"), `

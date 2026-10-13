@@ -14,6 +14,16 @@ const q={select:()=>q,insert:()=>q,update:()=>q,upsert:()=>q,delete:()=>q,eq:()=
 export const supabase={from:()=>q,channel:()=>({on(){return this},subscribe(){return this}}),removeChannel:()=>{}};
 export default supabase;`);
 
+writeFileSync(join(dir, "stub-hooks.js"), `
+const MOVS = Object.freeze({ movimentos: [
+  { data:"2026-06-10", categoria:"Obra", valor:-246000 },
+  { data:"2026-07-10", categoria:"Obra", valor:-246000 },
+  { data:"2026-06-02", categoria:"Funding banco", valor: 250000 },
+  { data:"2026-07-02", categoria:"Funding banco", valor: 150000 },
+], loading:false, reload:()=>{} });
+export const useMovimentosPeriodo = () => MOVS;
+`);
+
 writeFileSync(join(dir, "entrada.jsx"), `
 import React from "react";
 import { createRoot } from "react-dom/client";
@@ -39,14 +49,15 @@ createRoot(document.getElementById("r")).render(
   React.createElement("div",{style:{fontFamily:"system-ui,-apple-system,sans-serif"}},
     React.createElement(ModalPlanoObra,{
       empresa:"favcloset", grupo:"LPX", nomeEmpresa:"Favorite Closet (Amadeu 07)",
-      plano, faturas, pagamentos, currentUser:{nome:"Felipe",role:"admin"},
+      plano, faturas, pagamentos, contaIds:["favcloset_bcp"], currentUser:{nome:"Felipe",role:"admin"},
       hoje:"2026-10-12",
       onGuardar:async()=>({}), onAplicar:async()=>({}), onFechar:()=>{} })));
 `.replace(/SRC\//g, pathToFileURL(join(process.cwd(),"src")).pathname + "/"));
 
 await build({ entryPoints:[join(dir,"entrada.jsx")], bundle:true, outfile:join(dir,"app.js"),
   jsx:"automatic", logLevel:"error", define:{"process.env.NODE_ENV":'"production"'},
-  plugins:[{name:"s",setup(b){ b.onResolve({filter:/(^|\/)supabase\.js$/},()=>({path:join(dir,"stub-supabase.js")})); }}] });
+  plugins:[{name:"s",setup(b){ b.onResolve({filter:/(^|\/)supabase\.js$/},()=>({path:join(dir,"stub-supabase.js")}));
+    b.onResolve({filter:/(^|\/)hooks\.js$/},()=>({path:join(dir,"stub-hooks.js")})); }}] });
 writeFileSync(join(dir,"i.html"), `<!doctype html><meta charset="utf-8"><body style="margin:0;background:#eef0f3"><div id="r"></div><script src="app.js"></script>`);
 
 const b = await chromium.launch({ executablePath: "/opt/pw-browsers/chromium" });
@@ -78,7 +89,7 @@ await p.waitForTimeout(250);
 console.log("Plano de obra (browser):");
 let t = await corpo();
 ok(t.includes("600.000,00"), "obra: sai a base, 600 000 \u20ac");
-ok(t.includes("8.856,00"), "fiscaliza\u00e7\u00e3o: 1 476 \u00d7 6 meses");
+ok(t.includes("10.892,88"), "fiscaliza\u00e7\u00e3o com IVA: 1 476 \u00d7 1,23 \u00d7 6 meses");
 ok(t.includes("138.000,00"), "IVA da obra: 138 000 \u20ac, pago nos dias 25");
 ok(t.includes("916.600,00"), "d\u00edvida no fim = 400 000 + 70% de (600 000 + 138 000)");
 ok(t.includes("420.000,00"), "o banco liberta 420 000 \u20ac sobre a base");
@@ -103,7 +114,12 @@ await p.waitForTimeout(350);
 t = await corpo();
 ok(t.includes("600.000,00"), "a obra total continua a mesma com o prazo maior");
 ok(/9 meses|\b9\b/.test(t), "mas passam a ser 9 meses");
-ok(t.includes("13.284,00"), "e a fiscaliza\u00e7\u00e3o sobe para 1 476 \u00d7 9 = 13 284 \u20ac");
+ok(t.includes("16.339,32"), "e a fiscaliza\u00e7\u00e3o sobe para 1 815,48 \u00d7 9 = 16 339,32 \u20ac");
+
+ok(t.includes("400.000,00"), "o ecr\u00e3 prop\u00f5e a d\u00edvida de 400 000 \u20ac lida do extrato");
+ok(/liberta\u00e7\u00f5es encontradas no\s+extrato|liberta\u00e7\u00e3o encontrada no\s+extrato/.test(t.replace(/\s+/g," ")) || t.includes("extrato"),
+   "dizendo que veio do extrato");
+ok(t.includes("492.000,00"), "e mostra 492 000 \u20ac j\u00e1 pagos de obra, do extrato");
 
 console.log(mau === 0 ? "\n\u2705 Ecr\u00e3 do plano de obra OK" : `\n\u274c ${mau} falha(s)`);
 await b.close();

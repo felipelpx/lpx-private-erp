@@ -140,6 +140,73 @@ export function gastoEmObra(faturas, { empresa, categorias, taxaIva = 23 } = {})
     }, 0));
 }
 
+// ─── O que o sistema já sabe sobre uma obra a decorrer ──────────────────────
+// Numa obra já começada não faz sentido pedir ao utilizador o que o ERP já
+// tem. Vai-se buscar aos documentos: a data do primeiro gasto, o que já foi
+// pago pelo banco fora, e o que está faturado à espera de pagamento.
+//
+// Duas fontes, de propósito:
+//   - as FATURAS (Contas a Pagar) dizem o que já foi incorrido contra o
+//     budget, pago ou não. É este o número que consome o budget: uma fatura
+//     por pagar já está no fluxo, prevê-la outra vez seria contá-la em
+//     dobro.
+//   - o EXTRATO diz o que saiu mesmo da conta. É a obra "já paga".
+const semAcento = (t) => String(t || "").normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().trim();
+const bate = (valor, lista) => lista.map(semAcento).includes(semAcento(valor));
+
+export function obraRealizada(movimentos, faturas, { empresa, categorias = [], taxaIva = 23 } = {}) {
+  const fs = (faturas || [])
+    .filter(f => f && f.empresa === empresa)
+    .filter(f => bate(f.categoria, categorias))
+    .filter(f => !/anulada|cancelada|rejeitada/i.test(String(f.status || "")));
+
+  const baseDe = (f) => {
+    const b = Number(f.valor_base);
+    if (Number.isFinite(b) && b > 0) return b;
+    return (Number(f.valor) || 0) / (1 + (Number(taxaIva) || 0) / 100);
+  };
+  const paga = (f) => /^(paga|pago)$/i.test(String(f.status || "").trim());
+
+  const faturado      = arred2(fs.reduce((s, f) => s + baseDe(f), 0));
+  const faturadoPago  = arred2(fs.filter(paga).reduce((s, f) => s + baseDe(f), 0));
+  const porPagar      = arred2(faturado - faturadoPago);
+
+  // Saídas do extrato classificadas como obra: o que saiu mesmo da conta.
+  const ms = (movimentos || [])
+    .filter(m => m && bate(m.categoria, categorias))
+    .filter(m => (Number(m.valor) || 0) < 0);
+  const pagoExtrato = arred2(ms.reduce((s, m) => s + Math.abs(Number(m.valor) || 0), 0));
+
+  const datas = [
+    ...fs.map(f => String(f.data_fatura || f.vencimento || "").slice(0, 10)),
+    ...ms.map(m => String(m.data || "").slice(0, 10)),
+  ].filter(d => /^\d{4}-\d{2}-\d{2}$/.test(d)).sort();
+
+  return {
+    faturado, faturadoPago, porPagar,
+    pagoExtrato,
+    nFaturas: fs.length, nMovimentos: ms.length,
+    primeiroGasto: datas[0] || null,
+    // O que serve para o plano: o que já foi incorrido, pago ou não.
+    jaIncorrido: faturado,
+  };
+}
+
+// O funding que o banco já libertou, lido do extrato: entradas classificadas
+// na rubrica de financiamento do projeto. É a dívida de hoje, sem a escrever
+// à mão.
+export function fundingLibertado(movimentos, { categorias = [], subcategorias = [] } = {}) {
+  const ms = (movimentos || [])
+    .filter(m => m && (Number(m.valor) || 0) > 0)
+    .filter(m => bate(m.categoria, categorias))
+    .filter(m => subcategorias.length === 0 || !m.subcategoria || bate(m.subcategoria, subcategorias));
+  return {
+    total: arred2(ms.reduce((s, m) => s + (Number(m.valor) || 0), 0)),
+    n: ms.length,
+    ultimo: ms.map(m => String(m.data || "").slice(0, 10)).sort().pop() || null,
+  };
+}
+
 // Quanto se tem pago por mês numa rubrica, para propor a avença em vez de
 // obrigar a ir ver às faturas. É a média pelos meses em que houve fatura —
 // não pelo número de faturas, que num mês podem ser duas.
@@ -176,7 +243,7 @@ export const PLANO_VAZIO = {
   empresa: "", ativo: true,
   data_inicio: "", data_fim: "",
   budget_obra: 0, taxa_iva_obra: 23,
-  fiscalizacao_mensal: 0, cso_mensal: 0, comissao_avaliacao: 0,
+  fiscalizacao_mensal: 0, cso_mensal: 0, taxa_iva_servicos: 23, comissao_avaliacao: 0,
   euribor: 0, spread: 0, funding_pct: 0, divida_inicial: 0,
   recuperar_iva: true,
 };
@@ -230,8 +297,17 @@ export function planearObra(plano, { gastoObra = 0, hoje = hojeISO(), grupo = "L
 
   // 2 e 3. Avenças: o valor é o mesmo todos os meses, e são tantos meses
   //    quantos a obra durar. É aqui que esticar o prazo custa dinheiro.
-  const fisc = arred2(num(p.fiscalizacao_mensal));
-  const cso  = arred2(num(p.cso_mensal));
+  //
+  //    Ao contrário da empreitada, estas faturas vêm COM IVA e pagam-se com
+  //    ele: não há inversão do sujeito passivo em serviços de fiscalização e
+  //    de coordenação de segurança. O valor que se introduz é a avença; o
+  //    IVA é acrescentado.
+  const taxaServicos = num(p.taxa_iva_servicos, 23);
+  const comIva = (v) => arred2(v * (1 + taxaServicos / 100));
+  const fiscBase = arred2(num(p.fiscalizacao_mensal));
+  const csoBase  = arred2(num(p.cso_mensal));
+  const fisc = comIva(fiscBase);
+  const cso  = comIva(csoBase);
 
   // 4, 5 e 6. Banco. Dois pagamentos distintos, em duas datas, ambos
   //    financiados:
@@ -283,10 +359,16 @@ export function planearObra(plano, { gastoObra = 0, hoje = hojeISO(), grupo = "L
       }));
     }
 
-    if (fisc > 0) linhas.push(linha("fiscalizacao", mes, fisc, grupo,
-      { descricao: `Fiscalização de obra — ${rotuloMes(mes)}` }));
-    if (cso > 0)  linhas.push(linha("cso", mes, cso, grupo,
-      { descricao: `CSO — ${rotuloMes(mes)}` }));
+    if (fisc > 0) linhas.push(linha("fiscalizacao", mes, fisc, grupo, {
+      descricao: `Fiscalização de obra — ${rotuloMes(mes)}`,
+      obs: `Avença ${fiscBase} € + IVA ${arred2(fisc - fiscBase)} € (${taxaServicos}%)`,
+      base: fiscBase, iva: arred2(fisc - fiscBase),
+    }));
+    if (cso > 0)  linhas.push(linha("cso", mes, cso, grupo, {
+      descricao: `CSO — ${rotuloMes(mes)}`,
+      obs: `Avença ${csoBase} € + IVA ${arred2(cso - csoBase)} € (${taxaServicos}%)`,
+      base: csoBase, iva: arred2(cso - csoBase),
+    }));
 
     // Libertação do mês: a percentagem contratada sobre a base da fatura.
     const libertado = arred2(baseMes * pctFunding / 100);
