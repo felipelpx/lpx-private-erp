@@ -12,6 +12,7 @@ import {
 let mau = 0;
 const ok = (c, m) => { console.log((c ? "  ✓ " : "  ✗ ") + m); if (!c) mau++; };
 const perto = (a, b, t = 0.02) => Math.abs(a - b) < t;
+const arredCent = (v) => Math.round(((Number(v) || 0) + Number.EPSILON) * 100) / 100;
 const soma = (ls, tipo) => ls.filter(l => l.plano_tipo === tipo)
   .reduce((s, l) => s + l.valor, 0);
 
@@ -55,7 +56,9 @@ const base = {
   euribor: 2.5, spread: 2.0, funding_pct: 70, divida_inicial: 400000,
   recuperar_iva: true,
 };
-const opts = { gastoObra: 400000, hoje: "2026-10-12", grupo: "LPX" };
+// O incorrido entra COM IVA (o IVA de obra é obra) e compara-se com o budget
+// + IVA: 1 230 000 − 492 000 = 738 000 em bruto, que são 600 000 € de base.
+const opts = { gastoObra: 492000, hoje: "2026-10-12", grupo: "LPX" };
 
 {
   const { linhas, resumo } = planearObra(base, opts);
@@ -206,7 +209,7 @@ console.log("\nCasos de fronteira:");
   ok(r.linhas.length === 0, "obra que já devia ter acabado não gera linhas");
   ok(r.avisos.some(a => /já devia ter terminado/.test(a)), "e avisa porquê");
 
-  const gastoDemais = planearObra(base, { ...opts, gastoObra: 1200000 });
+  const gastoDemais = planearObra(base, { ...opts, gastoObra: 1500000 });
   ok(perto(gastoDemais.resumo.porGastar, 0), "gasto acima do budget: não há obra a prever");
   ok(gastoDemais.linhas.filter(l => l.plano_tipo === "obra").length === 0,
      "sem obra, nenhuma linha de obra");
@@ -458,13 +461,18 @@ console.log("\nObra já iniciada: o sistema vai buscar em vez de perguntar");
   ok(perto(r.pagoExtrato, 307500), "saiu da conta 307 500 € (com IVA, como no extrato)");
   ok(r.primeiroGasto === "2026-07-15", "o primeiro gasto de obra é de 15/07/2026");
   ok(r.nFaturas === 3, "três faturas de obra válidas");
-  // A regra: incorrido = o que saiu da conta + o que está faturado por pagar.
-  // 307 500 (extrato) + 80 000 (por pagar) = 387 500
-  ok(perto(r.pagoExtratoBase, 250000), `o extrato vem com IVA: 307 500 ÷ 1,23 = 250 000 € (deu ${r.pagoExtratoBase})`);
-  ok(perto(r.ivaNoPago, 57500), "e o IVA retirado foi 57 500 €");
-  ok(perto(r.jaIncorrido, 330000), `incorrido = 250 000 + 80 000 = 330 000 € (deu ${r.jaIncorrido})`);
-  ok(perto(r.jaIncorrido, r.pagoExtratoBase + r.porPagar), "é a soma do pago sem IVA com o faturado por pagar");
-  ok(r.jaIncorrido < r.pagoExtrato + r.porPagar, "e fica abaixo da soma em bruto, por causa do IVA");
+  // A regra: incorrido = o que saiu da conta + o que está faturado por pagar,
+  // tudo COM IVA, porque o IVA de obra é obra.
+  // 307 500 (extrato) + 98 400 (por pagar, com IVA) = 405 900
+  ok(perto(r.porPagarBruto, 98400), "por pagar com IVA = 98 400 €");
+  ok(perto(r.faturadoBruto, 405900), "faturado com IVA = 123 000 + 184 500 + 98 400");
+  ok(perto(r.jaIncorrido, 405900), `incorrido = 307 500 + 98 400 = 405 900 € (deu ${r.jaIncorrido})`);
+  ok(perto(r.jaIncorrido, r.pagoExtrato + r.porPagarBruto), "é a soma do pago com o faturado por pagar, em bruto");
+  ok(perto(r.jaIncorridoBase, 330000), `e sem IVA são as 330 000 € de base (deu ${r.jaIncorridoBase})`);
+  // o IVA no pago fica como informação, não se desconta de nada
+  ok(perto(r.pagoExtratoBase, 250000), `dos 307 500 € pagos, 250 000 € são base (deu ${r.pagoExtratoBase})`);
+  ok(perto(r.ivaNoPago, 57500), "e 57 500 € são IVA — que continua a contar como obra");
+  ok(r.jaIncorrido > r.pagoExtratoBase + r.porPagar, "o incorrido é maior do que a conta em base, como tem de ser");
   ok(r.fonte === "extrato", "e diz que veio do extrato");
 
   // categoria alheia e outra empresa ficam de fora
@@ -479,7 +487,7 @@ console.log("\nObra já iniciada: o sistema vai buscar em vez de perguntar");
   // Sem extrato nenhum continua a funcionar pelas faturas
   const semExtrato = obraRealizada([], faturas, { empresa:"favcloset", categorias:["Obra"] });
   ok(perto(semExtrato.faturado, 330000), "sem extrato, o incorrido sai à mesma das faturas");
-  ok(perto(semExtrato.jaIncorrido, 330000), "as 330 000 € faturadas, e não só as 80 000 por pagar");
+  ok(perto(semExtrato.jaIncorrido, 405900), "as 330 000 € faturadas com IVA, e não só as 80 000 por pagar");
   ok(semExtrato.fonte === "faturas", "e diz que veio das faturas");
   ok(semExtrato.pagoExtrato === 0, "e o pago fica a zero");
   ok(semExtrato.primeiroGasto === "2026-07-15", "a data de início também");
@@ -489,9 +497,14 @@ console.log("\nObra já iniciada: o sistema vai buscar em vez de perguntar");
   // Uma obra já iniciada entra no plano com o budget certo
   const plano = planearObra({ ...base, budget_obra: 1000000, data_inicio: r.primeiroGasto },
                             { gastoObra: r.jaIncorrido, hoje:"2026-10-12", grupo:"LPX" });
-  ok(perto(plano.resumo.gasto, 330000), "o plano arranca com 330 000 € já incorridos");
-  ok(perto(plano.resumo.porGastar, 670000), "e 670 000 € por gastar");
+  ok(perto(plano.resumo.gasto, 405900), "o plano arranca com 405 900 € já incorridos, com IVA");
+  ok(perto(plano.resumo.budgetBruto, 1230000), "e um total a gastar de 1 000 000 + IVA = 1 230 000 €");
+  ok(perto(plano.resumo.porGastarBruto, 824100), "falta gastar 824 100 € em bruto");
+  ok(perto(plano.resumo.porGastar, 670000), "que são 670 000 € de base");
   ok(perto(soma(plano.linhas, "obra"), 670000), "é esse o valor que se espalha pelos meses que faltam");
+  ok(perto(soma(plano.linhas, "iva_obra"), 154100), "e o IVA dos 670 000 € vai para os trimestres");
+  ok(perto(soma(plano.linhas, "obra") + soma(plano.linhas, "iva_obra"), plano.resumo.porGastarBruto),
+     "obra + IVA de obra fecham exatamente o que falta gastar");
 }
 
 console.log("\nO caso do Favorite Closet (o que estava errado no ecrã):");
@@ -504,21 +517,141 @@ console.log("\nO caso do Favorite Closet (o que estava errado no ecrã):");
   ];
   const r = obraRealizada(movs, fats, { empresa:"favcloset", categorias:["Obra"], taxaIva: 6 });
   ok(perto(r.pagoExtrato, 663542.12), "já pago no extrato, com IVA: 663 542,12 €");
-  ok(perto(r.ivaNoPago, 37558.99), `IVA a 6% retirado: 37 558,99 € (deu ${r.ivaNoPago})`);
-  ok(perto(r.pagoExtratoBase, 625983.13), `já pago sem IVA: 625 983,13 € (deu ${r.pagoExtratoBase})`);
-  ok(perto(r.porPagar, 78964.68), "faturado por pagar: 78 964,68 €");
-  ok(perto(r.jaIncorrido, 704947.81), `incorrido: 704 947,81 € (deu ${r.jaIncorrido})`);
+  ok(perto(r.ivaNoPago, 37558.99), `dos quais 37 558,99 € de IVA a 6% (deu ${r.ivaNoPago})`);
+  ok(perto(r.pagoExtratoBase, 625983.13), `e 625 983,13 € de base (deu ${r.pagoExtratoBase})`);
+  ok(perto(r.porPagar, 78964.68), "faturado por pagar, base: 78 964,68 €");
+  ok(perto(r.porPagarBruto, 83702.56), "faturado por pagar, com IVA: 83 702,56 €");
+  ok(perto(r.jaIncorrido, 747244.68), `incorrido: 663 542,12 + 83 702,56 = 747 244,68 € (deu ${r.jaIncorrido})`);
+  ok(perto(r.jaIncorridoBase, 704947.81), `que sem IVA são 704 947,81 € (deu ${r.jaIncorridoBase})`);
+  ok(perto(r.ivaIncorrido, 42296.87), `e 42 296,87 € de IVA de obra já incorrido (deu ${r.ivaIncorrido})`);
+  ok(perto(r.jaIncorridoBase + r.ivaIncorrido, r.jaIncorrido), "base + IVA fecham o incorrido ao cêntimo");
   ok(!perto(r.jaIncorrido, 80514.68), "e já não os 80 514,68 € que o ecrã mostrava");
   const p = planearObra({ ...base, budget_obra: 1300000, taxa_iva_obra: 6, data_fim: "2027-02-28" },
                         { gastoObra: r.jaIncorrido, hoje: "2026-10-13", grupo: "LPX" });
-  ok(perto(p.resumo.porGastar, 595052.19), `falta gastar: 595 052,19 € (deu ${p.resumo.porGastar})`);
+  ok(perto(p.resumo.budgetBruto, 1378000), "total a gastar: 1 300 000 + 6% = 1 378 000 €");
+  ok(perto(p.resumo.porGastarBruto, 630755.32), `falta gastar: 630 755,32 € (deu ${p.resumo.porGastarBruto})`);
+  ok(perto(p.resumo.porGastar, 595052.19), `que são 595 052,19 € de obra (deu ${p.resumo.porGastar})`);
   ok(perto(soma(p.linhas, "obra"), 595052.19), "e é isso que se distribui pelo fluxo, ao cêntimo");
+  ok(perto(soma(p.linhas, "obra") + soma(p.linhas, "iva_obra"), 630755.32),
+     "obra + IVA fecham o que falta gastar, ao cêntimo");
+  ok(perto(r.jaIncorrido + p.resumo.porGastarBruto, 1378000),
+     "e incorrido + falta gastar dão o budget com IVA, exatamente");
   // A taxa da obra manda na limpeza: a 23% o IVA retirado seria muito maior
   const r23 = obraRealizada(movs, fats, { empresa:"favcloset", categorias:["Obra"], taxaIva: 23 });
   ok(r23.pagoExtratoBase < r.pagoExtratoBase, "a 23% sobraria menos base, como tem de ser");
   const r0 = obraRealizada(movs, fats, { empresa:"favcloset", categorias:["Obra"], taxaIva: 0 });
   ok(perto(r0.pagoExtratoBase, 663542.12), "a 0% o extrato entra tal como está");
-  ok(r0.ivaNoPago === 0, "e não há IVA a retirar");
+  ok(r0.ivaNoPago === 0, "e não há IVA a separar");
+  // O incorrido em bruto não depende da taxa — só a sua decomposição depende
+  ok(perto(r23.jaIncorrido, r.jaIncorrido), "o incorrido em bruto é o mesmo a 23% ou a 6%");
+  ok(r23.jaIncorridoBase < r.jaIncorridoBase, "só a base muda com a taxa");
+}
+
+console.log("\nA conta em bruto: budget + IVA contra obra + IVA já pagos");
+{
+  // A identidade que tem de valer sempre:
+  //     incorrido (com IVA) + falta gastar (com IVA) = budget × (1 + taxa)
+  // e, do outro lado, as linhas que vão para o fluxo:
+  //     obra (base) + IVA de obra = falta gastar (com IVA)
+  const casos = [
+    { budget: 1300000, taxa: 6,  gasto: 747244.68, fim: "2027-02-28" },
+    { budget: 1000000, taxa: 23, gasto: 405900,    fim: "2027-03-31" },
+    { budget:  850000, taxa: 23, gasto: 0,         fim: "2027-01-31" },
+    { budget:  600000, taxa: 6,  gasto: 123456.78, fim: "2026-12-31" },
+    { budget:  250000, taxa: 0,  gasto:  50000,    fim: "2026-11-30" },
+    { budget:  999999, taxa: 23, gasto: 777777.77, fim: "2027-06-30" },
+    { budget:  100000, taxa: 6,  gasto: 106000,    fim: "2027-01-31" },   // esgotado ao cêntimo
+    { budget:  100000, taxa: 6,  gasto: 200000,    fim: "2027-01-31" },   // passou o budget
+  ];
+  let todasFecham = true, todasLinhasFecham = true, algumaAvisa = false;
+  casos.forEach(c => {
+    const r = planearObra(
+      { ...base, budget_obra: c.budget, taxa_iva_obra: c.taxa, data_fim: c.fim },
+      { gastoObra: c.gasto, hoje: "2026-10-13", grupo: "LPX" });
+    const bruto = arredCent(c.budget * (1 + c.taxa / 100));
+    if (!perto(r.resumo.budgetBruto, bruto)) todasFecham = false;
+    // a identidade só vale até se esgotar o budget; depois disso falta gastar é 0
+    const esperado = Math.max(0, arredCent(bruto - c.gasto));
+    if (!perto(r.resumo.porGastarBruto, esperado)) todasFecham = false;
+    const linhas = soma(r.linhas, "obra") + soma(r.linhas, "iva_obra");
+    if (!perto(linhas, r.resumo.porGastarBruto, 0.011)) todasLinhasFecham = false;
+    if (c.gasto > bruto && r.avisos.some(a => /acima/.test(a))) algumaAvisa = true;
+  });
+  ok(todasFecham, "em todos os casos, budget + IVA menos o incorrido dá o que falta gastar");
+  ok(todasLinhasFecham, "e as linhas de obra mais as de IVA fecham esse valor ao cêntimo");
+  ok(algumaAvisa, "gastar acima do budget com IVA avisa");
+
+  // A taxa zero não deve inventar IVA nenhum
+  const semIva = planearObra({ ...base, budget_obra: 500000, taxa_iva_obra: 0 },
+                             { gastoObra: 100000, hoje: "2026-10-13", grupo: "LPX" });
+  ok(perto(semIva.resumo.budgetBruto, 500000), "a 0% o total a gastar é o próprio budget");
+  ok(perto(semIva.resumo.porGastar, semIva.resumo.porGastarBruto), "e bruto e base são o mesmo");
+  ok(soma(semIva.linhas, "iva_obra") === 0, "e não há linhas de IVA de obra");
+
+  // Orçamento esgotado exatamente: nada a prever, e sem aviso de excesso
+  const certinho = planearObra({ ...base, budget_obra: 100000, taxa_iva_obra: 6 },
+                               { gastoObra: 106000, hoje: "2026-10-13", grupo: "LPX" });
+  ok(perto(certinho.resumo.porGastarBruto, 0), "budget esgotado ao cêntimo: nada por gastar");
+  ok(!certinho.avisos.some(a => /acima/.test(a)), "e não avisa de excesso, porque não houve");
+  ok(certinho.linhas.filter(l => l.plano_tipo === "obra").length === 0, "sem linhas de obra");
+  ok(certinho.linhas.filter(l => l.plano_tipo === "fiscalizacao").length > 0,
+     "mas as avenças continuam até ao fim da obra");
+}
+
+console.log("\nIVA de obra: realizado e futuro, separados, a fechar no IVA do budget");
+{
+  // A regra que o Felipe pediu: o IVA de obra já incorrido mais o IVA de obra
+  // que falta lançar têm de dar exatamente a taxa × budget. Nem um cêntimo
+  // a mais, seja qual for o quanto já se gastou.
+  const taxas = [0, 6, 13, 23];
+  const budgets = [1300000, 1000000, 847333.33, 250000, 99999.99];
+  const gastos = [0, 1, 123456.78, 500000, 747244.68, 999999.99];
+  let falhas = 0, casos = 0, separados = 0;
+  taxas.forEach(taxa => budgets.forEach(b => gastos.forEach(g => {
+    const bruto = arredCent(b * (1 + taxa / 100));
+    if (g > bruto) return;                       // o excesso tem regra própria
+    casos++;
+    const r = planearObra({ ...base, budget_obra: b, taxa_iva_obra: taxa, data_fim: "2027-06-30" },
+                          { gastoObra: g, hoje: "2026-10-13", grupo: "LPX" });
+    const { gastoBase, gastoIva, porGastar, ivaPorGastar, ivaDoBudget } = r.resumo;
+    // 1. as duas pontas do IVA fecham no IVA do budget
+    if (!perto(gastoIva + ivaPorGastar, ivaDoBudget, 0.011)) falhas++;
+    // 2. as duas pontas da base fecham no budget
+    if (!perto(gastoBase + porGastar, b, 0.011)) falhas++;
+    // 3. cada ponta fecha em si: base + IVA = o respetivo bruto
+    if (!perto(gastoBase + gastoIva, g, 0.011)) falhas++;
+    if (!perto(porGastar + ivaPorGastar, r.resumo.porGastarBruto, 0.011)) falhas++;
+    // 4. o IVA que falta é o que vai mesmo para as linhas do fluxo
+    if (!perto(soma(r.linhas, "iva_obra"), ivaPorGastar, 0.011)) falhas++;
+    if (gastoIva > 0 && ivaPorGastar > 0) separados++;
+  })));
+  ok(casos > 80, `${casos} combinações de taxa, budget e gasto testadas`);
+  ok(falhas === 0, `em todas elas o IVA realizado + o IVA futuro dão o IVA do budget (${falhas} falhas)`);
+  ok(separados > 30, "e em dezenas delas as duas pontas existem ao mesmo tempo, separadas");
+
+  // O caso concreto do Favorite Closet, a 6%
+  const fc = planearObra({ ...base, budget_obra: 1300000, taxa_iva_obra: 6, data_fim: "2027-02-28" },
+                         { gastoObra: 747244.68, hoje: "2026-10-13", grupo: "LPX" });
+  ok(perto(fc.resumo.ivaDoBudget, 78000), "IVA do budget: 6% de 1 300 000 = 78 000 €");
+  ok(perto(fc.resumo.gastoIva, 42296.87), `IVA de obra já incorrido: 42 296,87 € (deu ${fc.resumo.gastoIva})`);
+  ok(perto(fc.resumo.ivaPorGastar, 35703.13), `IVA de obra futuro: 35 703,13 € (deu ${fc.resumo.ivaPorGastar})`);
+  ok(perto(fc.resumo.gastoIva + fc.resumo.ivaPorGastar, 78000), "e os dois somam os 78 000 € ao cêntimo");
+  ok(perto(fc.resumo.gastoBase, 704947.81), `obra realizada, sem IVA: 704 947,81 € (deu ${fc.resumo.gastoBase})`);
+  ok(perto(fc.resumo.gastoBase + fc.resumo.porGastar, 1300000), "e a base das duas pontas dá o budget");
+  ok(fc.resumo.gastoIva !== fc.resumo.ivaPorGastar, "realizado e futuro são números distintos");
+
+  // Obra por começar: todo o IVA é futuro, nada é realizado
+  const zero = planearObra({ ...base, budget_obra: 500000, taxa_iva_obra: 6 },
+                           { gastoObra: 0, hoje: "2026-10-13", grupo: "LPX" });
+  ok(zero.resumo.gastoIva === 0, "obra por começar não tem IVA realizado");
+  ok(perto(zero.resumo.ivaPorGastar, 30000), "e os 30 000 € de IVA ficam todos por lançar");
+
+  // Obra terminada ao cêntimo: todo o IVA é realizado, nada fica por lançar
+  const fim = planearObra({ ...base, budget_obra: 500000, taxa_iva_obra: 6 },
+                          { gastoObra: 530000, hoje: "2026-10-13", grupo: "LPX" });
+  ok(perto(fim.resumo.gastoIva, 30000), "obra toda incorrida: os 30 000 € de IVA são todos realizados");
+  ok(fim.resumo.ivaPorGastar === 0, "e não sobra IVA futuro");
+  ok(soma(fim.linhas, "iva_obra") === 0, "nem linhas de IVA no fluxo");
 }
 
 console.log("\nHDG: o funding tem subcategoria própria");

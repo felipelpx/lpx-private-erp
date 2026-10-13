@@ -18,7 +18,9 @@ import { hojeISO, arred2 } from "./iva.js";
 // ─────────────────────────────────────────────────────────────────────────────
 
 const COR = { tinta: "#091C2A", cinza: "#6E7378", alerta: "#A93226",
-              bom: "#1B6A49", banco: "#2C4A63", aviso: "#96702A" };
+              bom: "#1B6A49", banco: "#2C4A63", aviso: "#96702A",
+              // superfícies da marca, para o quadro de conferência do IVA
+              ouroTenue: "#F6ECD6", alertaLinha: "#E3CE9F", negativoForte: "#8E2A20" };
 
 const Rotulo = ({ children, dica }) => (
   <div title={dica} style={{ fontSize: 10, color: "#9DA2A6", textTransform: "uppercase",
@@ -230,27 +232,58 @@ export default function ModalPlanoObra({
               )}
             </Caixa>
 
-            <Caixa titulo="Obra" nota="O budget é sem IVA. A fatura do empreiteiro sai pela base; o IVA é autoliquidado e entregue no apuramento do trimestre.">
+            <Caixa titulo="Obra" nota="O budget é sem IVA, mas o IVA de obra é obra: a conta fecha-se em bruto. A fatura do empreiteiro sai pela base; o IVA é autoliquidado e entregue no apuramento do trimestre.">
               <Numero rotulo="Budget da empreitada (sem IVA)" valor={f.budget_obra}
                 onMudar={muda("budget_obra")} />
               <Numero rotulo="Taxa de IVA da obra" sufixo="%" valor={f.taxa_iva_obra}
                 onMudar={muda("taxa_iva_obra")} />
               <div style={{ background: "#FAF6F0", borderRadius: 9, padding: "10px 12px", fontSize: 11.5 }}>
+                <Linha k="Budget (sem IVA)" v={fmtEUR(resumo.budget)}
+                  dica="O orçamento da empreitada como está contratado, pela base." />
+                <Linha k={`+  IVA a ${num(f.taxa_iva_obra)}%`}
+                  v={fmtEUR(resumo.budgetBruto - resumo.budget)}
+                  dica="O IVA de obra é obra: entra no custo do projeto, não é um imposto a recuperar." />
+                <div style={{ height: 1, background: "#D8CCBB", margin: "7px 0" }} />
+                <Linha k="=  Total a gastar" v={fmtEUR(resumo.budgetBruto)} forte
+                  dica="Budget mais o IVA da obra. É contra este valor que se mede o que já foi pago." />
+                <div style={{ height: 11 }} />
                 <Linha k="Já pago (extrato, com IVA)" v={movLoading ? "a ler..." : fmtEUR(realizado.pagoExtrato)}
-                  dica={`${realizado.nMovimentos} movimentos de ${catObra} no extrato do projeto. É o que saiu mesmo da conta, e no fluxo realizado a obra é lançada com IVA.`} />
-                {realizado.ivaNoPago > 0 && (
-                  <Linha k={`−  IVA a ${realizado.taxaUsada}%`} v={`−${fmtEUR(realizado.ivaNoPago)}`}
-                    dica="O budget é sem IVA, por isso o pagamento tem de ser limpo antes de entrar na conta: base = pago ÷ (1 + taxa)." />
-                )}
-                <Linha k="+  Faturado por pagar" v={fmtEUR(realizado.porPagar)}
-                  dica={`Faturas de ${catObra} registadas no Contas a Pagar e ainda por liquidar. Como ainda não saíram da conta, não estão na linha de cima.`} />
+                  dica={`${realizado.nMovimentos} movimentos de ${catObra} no extrato do projeto. É o que saiu mesmo da conta — obra e IVA de obra juntos.`} />
+                <Linha k="+  Faturado por pagar (com IVA)" v={fmtEUR(realizado.porPagarBruto)}
+                  dica={`Faturas de ${catObra} registadas no Contas a Pagar e ainda por liquidar, pelo total. Como ainda não saíram da conta, não estão na linha de cima.`} />
                 <div style={{ height: 1, background: "#D8CCBB", margin: "7px 0" }} />
                 <Linha k="=  Incorrido" v={fmtEUR(gasto)} forte
                   dica={realizado.fonte === "extrato"
-                    ? `O que saiu da conta já sem IVA (${fmtEUR(realizado.pagoExtratoBase)}) mais o que está faturado por pagar. Cada euro conta uma vez: uma fatura paga já está no extrato, uma por pagar ainda não.`
-                    : `Sem movimentos de ${catObra} no extrato, vale o que as faturas dizem.`} />
-                <Linha k="Falta gastar" v={fmtEUR(resumo.porGastar)} forte
-                  dica="Budget menos o incorrido. É este valor que o motor espalha pelos meses que faltam." />
+                    ? "O que saiu da conta mais o que está faturado por pagar, tudo com IVA. Cada euro conta uma vez: uma fatura paga já está no extrato, uma por pagar ainda não."
+                    : `Sem movimentos de ${catObra} no extrato, vale o que as faturas dizem, pelo total.`} />
+                <Linha k="       obra realizada" v={fmtEUR(resumo.gastoBase)} suave
+                  dica="A parte do incorrido que é empreitada, sem IVA." />
+                <Linha k="       IVA de obra realizado" v={fmtEUR(resumo.gastoIva)} suave
+                  dica={`A parte do incorrido que é IVA, à taxa de ${num(f.taxa_iva_obra)}%. Já foi pago, mas continua a contar como obra.`} />
+                <div style={{ height: 1, background: "#D8CCBB", margin: "7px 0" }} />
+                <Linha k="=  Falta gastar" v={fmtEUR(resumo.porGastarBruto)} forte
+                  dica="Total a gastar menos o incorrido — desconta o que já foi pago tanto de obra como de IVA de obra." />
+                <Linha k="       obra futura" v={fmtEUR(resumo.porGastar)} suave
+                  dica="Espalha-se pelos meses que faltam, pela base: a fatura do empreiteiro sai sem IVA." />
+                <Linha k="       IVA de obra futuro" v={fmtEUR(resumo.ivaPorGastar)} suave
+                  dica="Entra nos apuramentos trimestrais, nos dias 25 — e não na data da fatura." />
+              </div>
+
+              {/* A conferência que o Felipe pediu: as duas pontas do IVA de obra
+                  têm de somar o IVA do budget, sempre. */}
+              <div style={{ background: COR.ouroTenue, border: `1px solid ${COR.alertaLinha}`,
+                            borderRadius: 9, padding: "9px 12px", fontSize: 11 }}>
+                <Linha k="IVA de obra realizado" v={fmtEUR(resumo.gastoIva)} />
+                <Linha k="+  IVA de obra futuro" v={fmtEUR(resumo.ivaPorGastar)} />
+                <div style={{ height: 1, background: COR.alertaLinha, margin: "6px 0" }} />
+                <Linha k={`=  IVA de obra total (${num(f.taxa_iva_obra)}% do budget)`}
+                  v={fmtEUR(resumo.ivaDoBudget)} forte />
+                {Math.abs((resumo.gastoIva + resumo.ivaPorGastar) - resumo.ivaDoBudget) > 0.02 && (
+                  <div style={{ fontSize: 10.5, color: COR.negativoForte, marginTop: 5, lineHeight: 1.5 }}>
+                    As duas pontas não fecham no IVA do budget — já se gastou mais do que o
+                    orçamento com IVA, por isso não sobra IVA nenhum por lançar.
+                  </div>
+                )}
               </div>
               <label style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer", fontSize: 12 }}>
                 <input type="checkbox" checked={f.recuperar_iva !== false}
@@ -456,10 +489,14 @@ export default function ModalPlanoObra({
   );
 }
 
-const Linha = ({ k, v, forte, dica }) => (
-  <div title={dica} style={{ display: "flex", justifyContent: "space-between", padding: "2px 0" }}>
-    <span style={{ color: "#7E8388" }}>{k}</span>
-    <span style={{ fontFamily: "var(--fonte-numero)", fontWeight: forte ? 700 : 400, color: COR.tinta }}>{v}</span>
+// `suave` é para as decomposições: a linha de cima manda, estas abrem-na.
+const Linha = ({ k, v, forte, suave, dica }) => (
+  <div title={dica} style={{ display: "flex", justifyContent: "space-between",
+                             padding: suave ? "1px 0" : "2px 0",
+                             fontSize: suave ? "0.92em" : undefined }}>
+    <span style={{ color: suave ? "#9DA2A6" : "#7E8388" }}>{k}</span>
+    <span style={{ fontFamily: "var(--fonte-numero)", fontWeight: forte ? 700 : 400,
+                   color: suave ? "#7E8388" : COR.tinta }}>{v}</span>
   </div>
 );
 

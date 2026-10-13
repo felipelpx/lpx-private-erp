@@ -151,6 +151,11 @@ export function gastoEmObra(faturas, { empresa, categorias, taxaIva = 23 } = {})
 //     por pagar já está no fluxo, prevê-la outra vez seria contá-la em
 //     dobro.
 //   - o EXTRATO diz o que saiu mesmo da conta. É a obra "já paga".
+//
+// Tudo isto conta-se COM IVA, porque é assim que o fluxo realizado trata a
+// obra: o que saiu da conta saiu com IVA incluído, e o IVA de obra é obra.
+// A comparação do outro lado é, por isso, com o budget + IVA. A base (sem
+// IVA) fica também devolvida, para o ecrã poder abrir a conta.
 const semAcento = (t) => String(t || "").normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().trim();
 const bate = (valor, lista) => lista.map(semAcento).includes(semAcento(valor));
 
@@ -160,16 +165,30 @@ export function obraRealizada(movimentos, faturas, { empresa, categorias = [], t
     .filter(f => bate(f.categoria, categorias))
     .filter(f => !/anulada|cancelada|rejeitada/i.test(String(f.status || "")));
 
+  const taxa = Number(taxaIva) || 0;
+
+  // A base é o que está registado; onde não houver, deduz-se do total à taxa
+  // da obra. O bruto é o total da fatura; onde não houver, acrescenta-se o
+  // IVA à base. Assim qualquer uma das duas colunas serve de origem.
   const baseDe = (f) => {
     const b = Number(f.valor_base);
     if (Number.isFinite(b) && b > 0) return b;
-    return (Number(f.valor) || 0) / (1 + (Number(taxaIva) || 0) / 100);
+    return (Number(f.valor) || 0) / (1 + taxa / 100);
+  };
+  const brutoDe = (f) => {
+    const t = Number(f.valor);
+    if (Number.isFinite(t) && t > 0) return t;
+    return baseDe(f) * (1 + taxa / 100);
   };
   const paga = (f) => /^(paga|pago)$/i.test(String(f.status || "").trim());
 
-  const faturado      = arred2(fs.reduce((s, f) => s + baseDe(f), 0));
-  const faturadoPago  = arred2(fs.filter(paga).reduce((s, f) => s + baseDe(f), 0));
-  const porPagar      = arred2(faturado - faturadoPago);
+  const faturado       = arred2(fs.reduce((s, f) => s + baseDe(f), 0));
+  const faturadoPago   = arred2(fs.filter(paga).reduce((s, f) => s + baseDe(f), 0));
+  const porPagar       = arred2(faturado - faturadoPago);
+
+  const faturadoBruto     = arred2(fs.reduce((s, f) => s + brutoDe(f), 0));
+  const faturadoPagoBruto = arred2(fs.filter(paga).reduce((s, f) => s + brutoDe(f), 0));
+  const porPagarBruto     = arred2(faturadoBruto - faturadoPagoBruto);
 
   // Saídas do extrato classificadas como obra: o que saiu mesmo da conta.
   const ms = (movimentos || [])
@@ -182,28 +201,33 @@ export function obraRealizada(movimentos, faturas, { empresa, categorias = [], t
     ...ms.map(m => String(m.data || "").slice(0, 10)),
   ].filter(d => /^\d{4}-\d{2}-\d{2}$/.test(d)).sort();
 
-  // O extrato traz o valor que saiu da conta — ou seja, COM IVA. O budget é
-  // sem IVA, por isso o pagamento tem de ser limpo antes de entrar na conta:
-  //     base = pago / (1 + taxa/100)
-  // As faturas por pagar já vêm pela base, e por isso entram como estão.
-  const taxa = Number(taxaIva) || 0;
+  // Quanto do que saiu da conta era IVA — informativo, para o ecrã mostrar
+  // a composição do pagamento. Não se desconta de nada: o IVA de obra é obra.
   const pagoExtratoBase = arred2(pagoExtrato / (1 + taxa / 100));
   const ivaNoPago = arred2(pagoExtrato - pagoExtratoBase);
 
   // O que já foi incorrido é o que saiu da conta MAIS o que está faturado e
-  // ainda por pagar. Cada euro conta uma vez só: uma fatura já paga está no
-  // extrato, e uma por pagar ainda não.
+  // ainda por pagar, ambos COM IVA. Cada euro conta uma vez só: uma fatura
+  // já paga está no extrato, e uma por pagar ainda não.
   //
   // Sem movimentos de obra no extrato não há nada a somar — aí vale o que as
   // faturas dizem, que é tudo o que o ERP sabe.
-  const jaIncorrido = ms.length > 0 ? arred2(pagoExtratoBase + porPagar) : faturado;
+  const jaIncorrido = ms.length > 0
+    ? arred2(pagoExtrato + porPagarBruto)
+    : faturadoBruto;
+  // E as suas duas metades. Decompõe-se à taxa do plano, e o IVA é o resto —
+  // assim base + IVA dá exatamente o incorrido, sem cêntimos a fugir, e o IVA
+  // já incorrido mais o IVA que falta fecham no IVA do budget.
+  const jaIncorridoBase = arred2(jaIncorrido / (1 + taxa / 100));
+  const ivaIncorrido    = arred2(jaIncorrido - jaIncorridoBase);
 
   return {
     faturado, faturadoPago, porPagar,
+    faturadoBruto, faturadoPagoBruto, porPagarBruto,
     pagoExtrato, pagoExtratoBase, ivaNoPago, taxaUsada: taxa,
     nFaturas: fs.length, nMovimentos: ms.length,
     primeiroGasto: datas[0] || null,
-    jaIncorrido,
+    jaIncorrido, jaIncorridoBase, ivaIncorrido,
     // De onde veio o número, para o ecrã poder explicá-lo.
     fonte: ms.length > 0 ? "extrato" : "faturas",
   };
@@ -269,7 +293,8 @@ export const PLANO_VAZIO = {
  * Transforma um plano nas linhas que vão para o Fluxo Futuro.
  *
  * @param plano  os inputs do utilizador (ver PLANO_VAZIO)
- * @param opts.gastoObra  quanto já foi gasto em obra, SEM IVA
+ * @param opts.gastoObra  quanto já foi incorrido em obra, COM IVA — compara-se
+ *                        com o budget + IVA, porque o IVA de obra é obra
  * @param opts.hoje       data de referência (injetável para os testes)
  * @param opts.grupo      "LPX" ou "HDG" — decide o plano de contas
  */
@@ -288,27 +313,62 @@ export function planearObra(plano, { gastoObra = 0, hoje = hojeISO(), grupo = "L
   const primeiro = mesDe(p.data_inicio) > mesDe(hoje) ? mesDe(p.data_inicio) : mesDe(hoje);
   const meses = mesesEntre(primeiro, p.data_fim);
 
-  const budget    = num(p.budget_obra);
-  const gasto     = arred2(num(gastoObra));
-  const porGastar = arred2(Math.max(0, budget - gasto));
-  const taxa      = num(p.taxa_iva_obra, 23);
+  // O budget é dado sem IVA; o que já foi incorrido vem com IVA. A conta
+  // faz-se toda em bruto — budget + IVA menos o que já se pagou de obra e de
+  // IVA de obra — e só depois se parte o que falta em base e IVA, porque é
+  // assim que as faturas vão sair: a base no vencimento, o IVA no dia 25.
+  const budget      = num(p.budget_obra);
+  const taxa        = num(p.taxa_iva_obra, 23);
+  const budgetBruto = arred2(budget * (1 + taxa / 100));
+  const ivaDoBudget = arred2(budgetBruto - budget);
+  const gasto       = arred2(num(gastoObra));
 
-  if (budget > 0 && gasto > budget)
-    avisos.push(`Já se faturou mais do que o budget — ${arred2(gasto - budget)} € acima. ` +
+  // As duas metades do que já se gastou. O IVA é sempre o resto da base, para
+  // que base + IVA feche no bruto ao cêntimo.
+  const gastoBase = arred2(gasto / (1 + taxa / 100));
+  const gastoIva  = arred2(gasto - gastoBase);
+
+  // E as duas metades do que falta. A base é o que resta do budget; o IVA é
+  // outra vez o resto. Daqui sai a garantia que interessa:
+  //     IVA já incorrido + IVA que falta = IVA do budget, exatamente.
+  const porGastarBruto = arred2(Math.max(0, budgetBruto - gasto));
+  const porGastar      = Math.min(porGastarBruto, arred2(Math.max(0, budget - gastoBase)));
+  const ivaPorGastar   = arred2(porGastarBruto - porGastar);
+
+  if (budgetBruto > 0 && gasto > budgetBruto)
+    avisos.push(`Já se gastou mais do que o budget com IVA — ` +
+                `${arred2(gasto - budgetBruto)} € acima de ${arred2(budgetBruto)} €. ` +
                 `A obra entra a zero daqui para a frente: corrige o budget se não for isso.`);
   if (meses.length === 0 && p.data_fim)
     avisos.push("A obra já devia ter terminado: não há meses para espalhar o que falta.");
 
   const linhas = [];
   if (meses.length === 0) {
-    return { linhas, avisos, resumo: resumir(linhas, { budget, gasto, porGastar, meses }) };
+    return { linhas, avisos, resumo: resumir(linhas, { budget, budgetBruto, ivaDoBudget, gasto, gastoBase, gastoIva,
+                      porGastar, porGastarBruto, ivaPorGastar, meses }) };
   }
 
   // 1. Obra — o que falta, dividido por igual. A fatura do empreiteiro sai
   //    pela BASE: o IVA não é pago com ela, é autoliquidado e entregue com o
   //    apuramento do trimestre (ponto 6).
   const basePorMes = repartir(porGastar, meses.length);
-  const ivaPorMes  = basePorMes.map(b => arred2(b * taxa / 100));
+  // O IVA reparte-se pela proporção da base, por soma corrida: assim a soma
+  // das linhas de obra com as de IVA fecha ao cêntimo com o que falta gastar,
+  // em vez de ficar a um ou dois cêntimos por causa dos arredondamentos mês
+  // a mês. Cada mês continua a ter o IVA da sua própria base.
+  const ivaTotal = ivaPorGastar;
+  const ivaPorMes = (() => {
+    let pago = 0, baseAcum = 0;
+    return basePorMes.map((b, i) => {
+      baseAcum = arred2(baseAcum + b);
+      const alvo = i === basePorMes.length - 1
+        ? ivaTotal
+        : arred2(porGastar > 0 ? ivaTotal * baseAcum / porGastar : 0);
+      const v = arred2(alvo - pago);
+      pago = arred2(pago + v);
+      return v;
+    });
+  })();
   const obraBaseMes = basePorMes[0];          // o mês típico, para os textos
   const obraIvaMes  = ivaPorMes[0];
 
@@ -452,7 +512,8 @@ export function planearObra(plano, { gastoObra = 0, hoje = hojeISO(), grupo = "L
                 "os juros só são calculados até ao último mês de obra.");
 
   linhas.sort((a, b) => a.data.localeCompare(b.data) || TIPOS.indexOf(a.plano_tipo) - TIPOS.indexOf(b.plano_tipo));
-  return { linhas, avisos, resumo: resumir(linhas, { budget, gasto, porGastar, meses, dividaFinal: divida }) };
+  return { linhas, avisos, resumo: resumir(linhas, { budget, budgetBruto, ivaDoBudget, gasto, gastoBase, gastoIva,
+                    porGastar, porGastarBruto, ivaPorGastar, meses, dividaFinal: divida }) };
 }
 
 function linha(tipo, mes, valor, grupo, extra = {}) {
@@ -476,13 +537,20 @@ export function rotuloMes(mes) {
   return m ? `${NOMES_MES_CURTO[m - 1]}/${String(a).slice(-2)}` : String(mes);
 }
 
-function resumir(linhas, { budget, gasto, porGastar, meses, dividaFinal = 0 }) {
+function resumir(linhas, { budget, budgetBruto = 0, ivaDoBudget = 0,
+                           gasto, gastoBase = 0, gastoIva = 0,
+                           porGastar, porGastarBruto = 0, ivaPorGastar = 0,
+                           meses, dividaFinal = 0 }) {
   const soma = (t) => arred2(linhas.filter(l => l.plano_tipo === t)
     .reduce((s, l) => s + (l.tipo === "entrada" ? -l.valor : l.valor), 0));
   const totais = Object.fromEntries(TIPOS.map(t => [t, soma(t)]));
   const custoTotal = arred2(TIPOS.reduce((s, t) => s + totais[t], 0));
   return {
-    budget: arred2(budget), gasto, porGastar,
+    budget: arred2(budget), budgetBruto: arred2(budgetBruto),
+    ivaDoBudget: arred2(ivaDoBudget),
+    gasto, gastoBase: arred2(gastoBase), gastoIva: arred2(gastoIva),
+    porGastar, porGastarBruto: arred2(porGastarBruto),
+    ivaPorGastar: arred2(ivaPorGastar),
     meses: meses.length,
     primeiroMes: meses[0] || null,
     ultimoMes: meses[meses.length - 1] || null,
