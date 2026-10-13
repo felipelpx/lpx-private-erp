@@ -67,12 +67,45 @@ const muda = async (el, v) => { await act(async () => {
   el.dispatchEvent(new window.Event("change", { bubbles: true }));
   el.dispatchEvent(new window.Event("input", { bubbles: true })); }); };
 const linhas = (host) => [...host.querySelectorAll("tbody tr")].filter(tr => tr.querySelectorAll("td").length > 3);
+const caixaFiltro = (host, rot) => [...host.querySelectorAll("div")].find(x =>
+  x.children[0] && txt(x.children[0]).toLowerCase() === rot.toLowerCase() &&
+  x.querySelector("select, input, button"));
 const filtro = (host, rot) => {
-  const d = [...host.querySelectorAll("div")].find(x =>
-    x.children[0] && txt(x.children[0]).toLowerCase() === rot.toLowerCase() &&
-    x.querySelector("select, input"));
+  const d = caixaFiltro(host, rot);
   return d ? d.querySelector("select, input") : null;
 };
+// Categoria, subcategoria, ano e mes sao caixas de varias escolhas: um botao
+// que abre uma lista de vistos. Estes ajudantes abrem-na e marcam/desmarcam.
+const clicar = async (el) => { await act(async () => {
+  el.dispatchEvent(new window.MouseEvent("click", { bubbles: true })); }); };
+const abrirVarios = async (host, rot) => {
+  const d = caixaFiltro(host, rot);
+  if (!d) throw new Error("sem caixa de filtro: " + rot);
+  if (!d.querySelector('input[type=checkbox]')) await clicar(d.querySelector("button"));
+  return caixaFiltro(host, rot);
+};
+const opcoesVarios = async (host, rot) =>
+  [...(await abrirVarios(host, rot)).querySelectorAll("label")].map(l => txt(l));
+const marcar = async (host, rot, ...rotulos) => {
+  for (const r of rotulos) {
+    const d = await abrirVarios(host, rot);
+    const l = [...d.querySelectorAll("label")].find(x => txt(x) === r);
+    if (!l) throw new Error('sem opcao "' + r + '" em ' + rot);
+    // .click() nativo: o React 18 ouve o clique nas caixas de visto, e assim
+    // o seu rastreador de valor nao fica a dizer que nada mudou.
+    const cx = l.querySelector("input[type=checkbox]");
+    await act(async () => { cx.click(); });
+  }
+};
+const botaoVarios = async (host, rot, nome) => {
+  const d = await abrirVarios(host, rot);
+  const b = [...d.querySelectorAll("button")].find(x => txt(x) === nome);
+  if (b) await clicar(b);
+};
+const limparVarios = (host, rot) => botaoVarios(host, rot, "Limpar");
+// O resumo \u00e9 o primeiro <span> do bot\u00e3o; o segundo \u00e9 a setinha.
+const resumoVarios = (host, rot) =>
+  txt(caixaFiltro(host, rot).querySelector("button span"));
 // O texto da tabela, sem o das caixas de filtro (que listam todas as empresas).
 const corpo = (host) => linhas(host).map(txt).join(" | ");
 
@@ -109,20 +142,18 @@ const base = { currentUser: gestor, empresasVisiveis: emp };
   ok(linhas(r.host).length === 1, "filtrar por banco deixa 1");
   await muda(banco, "");
 
-  const ano = filtro(r.host, "Ano");
-  await muda(ano, "2025");
+  await marcar(r.host, "Ano", "2025");
   ok(linhas(r.host).length === 1, "filtrar por ano deixa 1");
-  await muda(ano, "");
+  await limparVarios(r.host, "Ano");
+  ok(linhas(r.host).length === 5, "e limpar devolve as 5");
 
-  const mes = filtro(r.host, "M\\u00eas");
-  await muda(mes, "09");
-  ok(linhas(r.host).length === 2, "filtrar por m\\u00eas (setembro) deixa 2");
-  await muda(mes, "");
+  await marcar(r.host, "M\u00eas", "setembro");
+  ok(linhas(r.host).length === 2, "filtrar por m\u00eas (setembro) deixa 2");
+  await limparVarios(r.host, "M\u00eas");
 
-  const cat = filtro(r.host, "Categoria");
-  await muda(cat, "Obras");
+  await marcar(r.host, "Categoria", "Obras");
   ok(linhas(r.host).length === 1, "filtrar por categoria deixa 1");
-  await muda(cat, "");
+  await limparVarios(r.host, "Categoria");
 
   const proc = filtro(r.host, "Procurar na descri\\u00e7\\u00e3o");
   await muda(proc, "cosmik");
@@ -139,6 +170,92 @@ const base = { currentUser: gestor, empresasVisiveis: emp };
   const btSaidas = [...r.host.querySelectorAll("button")].find(b => txt(b) === "Sa\\u00eddas");
   await act(async () => { btSaidas.dispatchEvent(new window.MouseEvent("click", { bubbles:true })); });
   ok(linhas(r.host).length === 3, "s\\u00f3 sa\\u00eddas: 3 linhas");
+  await limpa(r);
+}
+
+// \u2500\u2500 Varias escolhas no mesmo filtro \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
+{
+  const r = await monta(base);
+
+  // Categoria: duas de uma vez
+  await marcar(r.host, "Categoria", "Obra", "Obras");
+  ok(linhas(r.host).length === 2, "duas categorias marcadas deixam as duas linhas");
+  ok(/2 selecionados/.test(resumoVarios(r.host, "Categoria")), "e o bot\u00e3o di-lo: 2 selecionados");
+  await marcar(r.host, "Categoria", "Funding");
+  ok(linhas(r.host).length === 3, "uma terceira categoria soma, n\u00e3o substitui");
+  await marcar(r.host, "Categoria", "Obras");
+  ok(linhas(r.host).length === 2, "desmarcar uma tira s\u00f3 essa");
+  await limparVarios(r.host, "Categoria");
+  ok(linhas(r.host).length === 5, "limpar devolve tudo");
+  ok(resumoVarios(r.host, "Categoria") === "Todas", "e o bot\u00e3o volta a Todas");
+
+  // Ano: 2025 e 2026 juntos
+  await marcar(r.host, "Ano", "2025", "2026");
+  ok(linhas(r.host).length === 5, "os dois anos cobrem tudo");
+  await marcar(r.host, "Ano", "2026");
+  ok(linhas(r.host).length === 1, "s\u00f3 2025 deixa 1");
+  await limparVarios(r.host, "Ano");
+
+  // M\u00eas: setembro e outubro
+  await marcar(r.host, "M\u00eas", "setembro", "outubro");
+  ok(linhas(r.host).length === 3, "setembro + outubro d\u00e3o 3");
+  ok(/2 selecionados/.test(resumoVarios(r.host, "M\u00eas")), "o resumo do m\u00eas conta as duas");
+  await limparVarios(r.host, "M\u00eas");
+
+  // Cruzar os tr\u00eas
+  await marcar(r.host, "Ano", "2026");
+  await marcar(r.host, "M\u00eas", "setembro", "outubro");
+  await marcar(r.host, "Categoria", "Obra", "Obras");
+  ok(linhas(r.host).length === 2, "ano + dois meses + duas categorias cruzam-se bem");
+
+  // O bot\u00e3o "Todos" dentro da caixa marca tudo
+  await botaoVarios(r.host, "Categoria", "Todos");
+  ok(linhas(r.host).length === 3, "o bot\u00e3o Todos marca a lista toda");
+  await limpa(r);
+}
+
+// \u2500\u2500 As listas seguem a empresa escolhida \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
+{
+  const r = await monta(base);
+  const todasCats = await opcoesVarios(r.host, "Categoria");
+  ok(todasCats.includes("Obra") && todasCats.includes("Obras") && todasCats.includes("S\u00f3cios"),
+     "em Todas as empresas, a lista de categorias traz as de todas");
+
+  const emp = filtro(r.host, "Empresa");
+  await muda(emp, "adseq");
+  const catsAd = await opcoesVarios(r.host, "Categoria");
+  ok(catsAd.includes("Obras") && catsAd.includes("S\u00f3cios"), "filtrada a Admirable Sequence, ficam as dela");
+  ok(!catsAd.includes("Obra"), "e sai a Obra, que \u00e9 da Favorite Closet");
+  ok(!catsAd.includes("Encargos financeiros"), "e sai a da Pearl");
+
+  const anosAd = await opcoesVarios(r.host, "Ano");
+  ok(anosAd.includes("2025") && anosAd.includes("2026"), "os anos da Admirable Sequence s\u00e3o os dois");
+  const subAd = await opcoesVarios(r.host, "Subcategoria");
+  ok(subAd.includes("Gastos com Obras") && subAd.includes("Suprimentos"), "e as subcategorias dela");
+
+  await muda(emp, "pearl");
+  const catsPearl = await opcoesVarios(r.host, "Categoria");
+  ok(catsPearl.length === 1 && catsPearl[0] === "Encargos financeiros",
+     "a Pearl s\u00f3 tem uma categoria, e \u00e9 s\u00f3 essa que aparece");
+  const anosPearl = await opcoesVarios(r.host, "Ano");
+  ok(anosPearl.length === 1 && anosPearl[0] === "2026", "e um ano s\u00f3");
+
+  await muda(emp, "");
+  const outraVez = await opcoesVarios(r.host, "Categoria");
+  ok(outraVez.length === todasCats.length, "voltar a Todas devolve a lista inteira");
+  await limpa(r);
+}
+
+// \u2500\u2500 Trocar de empresa larga os filtros que j\u00e1 n\u00e3o existem \u2500\u2500\u2500\u2500\u2500\u2500\u2500
+{
+  const r = await monta(base);
+  await marcar(r.host, "Categoria", "Obra");
+  ok(linhas(r.host).length === 1, "marcada a Obra, fica 1 linha");
+  const emp = filtro(r.host, "Empresa");
+  await muda(emp, "adseq");
+  ok(resumoVarios(r.host, "Categoria") === "Todas",
+     "mudar para uma empresa sem essa categoria larga o filtro");
+  ok(linhas(r.host).length === 2, "e mostram-se as 2 linhas da empresa nova, n\u00e3o uma lista vazia");
   await limpa(r);
 }
 

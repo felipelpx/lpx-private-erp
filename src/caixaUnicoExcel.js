@@ -32,14 +32,22 @@ const isoParaData = (iso) => {
 const arred2 = (v) => Math.round(((Number(v) || 0) + Number.EPSILON) * 100) / 100;
 
 // Descreve os filtros em texto, para quem abrir o ficheiro saber o que está a ver.
+// Categoria, ano e mês aceitam várias escolhas, por isso podem vir em lista.
+const lista = (v) => (Array.isArray(v) ? v : v ? [v] : []).filter(Boolean);
+const emTexto = (rotulo, v, plural = `${rotulo}s`) => {
+  const xs = lista(v);
+  if (xs.length === 0) return null;
+  if (xs.length === 1) return `${rotulo} ${xs[0]}`;
+  return `${plural} ${xs.join(", ")}`;
+};
+
 function descreverFiltros(f = {}) {
   const partes = [];
   if (f.empresa) partes.push(`empresa ${f.empresa}`);
   if (f.banco) partes.push(`banco ${f.banco}`);
-  if (f.categoria) partes.push(`categoria ${f.categoria}`);
-  if (f.subcategoria) partes.push(`subcategoria ${f.subcategoria}`);
-  if (f.ano) partes.push(`ano ${f.ano}`);
-  if (f.mes) partes.push(`mês ${f.mes}`);
+  [emTexto("categoria", f.categoria), emTexto("subcategoria", f.subcategoria),
+   emTexto("ano", f.ano), emTexto("mês", f.mes, "meses")]
+    .filter(Boolean).forEach(x => partes.push(x));
   if (f.de) partes.push(`de ${f.de}`);
   if (f.ate) partes.push(`até ${f.ate}`);
   if (f.procura) partes.push(`a procurar "${f.procura}"`);

@@ -47,6 +47,101 @@ const tdNum = { ...td, textAlign: "right", whiteSpace: "nowrap", fontVariantNume
 const nomeEmpresa = (id) => EMPRESAS.find(x => x.id === id)?.nome || id || "—";
 const semAcento = (s) => String(s || "").normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
 
+// ─── Filtro de várias escolhas ───────────────────────────────────────────────
+// Um <select multiple> nativo obriga a carregar no Ctrl e não cabe na linha dos
+// outros filtros. Isto é um botão que abre uma lista de caixas de visto: vê-se
+// o que está escolhido sem abrir, e escolhe-se com um clique de cada vez.
+//
+// `opcoes` são strings ou { v, r } (valor e rótulo) — para o mês, em que o
+// valor é "01" e o rótulo é "janeiro".
+function Varios({ opcoes, valores, onMudar, nadaSelecionado = "Todos", procuravel }) {
+  const [aberto, setAberto] = useState(false);
+  const [procura, setProcura] = useState("");
+  const caixa = useRef(null);
+  const sel = Array.isArray(valores) ? valores : (valores ? [valores] : []);
+  const ops = opcoes.map(o => (typeof o === "string" ? { v: o, r: o } : o));
+
+  // Fechar ao clicar fora ou com Esc: a lista tapa o resto dos filtros.
+  useEffect(() => {
+    if (!aberto) return;
+    const fora = (e) => { if (caixa.current && !caixa.current.contains(e.target)) setAberto(false); };
+    const esc = (e) => { if (e.key === "Escape") setAberto(false); };
+    document.addEventListener("mousedown", fora);
+    document.addEventListener("keydown", esc);
+    return () => { document.removeEventListener("mousedown", fora); document.removeEventListener("keydown", esc); };
+  }, [aberto]);
+
+  const trocar = (v) => onMudar(sel.includes(v) ? sel.filter(x => x !== v) : [...sel, v]);
+
+  const rotuloDe = (v) => ops.find(o => o.v === v)?.r ?? v;
+  const resumo = sel.length === 0 ? nadaSelecionado
+               : sel.length === 1 ? rotuloDe(sel[0])
+               : `${sel.length} selecionados`;
+
+  const visiveis = procura
+    ? ops.filter(o => semAcento(o.r).includes(semAcento(procura)))
+    : ops;
+
+  return (
+    <div ref={caixa} style={{ position: "relative" }}>
+      <button type="button" onClick={() => setAberto(a => !a)}
+        title={sel.length > 1 ? sel.map(rotuloDe).join(", ") : undefined}
+        style={{ ...campo, textAlign: "left", cursor: "pointer", display: "flex",
+                 alignItems: "center", gap: 6, lineHeight: 1.3,
+                 borderColor: sel.length ? COR.ouro : COR.linha,
+                 color: sel.length ? COR.texto : COR.textoTenue }}>
+        <span style={{ flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+          {resumo}
+        </span>
+        <span style={{ color: COR.textoApagado, fontSize: 9 }}>▾</span>
+      </button>
+
+      {aberto && (
+        <div style={{ position: "absolute", zIndex: 40, top: "calc(100% + 4px)", left: 0,
+                      minWidth: "100%", maxWidth: 320, background: COR.papel,
+                      border: `1px solid ${COR.linhaForte}`, borderRadius: RAIO.medio,
+                      boxShadow: "0 10px 30px rgba(9,28,42,0.10)", padding: 6 }}>
+          {procuravel && ops.length > 12 && (
+            <input autoFocus value={procura} onChange={e => setProcura(e.target.value)}
+              placeholder="procurar..." style={{ ...campo, padding: "6px 8px", fontSize: 11.5,
+                                                 marginBottom: 4 }} />
+          )}
+          <div style={{ maxHeight: 260, overflowY: "auto" }}>
+            {visiveis.length === 0 && (
+              <div style={{ padding: "8px 10px", fontSize: 11.5, color: COR.textoTenue }}>
+                Nada com esse nome.
+              </div>
+            )}
+            {visiveis.map(o => (
+              <label key={o.v} style={{ display: "flex", alignItems: "center", gap: 8,
+                                        padding: "5px 8px", borderRadius: 4, cursor: "pointer",
+                                        fontSize: 12, color: COR.texto,
+                                        background: sel.includes(o.v) ? COR.fundoSuave : "transparent" }}>
+                <input type="checkbox" checked={sel.includes(o.v)} onChange={() => trocar(o.v)}
+                  style={{ width: 14, height: 14, accentColor: COR.navy, flexShrink: 0 }} />
+                <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{o.r}</span>
+              </label>
+            ))}
+          </div>
+          <div style={{ display: "flex", gap: 6, borderTop: `1px solid ${COR.linhaSuave}`,
+                        marginTop: 4, paddingTop: 6 }}>
+            <button type="button" onClick={() => onMudar(visiveis.map(o => o.v))}
+              style={botaoMini}>Todos</button>
+            <button type="button" onClick={() => onMudar([])} style={botaoMini}>Limpar</button>
+            <button type="button" onClick={() => setAberto(false)}
+              style={{ ...botaoMini, marginLeft: "auto" }}>Fechar</button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+const botaoMini = {
+  background: "transparent", border: `1px solid ${COR.linha}`, borderRadius: 4,
+  padding: "4px 9px", fontSize: 11, color: COR.textoSuave, cursor: "pointer",
+};
+
 // ─── Célula que grava sozinha ────────────────────────────────────────────────
 function Celula({ valor, opcoes, aviso, onGravar, livre, dica }) {
   const [v, setV] = useState(valor || "");
@@ -101,7 +196,7 @@ export default function CaixaUnicoView({ currentUser, empresasVisiveis = [] }) {
   const podeEditar = currentUser?.role === "admin" || currentUser?.role === "gestor";
 
   const [f, setF] = useState(() => {
-    try { return { ...vazio(), ...JSON.parse(localStorage.getItem(MEMORIA) || "{}") }; }
+    try { return normalizar({ ...vazio(), ...JSON.parse(localStorage.getItem(MEMORIA) || "{}") }); }
     catch { return vazio(); }
   });
   const [limite, setLimite] = useState(POR_PAGINA);
@@ -118,24 +213,50 @@ export default function CaixaUnicoView({ currentUser, empresasVisiveis = [] }) {
     ids.includes(m.empresa_id) ||
     (podeEditar && !EMPRESAS.some(e => e.id === m.empresa_id))), [movimentos, ids.join(), podeEditar]);
 
-  const bancos = useMemo(() => [...new Set(todos.map(m => m.banco).filter(Boolean))].sort(), [todos]);
-  const anos = useMemo(() => [...new Set(todos.map(m => String(m.data || "").slice(0, 4)).filter(Boolean))]
-    .sort((a, b) => b.localeCompare(a)), [todos]);
-  const categorias = useMemo(() => [...new Set(todos.map(m => m.categoria).filter(Boolean))].sort(), [todos]);
-  const subcategorias = useMemo(() => [...new Set(todos
-    .filter(m => !f.categoria || m.categoria === f.categoria)
-    .map(m => m.subcategoria).filter(Boolean))].sort(), [todos, f.categoria]);
+  // Escolhida uma empresa, as outras caixas passam a mostrar só o que existe
+  // nela: não faz sentido oferecer o plano de contas do grupo inteiro para
+  // filtrar uma SPV. Em "Todas", volta a lista toda.
+  const doAmbito = useMemo(
+    () => (f.empresa ? todos.filter(m => m.empresa_id === f.empresa) : todos),
+    [todos, f.empresa]);
+
+  const bancos = useMemo(() => [...new Set(doAmbito.map(m => m.banco).filter(Boolean))].sort(), [doAmbito]);
+  const anos = useMemo(() => [...new Set(doAmbito.map(m => String(m.data || "").slice(0, 4)).filter(Boolean))]
+    .sort((a, b) => b.localeCompare(a)), [doAmbito]);
+  const categorias = useMemo(() => [...new Set(doAmbito.map(m => m.categoria).filter(Boolean))].sort(), [doAmbito]);
+  const subcategorias = useMemo(() => [...new Set(doAmbito
+    .filter(m => f.categoria.length === 0 || f.categoria.includes(m.categoria))
+    .map(m => m.subcategoria).filter(Boolean))].sort(), [doAmbito, f.categoria.join("|")]);
+
+  // Trocar de empresa deixaria filtros pendurados em valores que a empresa
+  // nova não tem — a lista vinha vazia sem se perceber porquê. Largam-se.
+  useEffect(() => {
+    setF(x => {
+      const podar = (k, validos) => x[k].filter(v => validos.includes(v));
+      const novo = {
+        ...x,
+        banco: bancos.includes(x.banco) ? x.banco : "",
+        categoria: podar("categoria", categorias),
+        subcategoria: podar("subcategoria", subcategorias),
+        ano: podar("ano", anos),
+      };
+      const igual = novo.banco === x.banco &&
+        ["categoria", "subcategoria", "ano"].every(k => novo[k].length === x[k].length);
+      return igual ? x : novo;
+    });
+  }, [f.empresa, bancos.join("|"), categorias.join("|"), anos.join("|"), subcategorias.join("|")]);
 
   const lista = useMemo(() => {
     const procura = semAcento(f.procura).trim();
     return todos.filter(m => {
       if (f.empresa && m.empresa_id !== f.empresa) return false;
       if (f.banco && m.banco !== f.banco) return false;
-      if (f.categoria && m.categoria !== f.categoria) return false;
-      if (f.subcategoria && m.subcategoria !== f.subcategoria) return false;
+      // Lista vazia é "todas". Com várias escolhidas, basta bater numa.
+      if (f.categoria.length && !f.categoria.includes(m.categoria)) return false;
+      if (f.subcategoria.length && !f.subcategoria.includes(m.subcategoria)) return false;
       const d = String(m.data || "").slice(0, 10);
-      if (f.ano && d.slice(0, 4) !== f.ano) return false;
-      if (f.mes && d.slice(5, 7) !== f.mes) return false;
+      if (f.ano.length && !f.ano.includes(d.slice(0, 4))) return false;
+      if (f.mes.length && !f.mes.includes(d.slice(5, 7))) return false;
       if (f.de && d < f.de) return false;
       if (f.ate && d > f.ate) return false;
       if (f.sinal === "entradas" && !(m.valor > 0)) return false;
@@ -153,7 +274,8 @@ export default function CaixaUnicoView({ currentUser, empresasVisiveis = [] }) {
     saidas:   s.saidas   + (m.valor < 0 ? m.valor : 0),
   }), { entradas: 0, saidas: 0 }), [lista]);
 
-  const haFiltro = Object.entries(f).some(([k, v]) => v && k !== "sinal") || f.sinal !== "todos";
+  const haFiltro = Object.entries(f).some(([k, v]) =>
+    k !== "sinal" && (Array.isArray(v) ? v.length > 0 : Boolean(v))) || f.sinal !== "todos";
 
   const exportar = async () => {
     if (exportando) return;
@@ -222,31 +344,26 @@ export default function CaixaUnicoView({ currentUser, empresasVisiveis = [] }) {
           </div>
           <div>
             <Rotulo>Categoria</Rotulo>
-            <select value={f.categoria} onChange={e => setF(x => ({ ...x, categoria: e.target.value, subcategoria: "" }))} style={campo}>
-              <option value="">Todas</option>
-              {categorias.map(c => <option key={c} value={c}>{c}</option>)}
-            </select>
+            {/* Ao largar uma categoria, largam-se as subcategorias que já não
+                existem na escolha — senão o filtro fica vazio sem se perceber. */}
+            <Varios opcoes={categorias} valores={f.categoria} nadaSelecionado="Todas" procuravel
+              onMudar={(v) => setF(x => ({ ...x, categoria: v,
+                subcategoria: x.subcategoria.filter(sub => v.length === 0 ||
+                  todos.some(m => v.includes(m.categoria) && m.subcategoria === sub)) }))} />
           </div>
           <div>
             <Rotulo>Subcategoria</Rotulo>
-            <select value={f.subcategoria} onChange={e => muda("subcategoria")(e.target.value)} style={campo}>
-              <option value="">Todas</option>
-              {subcategorias.map(c => <option key={c} value={c}>{c}</option>)}
-            </select>
+            <Varios opcoes={subcategorias} valores={f.subcategoria} nadaSelecionado="Todas" procuravel
+              onMudar={muda("subcategoria")} />
           </div>
           <div>
             <Rotulo>Ano</Rotulo>
-            <select value={f.ano} onChange={e => muda("ano")(e.target.value)} style={campo}>
-              <option value="">Todos</option>
-              {anos.map(a => <option key={a} value={a}>{a}</option>)}
-            </select>
+            <Varios opcoes={anos} valores={f.ano} onMudar={muda("ano")} />
           </div>
           <div>
             <Rotulo>Mês</Rotulo>
-            <select value={f.mes} onChange={e => muda("mes")(e.target.value)} style={campo}>
-              <option value="">Todos</option>
-              {MESES.map((m, i) => <option key={m} value={String(i + 1).padStart(2, "0")}>{m}</option>)}
-            </select>
+            <Varios valores={f.mes} onMudar={muda("mes")}
+              opcoes={MESES.map((m, i) => ({ v: String(i + 1).padStart(2, "0"), r: m }))} />
           </div>
           <div>
             <Rotulo>Data de</Rotulo>
@@ -403,6 +520,18 @@ export default function CaixaUnicoView({ currentUser, empresasVisiveis = [] }) {
 }
 
 function vazio() {
-  return { empresa: "", banco: "", categoria: "", subcategoria: "",
-           ano: "", mes: "", de: "", ate: "", procura: "", sinal: "todos" };
+  return { empresa: "", banco: "", categoria: [], subcategoria: [],
+           ano: [], mes: [], de: "", ate: "", procura: "", sinal: "todos" };
+}
+
+// Os filtros guardados antes de isto aceitar várias escolhas traziam uma string
+// em categoria, subcategoria, ano e mês. Lê-se à mesma: uma escolha só.
+const LISTAS = ["categoria", "subcategoria", "ano", "mes"];
+export function normalizar(f) {
+  const out = { ...f };
+  LISTAS.forEach(k => {
+    const v = out[k];
+    out[k] = Array.isArray(v) ? v.filter(Boolean) : (v ? [String(v)] : []);
+  });
+  return out;
 }
