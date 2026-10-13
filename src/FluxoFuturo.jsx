@@ -2,6 +2,7 @@ import React, { useState, useMemo, useEffect } from "react";
 import { useVendas, useSaldosAtuais, useRecebiveis, useObraPlanos } from "./hooks.js";
 import ModalPlanoObra, { BotaoPlanoObra } from "./ObraPlano.jsx";
 import { CATEGORIAS } from "./categorias.js";
+import { categoriasDa, comOValorAtual } from "./categoriasEmpresa.js";
 import { faturaPaga, faturaAtrasada, statusFatura } from "./status.js";
 import { fmtEUR as fmtEuro } from "./formato.js";
 import { labelEmpresa, EMPRESAS as EMPRESAS_TODAS } from "./empresas.js";
@@ -1023,7 +1024,8 @@ export default function FluxoFuturo({ faturas: faturasTodas, faturasLoading, pag
                 <label style={{ fontSize: 10, color: "#9DA2A6", fontFamily: "var(--fonte-numero)", textTransform: "uppercase" }}>Categoria</label>
                 <select value={form.categoria} onChange={e => setForm(f => ({ ...f, categoria: e.target.value }))}
                   style={{ background: "#F9F5EF", border: "1px solid #EFE8DE", borderRadius: 8, padding: "9px 12px", fontSize: 13, outline: "none" }}>
-                  {CATEGORIAS.map(v => <option key={v}>{v}</option>)}
+                  {comOValorAtual(categoriasDa(form.empresa) || CATEGORIAS, form.categoria)
+                    .map(v => <option key={v}>{v}</option>)}
                 </select>
               </div>
               <div style={{ gridColumn: "1/-1", display: "flex", flexDirection: "column", gap: 4 }}>
@@ -1571,7 +1573,8 @@ export default function FluxoFuturo({ faturas: faturasTodas, faturasLoading, pag
                 <label style={{ fontSize: 10, color: "#9DA2A6", fontFamily: "var(--fonte-numero)", textTransform: "uppercase" }}>Categoria</label>
                 <select value={editForm.categoria} onChange={e => setEditForm(f => ({ ...f, categoria: e.target.value }))}
                   style={{ background: "#F9F5EF", border: "1px solid #EFE8DE", borderRadius: 8, padding: "9px 12px", fontSize: 13, outline: "none" }}>
-                  {CATEGORIAS.map(v => <option key={v}>{v}</option>)}
+                  {comOValorAtual(categoriasDa(form.empresa) || CATEGORIAS, form.categoria)
+                    .map(v => <option key={v}>{v}</option>)}
                 </select>
               </div>
             </div>

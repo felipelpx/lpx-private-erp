@@ -16,8 +16,8 @@ export default supabase;`);
 
 writeFileSync(join(dir, "stub-hooks.js"), `
 const MOVS = Object.freeze({ movimentos: [
-  { data:"2026-06-10", categoria:"Obra", valor:-246000 },
-  { data:"2026-07-10", categoria:"Obra", valor:-246000 },
+  { data:"2026-06-10", categoria:"Obra", valor:-300000 },
+  { data:"2026-07-10", categoria:"Obra", valor:-192000 },
   { data:"2026-06-02", categoria:"Funding banco", valor: 250000 },
   { data:"2026-07-02", categoria:"Funding banco", valor: 150000 },
 ], loading:false, reload:()=>{} });
@@ -119,7 +119,9 @@ ok(t.includes("16.339,32"), "e a fiscaliza\u00e7\u00e3o sobe para 1 815,48 \u00d
 ok(t.includes("400.000,00"), "o ecr\u00e3 prop\u00f5e a d\u00edvida de 400 000 \u20ac lida do extrato");
 ok(/liberta\u00e7\u00f5es encontradas no\s+extrato|liberta\u00e7\u00e3o encontrada no\s+extrato/.test(t.replace(/\s+/g," ")) || t.includes("extrato"),
    "dizendo que veio do extrato");
-ok(t.includes("492.000,00"), "e mostra 492 000 \u20ac j\u00e1 pagos de obra, do extrato");
+ok(t.includes("492.000,00"), "mostra 492 000 \u20ac pagos no extrato, com IVA");
+ok(t.includes("92.000,00"), "e a linha do IVA a 23% retirado: 92 000 \u20ac");
+ok(t.includes("400.000,00"), "sobrando 400 000 \u20ac de base incorrida");
 
 console.log(mau === 0 ? "\n\u2705 Ecr\u00e3 do plano de obra OK" : `\n\u274c ${mau} falha(s)`);
 await b.close();

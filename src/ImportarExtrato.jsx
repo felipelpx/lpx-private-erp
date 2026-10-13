@@ -1,5 +1,6 @@
 import { useState, useRef } from "react";
 import { CATEGORIAS } from "./categorias.js";
+import { categoriasDa, comOValorAtual } from "./categoriasEmpresa.js";
 import { supabase } from "./supabase.js";
 import { EMPRESAS_IMPORT, buildContaId as buildContaIdCfg } from "./empresas.js";
 import { fmtEUR, fmtTamanho } from "./formato.js";
@@ -640,7 +641,8 @@ export default function ImportarExtrato({ onSaveMovimentos, onGoToExtrato }) {
                       <select value={m.catEditada} onChange={e => updateCat(m.id, e.target.value)}
                         style={{ width: "100%", background: "#F9F5EF", border: "1px solid #EFE8DE", borderRadius: 6, padding: "4px 8px", fontSize: 11, outline: "none" }}>
                         <option value="">-- sem categoria --</option>
-                        {CATEGORIAS.map(c => <option key={c}>{c}</option>)}
+                        {comOValorAtual(categoriasDa(empresa?.id || empresa) || CATEGORIAS, m.catEditada)
+                          .map(c => <option key={c}>{c}</option>)}
                       </select>
                     </td>
                     <td style={{ padding: "9px 12px", minWidth: 140 }}>

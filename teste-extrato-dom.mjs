@@ -18,6 +18,8 @@ const MOVS = [
   { id: "m5", conta_id: "adseq_bcp", empresa_id: "adseq", banco: "BCP", data: "2026-10-01", movimento: "TAXA GESTAO", valor: -100, saldo: -53, categoria: "Soft_Costs", subcategoria: "", detalhes: "" },
   { id: "m6", conta_id: "adseq_bcp", empresa_id: "adseq", banco: "BCP", data: "2026-10-01", movimento: "SEM PLANO", valor: -7, saldo: -60, categoria: "Categoria Esquisita", subcategoria: "", detalhes: "" },
   { id: "m2", conta_id: "adseq_bcp", empresa_id: "adseq", banco: "BCP", data: "2026-09-12", movimento: "ENTRADA SOCIO", valor: 50000, saldo: 90000, categoria: "Aportes", detalhes: "" },
+  // Uma linha da Favorite Closet, para provar que o plano é o DA EMPRESA
+  { id: "m7", conta_id: "favcloset_bcp", empresa_id: "favcloset", banco: "BCP", data: "2026-10-02", movimento: "PAGAMENTO OBRA FC", valor: -900, saldo: 100, categoria: "Obra", subcategoria: "", detalhes: "" },
 ];
 
 writeFileSync(join(dir, "stub-supabase.js"), `
@@ -253,11 +255,18 @@ async function abreExtrato(props) {
   ok(!cabec.includes("Subcategoria"), "LPX continua sem coluna Subcategoria");
   ok(cabec.includes("Detalhes"), "LPX continua com Detalhes");
   const opcoes = [...host.querySelectorAll("tbody tr select")].map(s => [...s.options].map(o => o.value));
-  ok(opcoes.some(o => o.includes("Ticket Refeição")), "LPX mantém o seu plano de contas");
-  // "Soft_Costs" aparece como valor preservado da linha que o tem gravado
-  // (é o comportamento certo), por isso a prova é uma categoria HDG que
-  // nenhuma linha usa: essa não pode ser OFERECIDA.
-  ok(!opcoes.some(o => o.includes("Aquisição_de_Terreno")), "LPX não recebe o plano HDG");
+  // O plano segue a empresa da LINHA, não o grupo do ecrã: a linha da
+  // Favorite Closet tem de receber o plano da Favorite Closet.
+  ok(opcoes.some(o => o.includes("Terreno") && o.includes("Obra")),
+     "a linha da Favorite Closet recebe o plano dela");
+  // E nenhuma linha LPX pode ser oferecida uma categoria do plano HDG que
+  // nenhuma delas tenha gravada.
+  const daFC = [...host.querySelectorAll("tbody tr")]
+    .filter(tr => /PAGAMENTO OBRA FC/.test(txt(tr)))
+    .map(tr => [...(tr.querySelector("select")?.options || [])].map(o => o.value));
+  ok(daFC.length === 1, "encontra a linha da Favorite Closet");
+  ok(!daFC[0].includes("Aquisição_de_Terreno"), "e não lhe oferece o plano HDG");
+  ok(!daFC[0].includes("Soft_Costs"), "nem Soft_Costs");
 }
 
 // ── Subcategoria editável em todas as situações do ecrã real ───────────────

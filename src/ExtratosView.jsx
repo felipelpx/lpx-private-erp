@@ -5,6 +5,7 @@ import { CATEGORIAS } from "./categorias.js";
 import { fmtEUR, fmtNum, fmtInt, fmtPctSinal, fmtDataHora, fmtData as fmtDataCfg } from "./formato.js";
 import { agruparPorGrupo, GRUPOS_INFO, EMPRESAS as EMPRESAS_TODAS } from "./empresas.js";
 import { CATEGORIAS_HDG, subcategoriasHDG, subcategoriaValida, categoriaNoPlanoHDG } from "./categoriasHDG.js";
+import { categoriasDa, subcategoriasDa, usaSubcategoria, foraDoPlano } from "./categoriasEmpresa.js";
 import { ModalQuestionar } from "./Questoes.jsx";
 
 const BANCO_COLORS = {"Millennium":"#e84393","BNI":"#0057b7","BB Americas":"#c8a500","Eurobic":"#e74c3c","Revolut":"#6772e5","CGD":"#00a859","NovoBanco":"#ff6200","Banco Invest":"#1e3a6e","BAE":"#6c3483","BCP":"#002fa7","Miami":"#0891b2","Cartao 7449":"#C19A4A","Caixa Livre":"#6E5E8E"};
@@ -88,7 +89,7 @@ function EditableCategoria({ initialValue, movId, onSave, disabled, opcoes = CAT
 // ─── Subcategoria (só nos projetos HDG) ─────────────────────────────────────
 // As opções dependem da categoria escolhida; sem categoria, ou numa categoria
 // sem subcategorias (Transferências), o campo fica inerte em vez de enganar.
-function EditableSubcategoria({ initialValue, categoria, movId, onSave, disabled }) {
+function EditableSubcategoria({ initialValue, categoria, movId, onSave, disabled, empresaId }) {
   const [val, setVal] = useState(initialValue || "");
   const [status, setStatus] = useState(null);
   const lastInitial = useRef(initialValue || "");
@@ -99,7 +100,10 @@ function EditableSubcategoria({ initialValue, categoria, movId, onSave, disabled
     }
   }, [initialValue, movId]);
 
-  const opcoes = subcategoriasHDG(categoria);
+  // O plano é o da empresa da linha; só se não houver é que se usa o do grupo.
+  const opcoes = usaSubcategoria(empresaId)
+    ? subcategoriasDa(empresaId, categoria)
+    : subcategoriasHDG(categoria);
 
   const handleChange = async (e) => {
     const nova = e.target.value;
@@ -2400,10 +2404,13 @@ export default function ExtratosView({ EMPRESAS, extrato, caixaUnico, setCaixaUn
                             initialValue={m.categoria}
                             movId={m.id}
                             onSave={sbUpdate}
-                            opcoes={ehHDG ? CATEGORIAS_HDG : CATEGORIAS}
-                            noPlano={ehHDG ? categoriaNoPlanoHDG : undefined}
-                            extraPatch={ehHDG
-                              ? (nova) => (subcategoriaValida(nova, m.subcategoria) ? {} : { subcategoria: "" })
+                            opcoes={categoriasDa(m.empresa_id) || (ehHDG ? CATEGORIAS_HDG : CATEGORIAS)}
+                            noPlano={categoriasDa(m.empresa_id)
+                              ? (c) => !foraDoPlano(m.empresa_id, c)
+                              : (ehHDG ? categoriaNoPlanoHDG : undefined)}
+                            extraPatch={(usaSubcategoria(m.empresa_id) || ehHDG)
+                              ? (nova) => (subcategoriasDa(m.empresa_id, nova).includes(m.subcategoria)
+                                  || subcategoriaValida(nova, m.subcategoria) ? {} : { subcategoria: "" })
                               : undefined}
                           />
                         </td>
@@ -2413,6 +2420,7 @@ export default function ExtratosView({ EMPRESAS, extrato, caixaUnico, setCaixaUn
                               initialValue={m.subcategoria}
                               categoria={m.categoria}
                               movId={m.id}
+                              empresaId={m.empresa_id}
                               onSave={sbUpdate}
                             />
                           </td>

@@ -182,13 +182,30 @@ export function obraRealizada(movimentos, faturas, { empresa, categorias = [], t
     ...ms.map(m => String(m.data || "").slice(0, 10)),
   ].filter(d => /^\d{4}-\d{2}-\d{2}$/.test(d)).sort();
 
+  // O extrato traz o valor que saiu da conta — ou seja, COM IVA. O budget é
+  // sem IVA, por isso o pagamento tem de ser limpo antes de entrar na conta:
+  //     base = pago / (1 + taxa/100)
+  // As faturas por pagar já vêm pela base, e por isso entram como estão.
+  const taxa = Number(taxaIva) || 0;
+  const pagoExtratoBase = arred2(pagoExtrato / (1 + taxa / 100));
+  const ivaNoPago = arred2(pagoExtrato - pagoExtratoBase);
+
+  // O que já foi incorrido é o que saiu da conta MAIS o que está faturado e
+  // ainda por pagar. Cada euro conta uma vez só: uma fatura já paga está no
+  // extrato, e uma por pagar ainda não.
+  //
+  // Sem movimentos de obra no extrato não há nada a somar — aí vale o que as
+  // faturas dizem, que é tudo o que o ERP sabe.
+  const jaIncorrido = ms.length > 0 ? arred2(pagoExtratoBase + porPagar) : faturado;
+
   return {
     faturado, faturadoPago, porPagar,
-    pagoExtrato,
+    pagoExtrato, pagoExtratoBase, ivaNoPago, taxaUsada: taxa,
     nFaturas: fs.length, nMovimentos: ms.length,
     primeiroGasto: datas[0] || null,
-    // O que serve para o plano: o que já foi incorrido, pago ou não.
-    jaIncorrido: faturado,
+    jaIncorrido,
+    // De onde veio o número, para o ecrã poder explicá-lo.
+    fonte: ms.length > 0 ? "extrato" : "faturas",
   };
 }
 

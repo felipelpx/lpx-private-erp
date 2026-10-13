@@ -21,11 +21,11 @@ export const buildContaId = (empresaId, banco) =>
 // Definição compacta: para cada empresa, o id, o nome e a lista de bancos.
 const DEF = [
   { id: "favcloset", nome: "Favorite Closet",    projeto: "Amadeu 07",           grupo: "LPX", bancos: ["BCP", "RED"] },
-  { id: "simplify",  nome: "Simplify Rubric",    projeto: "Alto dos 7 Moinhos",  grupo: "LPX", bancos: ["BCP", "RED"] },
+  { id: "simplify",  nome: "Simplify Rubric",    projeto: "Alto dos 7 Moinhos",  grupo: "LPX", bancos: ["BCP", "RED", "BM"] },
   { id: "enchanted", nome: "Enchanted Vortex",   projeto: "Developer A07",       grupo: "LPX", bancos: ["BCP"] },
   { id: "blessed",   nome: "BlessedLegion",      projeto: "Developer 7M",        grupo: "LPX", bancos: ["BCP", "Revolut"] },
   { id: "pearl",     nome: "Pearl Syntax",       projeto: "Aura Properties",     grupo: "LPX", bancos: ["BCP", "Revolut"] },
-  { id: "genero",    nome: "Genero Prudente",    projeto: "Maria Pia",           grupo: "LPX", bancos: ["BCP"] },
+  { id: "genero",    nome: "Genero Prudente",    projeto: "Maria Pia",           grupo: "LPX", bancos: ["BCP", "LPX"] },
   { id: "fluffy",    nome: "Fluffy Rithm",       projeto: "Tax SPV",             grupo: "LPX", bancos: ["BCP", "Revolut"] },
   { id: "adseq",     nome: "Admirable Sequence", projeto: "Cinq Etoiles",        grupo: "HDG", bancos: ["BCP", "RED"] },
   { id: "infinite",  nome: "Infinite Change",    projeto: "Paço D'arcos",        grupo: "HDG", bancos: ["BCP", "RED"] },

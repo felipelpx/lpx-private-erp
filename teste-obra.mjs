@@ -458,7 +458,14 @@ console.log("\nObra já iniciada: o sistema vai buscar em vez de perguntar");
   ok(perto(r.pagoExtrato, 307500), "saiu da conta 307 500 € (com IVA, como no extrato)");
   ok(r.primeiroGasto === "2026-07-15", "o primeiro gasto de obra é de 15/07/2026");
   ok(r.nFaturas === 3, "três faturas de obra válidas");
-  ok(r.jaIncorrido === r.faturado, "o budget é consumido pelo incorrido, não pelo pago");
+  // A regra: incorrido = o que saiu da conta + o que está faturado por pagar.
+  // 307 500 (extrato) + 80 000 (por pagar) = 387 500
+  ok(perto(r.pagoExtratoBase, 250000), `o extrato vem com IVA: 307 500 ÷ 1,23 = 250 000 € (deu ${r.pagoExtratoBase})`);
+  ok(perto(r.ivaNoPago, 57500), "e o IVA retirado foi 57 500 €");
+  ok(perto(r.jaIncorrido, 330000), `incorrido = 250 000 + 80 000 = 330 000 € (deu ${r.jaIncorrido})`);
+  ok(perto(r.jaIncorrido, r.pagoExtratoBase + r.porPagar), "é a soma do pago sem IVA com o faturado por pagar");
+  ok(r.jaIncorrido < r.pagoExtrato + r.porPagar, "e fica abaixo da soma em bruto, por causa do IVA");
+  ok(r.fonte === "extrato", "e diz que veio do extrato");
 
   // categoria alheia e outra empresa ficam de fora
   ok(!perto(r.faturado, 339000), "Salários não conta");
@@ -472,6 +479,8 @@ console.log("\nObra já iniciada: o sistema vai buscar em vez de perguntar");
   // Sem extrato nenhum continua a funcionar pelas faturas
   const semExtrato = obraRealizada([], faturas, { empresa:"favcloset", categorias:["Obra"] });
   ok(perto(semExtrato.faturado, 330000), "sem extrato, o incorrido sai à mesma das faturas");
+  ok(perto(semExtrato.jaIncorrido, 330000), "as 330 000 € faturadas, e não só as 80 000 por pagar");
+  ok(semExtrato.fonte === "faturas", "e diz que veio das faturas");
   ok(semExtrato.pagoExtrato === 0, "e o pago fica a zero");
   ok(semExtrato.primeiroGasto === "2026-07-15", "a data de início também");
   ok(fundingLibertado([], { categorias:["Funding banco"] }).total === 0, "sem extrato não há funding");
@@ -482,6 +491,34 @@ console.log("\nObra já iniciada: o sistema vai buscar em vez de perguntar");
                             { gastoObra: r.jaIncorrido, hoje:"2026-10-12", grupo:"LPX" });
   ok(perto(plano.resumo.gasto, 330000), "o plano arranca com 330 000 € já incorridos");
   ok(perto(plano.resumo.porGastar, 670000), "e 670 000 € por gastar");
+  ok(perto(soma(plano.linhas, "obra"), 670000), "é esse o valor que se espalha pelos meses que faltam");
+}
+
+console.log("\nO caso do Favorite Closet (o que estava errado no ecrã):");
+{
+  // Extrato com quase toda a obra paga, e o Contas a Pagar com pouco
+  const movs = [{ data:"2024-11-29", categoria:"Obra", valor:-663542.12 }];
+  const fats = [
+    { empresa:"favcloset", categoria:"Obra", valor_base: 80514.68, valor: 85345.56, status:"Paga",     data_fatura:"2025-02-10" },
+    { empresa:"favcloset", categoria:"Obra", valor_base: 78964.68, valor: 83702.56, status:"Pendente", data_fatura:"2026-09-10" },
+  ];
+  const r = obraRealizada(movs, fats, { empresa:"favcloset", categorias:["Obra"], taxaIva: 6 });
+  ok(perto(r.pagoExtrato, 663542.12), "já pago no extrato, com IVA: 663 542,12 €");
+  ok(perto(r.ivaNoPago, 37558.99), `IVA a 6% retirado: 37 558,99 € (deu ${r.ivaNoPago})`);
+  ok(perto(r.pagoExtratoBase, 625983.13), `já pago sem IVA: 625 983,13 € (deu ${r.pagoExtratoBase})`);
+  ok(perto(r.porPagar, 78964.68), "faturado por pagar: 78 964,68 €");
+  ok(perto(r.jaIncorrido, 704947.81), `incorrido: 704 947,81 € (deu ${r.jaIncorrido})`);
+  ok(!perto(r.jaIncorrido, 80514.68), "e já não os 80 514,68 € que o ecrã mostrava");
+  const p = planearObra({ ...base, budget_obra: 1300000, taxa_iva_obra: 6, data_fim: "2027-02-28" },
+                        { gastoObra: r.jaIncorrido, hoje: "2026-10-13", grupo: "LPX" });
+  ok(perto(p.resumo.porGastar, 595052.19), `falta gastar: 595 052,19 € (deu ${p.resumo.porGastar})`);
+  ok(perto(soma(p.linhas, "obra"), 595052.19), "e é isso que se distribui pelo fluxo, ao cêntimo");
+  // A taxa da obra manda na limpeza: a 23% o IVA retirado seria muito maior
+  const r23 = obraRealizada(movs, fats, { empresa:"favcloset", categorias:["Obra"], taxaIva: 23 });
+  ok(r23.pagoExtratoBase < r.pagoExtratoBase, "a 23% sobraria menos base, como tem de ser");
+  const r0 = obraRealizada(movs, fats, { empresa:"favcloset", categorias:["Obra"], taxaIva: 0 });
+  ok(perto(r0.pagoExtratoBase, 663542.12), "a 0% o extrato entra tal como está");
+  ok(r0.ivaNoPago === 0, "e não há IVA a retirar");
 }
 
 console.log("\nHDG: o funding tem subcategoria própria");

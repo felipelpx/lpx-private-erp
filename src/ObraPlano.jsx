@@ -236,14 +236,21 @@ export default function ModalPlanoObra({
               <Numero rotulo="Taxa de IVA da obra" sufixo="%" valor={f.taxa_iva_obra}
                 onMudar={muda("taxa_iva_obra")} />
               <div style={{ background: "#FAF6F0", borderRadius: 9, padding: "10px 12px", fontSize: 11.5 }}>
-                <Linha k="Já pago (extrato)" v={movLoading ? "a ler..." : fmtEUR(realizado.pagoExtrato)}
-                  dica={`${realizado.nMovimentos} movimentos de ${catObra} no extrato do projeto. É o que saiu mesmo da conta.`} />
-                <Linha k="Faturado por pagar" v={fmtEUR(realizado.porPagar)}
-                  dica="Faturas de obra já registadas no Contas a Pagar e ainda por liquidar. Já estão no fluxo." />
-                <div style={{ height: 1, background: "#E7DED2", margin: "6px 0" }} />
-                <Linha k="Incorrido (consome o budget)" v={fmtEUR(gasto)}
-                  dica={`${realizado.nFaturas} faturas de ${catObra}, pagas ou não. Prever outra vez o que já está faturado contaria duas vezes.`} />
-                <Linha k="Falta gastar" v={fmtEUR(resumo.porGastar)} forte />
+                <Linha k="Já pago (extrato, com IVA)" v={movLoading ? "a ler..." : fmtEUR(realizado.pagoExtrato)}
+                  dica={`${realizado.nMovimentos} movimentos de ${catObra} no extrato do projeto. É o que saiu mesmo da conta, e no fluxo realizado a obra é lançada com IVA.`} />
+                {realizado.ivaNoPago > 0 && (
+                  <Linha k={`−  IVA a ${realizado.taxaUsada}%`} v={`−${fmtEUR(realizado.ivaNoPago)}`}
+                    dica="O budget é sem IVA, por isso o pagamento tem de ser limpo antes de entrar na conta: base = pago ÷ (1 + taxa)." />
+                )}
+                <Linha k="+  Faturado por pagar" v={fmtEUR(realizado.porPagar)}
+                  dica={`Faturas de ${catObra} registadas no Contas a Pagar e ainda por liquidar. Como ainda não saíram da conta, não estão na linha de cima.`} />
+                <div style={{ height: 1, background: "#D8CCBB", margin: "7px 0" }} />
+                <Linha k="=  Incorrido" v={fmtEUR(gasto)} forte
+                  dica={realizado.fonte === "extrato"
+                    ? `O que saiu da conta já sem IVA (${fmtEUR(realizado.pagoExtratoBase)}) mais o que está faturado por pagar. Cada euro conta uma vez: uma fatura paga já está no extrato, uma por pagar ainda não.`
+                    : `Sem movimentos de ${catObra} no extrato, vale o que as faturas dizem.`} />
+                <Linha k="Falta gastar" v={fmtEUR(resumo.porGastar)} forte
+                  dica="Budget menos o incorrido. É este valor que o motor espalha pelos meses que faltam." />
               </div>
               <label style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer", fontSize: 12 }}>
                 <input type="checkbox" checked={f.recuperar_iva !== false}
