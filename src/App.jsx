@@ -31,6 +31,7 @@ const STATUS_FILTRO = (() => {
 })();
 import { BRAND, VERSAO, COR, FONTE, RAIO, SOMBRA } from "./brand.js";
 import Logo from "./Logo.jsx";
+import CaixaUnicoView from "./CaixaUnicoView.jsx";
 import { fmtEUR, fmtCompacto, fmtPct, fmtInt, fmtData } from "./formato.js";
 
 const ROLE_LABELS = { admin: "Administrador", gestor: "Gestor", viewer: "Visualizador", investidor: "Investidor" };
@@ -1277,6 +1278,7 @@ function ImportarView({faturas, setFaturas, caixaUnico, setCaixaUnico, setTab, a
 const TABS_CONFIG = [
   {id:"ir",        label:"Investor Relations", roles:["admin","gestor","viewer","investidor"]},
   {id:"extrato",   label:"Extratos",          roles:["admin","gestor","viewer","investidor"]},
+  {id:"caixa",     label:"Caixa Único",       roles:["admin","gestor","viewer"]},
   {id:"comercial", label:"Comercial",          roles:["admin","gestor","viewer","investidor"]},
   {id:"fotos",     label:"Fotos",              roles:["admin","gestor","viewer","investidor"]},
   {id:"fluxo",     label:"Fluxo Futuro",       roles:["admin","gestor","viewer"]},
@@ -1566,6 +1568,7 @@ export default function App() {
       <div style={{padding:"32px 28px 56px",maxWidth:1560,margin:"0 auto"}}>
         <TabErrorBoundary key={tab}>
           {tab==="extrato"   && <ExtratosView EMPRESAS={empresasVisiveis} extrato={[]} caixaUnico={caixaUnico} setCaixaUnico={handleSetCaixaUnico} currentUser={currentUser} autoOpenConta={lastImportedConta} movCounts={movCounts} faturas={faturas} pagamentosExtras={pagamentosExtras} onUpdateFatura={updateFatura} onUpdatePagamento={updatePagamento} questionamentos={questionamentos} addQuestionamento={addQuestionamento} onVerQuestoes={()=>setTab("questoes")}/>}
+          {tab==="caixa"     && <CaixaUnicoView currentUser={currentUser} empresasVisiveis={empresasVisiveis}/>}
           {tab==="comercial" && <ComercialView currentUser={currentUser} onAddFatura={addFatura} empresasVisiveis={empresasVisiveis}/>}
           {tab==="ir"        && <IRView currentUser={currentUser} empresasVisiveis={empresasVisiveis}/>}
           {tab==="fotos"     && <FotosView currentUser={currentUser} empresasVisiveis={empresasVisiveis}/>}

@@ -232,6 +232,56 @@ export function usePagamentosExtras() {
            addPagamentos, apagarPagamentos }
 }
 
+// ─── CAIXA ÚNICO ─────────────────────────────────────────────────────────────
+// Todos os lançamentos, de todas as empresas e bancos, numa lista só.
+//
+// Ao contrário do extrato, que carrega uma conta de cada vez, aqui puxa-se
+// tudo — por páginas de mil, que é o máximo que o Supabase devolve de uma vez.
+// O RLS continua a mandar: cada pessoa recebe o que já podia ver.
+export function useCaixaUnico() {
+  const [movimentos, setMovimentos] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState(null)
+
+  const load = useCallback(async () => {
+    setLoading(true)
+    try {
+      const pagina = 1000
+      let inicio = 0, todos = []
+      for (;;) {
+        const { data, error } = await supabase.from('movimentos')
+          .select('id, conta_id, empresa_id, banco, data, movimento, valor, saldo, categoria, subcategoria, detalhes, seq')
+          .order('data', { ascending: false })
+          .order('seq', { ascending: false })
+          .range(inicio, inicio + pagina - 1)
+        if (error) { console.error('useCaixaUnico:', error); setError(error.message || String(error)); break }
+        setError(null)
+        todos = todos.concat(data || [])
+        if (!data || data.length < pagina) break
+        inicio += pagina
+        // Rede de segurança: nunca mais de 50 mil linhas de uma vez.
+        if (todos.length >= 50000) break
+      }
+      setMovimentos(todos.map(m => ({
+        ...m, valor: parseFloat(m.valor) || 0, saldo: parseFloat(m.saldo) || 0,
+      })))
+    } finally { setLoading(false) }
+  }, [])
+
+  useEffect(() => { load() }, [load])
+
+  // Alterar aqui altera o extrato: é a mesma linha, na mesma tabela.
+  const atualizarMovimento = async (id, campos) => {
+    const { data, error } = await supabase.from('movimentos')
+      .update(campos).eq('id', id).select()
+    if (error) console.error('atualizarMovimento:', error)
+    else setMovimentos(ms => ms.map(m => (m.id === id ? { ...m, ...campos } : m)))
+    return { data, error }
+  }
+
+  return { movimentos, loading, error, reload: load, atualizarMovimento }
+}
+
 // ─── PLANOS DE OBRA ──────────────────────────────────────────────────────────
 // Um plano por projeto com obra. Os inputs do utilizador vivem aqui; as
 // previsões que saem deles vão para pagamentos_extras, marcadas.

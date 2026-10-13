@@ -25,6 +25,17 @@ const MOV=Object.freeze({movimentos:[
  {data:"2026-05-02",categoria:"Funding banco",valor:160000},
 ],loading:false,reload:()=>{}});
 export const useMovimentosPeriodo=()=>MOV;
+const CX=Object.freeze({movimentos:[
+ {id:"a1",conta_id:"favcloset_bcp",empresa_id:"favcloset",banco:"BCP",data:"2026-10-05",movimento:"TRF P/ COSMIK BRIGADE, LDA",valor:-15812.37,saldo:716.96,categoria:"Obra",subcategoria:"",detalhes:"Auto de medição 7",seq:723},
+ {id:"a2",conta_id:"favcloset_red",empresa_id:"favcloset",banco:"RED",data:"2026-10-01",movimento:"LIBERTAÇÃO FUNDING OBRA",valor:15812.37,saldo:10314.84,categoria:"Funding",subcategoria:"",detalhes:"Tranche 7",seq:722},
+ {id:"b1",conta_id:"adseq_bcp",empresa_id:"adseq",banco:"BCP",data:"2026-09-28",movimento:"TRAÇO E ESQUADRIA LDA",valor:-2460,saldo:30.20,categoria:"Obras",subcategoria:"Gastos com Obras",detalhes:"Carpintaria",seq:338},
+ {id:"b2",conta_id:"adseq_red",empresa_id:"adseq",banco:"RED",data:"2026-09-23",movimento:"COMISSAO ABERTURA NR.",valor:-20307.04,saldo:12209.02,categoria:"Financiamento",subcategoria:"Outflow - Taxas e comissões",detalhes:"",seq:337},
+ {id:"c1",conta_id:"pearl_bcp",empresa_id:"pearl",banco:"BCP",data:"2026-09-20",movimento:"TRF P/ MORNING STEPS",valor:-782.28,saldo:24535.22,categoria:"Comissão",subcategoria:"",detalhes:"Fração AQ",seq:180},
+ {id:"d1",conta_id:"infinite_bcp",empresa_id:"infinite",banco:"BCP",data:"2026-09-18",movimento:"SUPRIMENTO PARCELA EMERGENTE",valor:48165.88,saldo:57711.31,categoria:"Sócios",subcategoria:"Suprimentos",detalhes:"2.ª parcela",seq:297},
+ {id:"e1",conta_id:"simplify_red",empresa_id:"simplify",banco:"RED",data:"2026-09-15",movimento:"IMPOSTO DE SELO 17.3.4",valor:-0.67,saldo:4609.55,categoria:"Encargos financeiros",subcategoria:"",detalhes:"",seq:307},
+ {id:"f1",conta_id:"genero_bcp",empresa_id:"genero",banco:"BCP",data:"2026-09-10",movimento:"REFORÇO SINAL PRÉDIO",valor:-50000,saldo:51298.39,categoria:"Terreno",subcategoria:"",detalhes:"Maria Pia",seq:25},
+],loading:false,error:null,reload:()=>{},atualizarMovimento:async()=>({data:[{}],error:null})});
+export const useCaixaUnico=()=>CX;
 const V=Object.freeze({vendas:[],loading:false,updateVenda:async()=>({})});
 export const useVendas=()=>V;
 const S=Object.freeze({saldos:Object.freeze({adseq_bcp:11032}),reload:()=>{},loading:false});
@@ -38,6 +49,7 @@ import React from "react";import { createRoot } from "react-dom/client";
 import IVAView from "SRC/IVAView.jsx";
 import ModalPlanoObra from "SRC/ObraPlano.jsx";
 import FluxoFuturo from "SRC/FluxoFuturo.jsx";
+import CaixaUnicoView from "SRC/CaixaUnicoView.jsx";
 import { Login } from "SRC/App.jsx";
 import { EMPRESAS } from "SRC/empresas.js";
 import { COR, FONTE, BRAND } from "SRC/brand.js";
@@ -87,6 +99,9 @@ createRoot(document.getElementById("r")).render(
        nomeEmpresa:"Admirable Sequence (Cinq Etoiles)",plano,faturas:[],pagamentos:[],contaIds:["adseq_bcp"],
        currentUser:{nome:"Felipe",role:"admin"},hoje:"2026-10-13",onGuardar:async()=>({}),onAplicar:async()=>({}),onFechar:()=>{}}))
    : qual==="login" ? React.createElement(Login,{onLogin:()=>{}})
+   : qual==="caixa"
+   ? React.createElement(Ecra,null, React.createElement(CaixaUnicoView,{currentUser:{id:"u1",nome:"Felipe",role:"gestor"},
+       empresasVisiveis:EMPRESAS.filter(e=>["favcloset","adseq","pearl","infinite","simplify","genero"].includes(e.id))}))
    : qual==="fluxo"
    ? React.createElement(Ecra,null, React.createElement(FluxoFuturo,{faturas:FATURAS,faturasLoading:false,
        pagamentosExtras:PAGS,pagamentosLoading:false,onAddPagamento:async()=>({}),onUpdatePagamento:async()=>({}),
@@ -106,10 +121,10 @@ writeFileSync(join(dir,"i.html"),`<!doctype html><meta charset="utf-8"><link rel
 const b=await chromium.launch({executablePath:"/opt/pw-browsers/chromium"});
 const p=await b.newPage({viewportSize:{width:1500,height:1080},deviceScaleFactor:2});
 p.on("pageerror",e=>console.log("[err]",e.message));
-for (const [e,out] of [["iva","/mnt/user-data/outputs/id-1-iva.png"],["obra","/mnt/user-data/outputs/id-2-obra.png"],["fluxo","/mnt/user-data/outputs/id-3-fluxo.png"],["login","/mnt/user-data/outputs/id-4-login.png"]]) {
+for (const [e,out] of [["iva","/mnt/user-data/outputs/id-1-iva.png"],["obra","/mnt/user-data/outputs/id-2-obra.png"],["fluxo","/mnt/user-data/outputs/id-3-fluxo.png"],["login","/mnt/user-data/outputs/id-4-login.png"],["caixa","/mnt/user-data/outputs/caixa-unico.png"]]) {
   await p.goto(pathToFileURL(join(dir,"i.html")).href + "?e=" + e);
   await p.waitForTimeout(1200);
-  if (e==="iva") { const t=await p.locator('td:has-text("3T26")').first(); if (await t.count()) { await t.click(); await p.waitForTimeout(300);} }
+  if (e==="caixa") { await p.waitForTimeout(400); } else if (e==="iva") { const t=await p.locator('td:has-text("3T26")').first(); if (await t.count()) { await t.click(); await p.waitForTimeout(300);} }
   await p.screenshot({path:out, fullPage: e==="iva"});
 }
 await b.close();rmSync(dir,{recursive:true,force:true});console.log("ok");
