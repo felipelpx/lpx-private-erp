@@ -1,5 +1,6 @@
 import React, { useState, useMemo, useEffect } from "react";
-import { useVendas, useSaldosAtuais, useRecebiveis } from "./hooks.js";
+import { useVendas, useSaldosAtuais, useRecebiveis, useObraPlanos } from "./hooks.js";
+import ModalPlanoObra, { BotaoPlanoObra } from "./ObraPlano.jsx";
 import { CATEGORIAS } from "./categorias.js";
 import { faturaPaga, faturaAtrasada, statusFatura } from "./status.js";
 import { fmtEUR as fmtEuro } from "./formato.js";
@@ -84,7 +85,7 @@ function BotaoFunding({ fonte, onAlternar, onPct }) {
   );
 }
 
-export default function FluxoFuturo({ faturas: faturasTodas, faturasLoading, pagamentosExtras: pagamentosTodos, pagamentosLoading, onAddPagamento, onUpdatePagamento, onDeletePagamento, onUpdateFatura, onDeleteFatura, currentUser, EMPRESAS, caixaUnico }) {
+export default function FluxoFuturo({ faturas: faturasTodas, faturasLoading, pagamentosExtras: pagamentosTodos, pagamentosLoading, onAddPagamento, onUpdatePagamento, onDeletePagamento, onAddPagamentos, onApagarPagamentos, onUpdateFatura, onDeleteFatura, currentUser, EMPRESAS, caixaUnico }) {
   // Só as empresas visíveis (filtro de grupo LPX/HDG e perfil investidor).
   // Itens cuja empresa não corresponda a nenhuma conhecida ficam visíveis para
   // admin e gestor, para não desaparecerem do sistema sem aviso.
@@ -144,6 +145,30 @@ export default function FluxoFuturo({ faturas: faturasTodas, faturasLoading, pag
   const [mostrarVazios, setMostrarVazios] = useState(false);
   const [converter, setConverter] = useState(null);    // previsão a converter em fatura
   const [aproximar, setAproximar] = useState(false);   // painel de aproximação em lote
+
+  // ── Plano de obra ────────────────────────────────────────────────────────
+  // Só existe para os projetos com obra, e só quando um está escolhido: um
+  // plano é de um projeto, não do consolidado.
+  const [planoAberto, setPlanoAberto] = useState(false);
+  const { planos: obraPlanos, guardarPlano } = useObraPlanos();
+  const planoDaEmpresa = (obraPlanos || []).find(p => p.empresa === empresa) || null;
+  const grupoDaEmpresa = EMPRESAS_TODAS.find(e => e.id === empresa)?.grupo || "LPX";
+  const nomeDaEmpresa = EMPRESAS_TODAS.find(e => e.id === empresa)?.nome || empresa;
+
+  // Aplicar: apaga o que foi dito que ia apagar e cria as linhas novas. A
+  // ordem importa — apagar primeiro, senão os ids determinísticos chocam com
+  // os do recálculo anterior.
+  const aplicarPlanoObra = async ({ plano, aCriar, idsAApagar }) => {
+    if (idsAApagar?.length) {
+      const r = await onApagarPagamentos?.(idsAApagar);
+      if (r?.error) return r;
+    }
+    if (aCriar?.length) {
+      const r = await onAddPagamentos?.(aCriar);
+      if (r?.error) return r;
+    }
+    return await guardarPlano(plano);
+  };
   const [escolhas, setEscolhas] = useState({});        // { pagamentoId: faturaId | "" }
   const [aAplicar, setAAplicar] = useState(false);
   const [showForm, setShowForm] = useState(false);
@@ -868,6 +893,11 @@ export default function FluxoFuturo({ faturas: faturasTodas, faturasLoading, pag
               ⇄ Aproximar previsões a faturas
             </button>
           )}
+          {isAdmin && (
+            <BotaoPlanoObra empresa={empresa} plano={planoDaEmpresa}
+              faturas={faturas} grupo={grupoDaEmpresa}
+              onAbrir={() => setPlanoAberto(true)} />
+          )}
           {/* Real (com fatura) vs Previsto (estimativa lançada à mão) */}
           <div style={{ display: "flex", gap: 2, background: "#f0f0f0", borderRadius: 8, padding: 2, marginLeft: 4 }}>
             {[["todos", "Tudo"], ["real", "Custo real"], ["previsto", "Forecast"]].map(([v, lbl]) => (
@@ -1314,6 +1344,16 @@ export default function FluxoFuturo({ faturas: faturasTodas, faturasLoading, pag
       </div>
 
       {/* Painel de aproximação em lote */}
+      {planoAberto && (
+        <ModalPlanoObra
+          empresa={empresa} grupo={grupoDaEmpresa} nomeEmpresa={nomeDaEmpresa}
+          plano={planoDaEmpresa} faturas={faturas} pagamentos={pagamentosExtras}
+          currentUser={currentUser}
+          onGuardar={guardarPlano}
+          onAplicar={aplicarPlanoObra}
+          onFechar={() => setPlanoAberto(false)} />
+      )}
+
       {aproximar && (
         <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.4)", zIndex: 215, display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}
           onClick={e => { if (e.target === e.currentTarget) setAproximar(false); }}>

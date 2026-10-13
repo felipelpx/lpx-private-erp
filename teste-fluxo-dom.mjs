@@ -29,6 +29,15 @@ export const useSaldosAtuais = () => SALDOS;
 const RECEB = Object.freeze({ recebiveis: [], loading: false, addRecebivel: async()=>({}),
   updateRecebivel: async()=>({}), deleteRecebivel: async()=>({}) });
 export const useRecebiveis = () => RECEB;
+globalThis.__planoGravado = [];
+const PLANOS = Object.freeze({ planos: [
+  { id:"adseq", empresa:"adseq", ativo:true, data_inicio:"2026-06-01", data_fim:"2027-03-31",
+    budget_obra:1000000, taxa_iva_obra:23, fiscalizacao_mensal:1476, cso_mensal:500,
+    comissao_avaliacao:300, funding_pct:70, euribor:2.5, spread:2, divida_inicial:400000,
+    recuperar_iva:true, calculado_em:"2026-10-01T00:00:00Z", gasto_no_calculo:0 },
+], loading:false, error:null,
+  guardarPlano: async (pl) => { globalThis.__planoGravado.push(pl); return { data:[pl], error:null }; } });
+export const useObraPlanos = () => PLANOS;
 `);
 
 writeFileSync(join(dir, "entrada.jsx"), `
@@ -81,6 +90,8 @@ const base = (pags, extra = {}) => ({
   pagamentosExtras: pags, pagamentosLoading: false,
   onAddPagamento: async()=>({}), onUpdatePagamento: async()=>({}),
   onDeletePagamento: async()=>({}), onUpdateFatura: async()=>({}), onDeleteFatura: async()=>({}),
+  onAddPagamentos: async(arr)=>{ globalThis.__criadas = arr; return { data: arr, error: null }; },
+  onApagarPagamentos: async(ids)=>{ globalThis.__apagadas = ids; return { data: [], error: null }; },
   currentUser: gestor, EMPRESAS: emp, caixaUnico: {},
   ...extra,
 });
@@ -193,6 +204,115 @@ let semFunding, comFunding, parcial;
   if (linhaVenc) await act(async () => { linhaVenc.dispatchEvent(new window.MouseEvent("click", { bubbles: true })); });
   const linhas = [...host.querySelectorAll("tr")].map(txt);
   ok(linhas.some(t => /Funding/i.test(t)), "a entrada do banco aparece também nas vencidas");
+}
+
+
+// ── Plano de obra ──────────────────────────────────────────────────────────
+const clica = async (el) => { if (!el) return; await act(async () => {
+  el.dispatchEvent(new window.MouseEvent("click", { bubbles: true })); }); };
+// As montagens anteriores ficam no document e os seus modais apareciam nas
+// buscas por document.querySelectorAll, dando respostas do ecrã errado.
+const limpa = async (r) => { if (r) await act(async () => { r.root.unmount(); r.host.remove(); }); };
+
+const abreOPlano = async (host) => {
+  const bt = [...host.querySelectorAll("button")].find(b => /Plano de obra/.test(txt(b)));
+  if (bt) await clica(bt);
+  return [...document.querySelectorAll("div")].find(d => /Plano de obra —/.test(txt(d)));
+};
+
+{
+  // No consolidado não há plano nenhum: um plano é de um projeto
+  const { host } = await monta(base([pagamento()]));
+  ok(![...host.querySelectorAll("button")].some(b => /Plano de obra/.test(txt(b))),
+     'em "Todos os Projetos" não aparece o botão do plano de obra');
+}
+
+{
+  // Escolher a adseq (tem obra) faz o botão aparecer
+  const comFatura = { id:"fo1", empresa:"adseq", categoria:"Obras", valor:123000,
+                      valor_base:100000, status:"Pago", data_fatura:"2026-09-10" };
+  const r0 = await monta(base([pagamento()], { faturas: [comFatura] }));
+  const host = r0.host;
+  const aba = [...host.querySelectorAll("button")].find(b => /Admirable Sequence/.test(txt(b)));
+  ok(!!aba, "a aba do projeto existe");
+  await clica(aba);
+  const bt = [...host.querySelectorAll("button")].find(b => /Plano de obra/.test(txt(b)));
+  ok(!!bt, "escolhido um projeto com obra, o botão aparece");
+  ok(/fim/.test(txt(bt)), "e mostra a data de fim já definida");
+  ok(/⚠/.test(txt(bt)), "marcado como desatualizado: há faturas de obra que o plano não viu");
+  await limpa(r0);
+}
+
+{
+  const r1 = await monta(base([pagamento()], { faturas: [] }));
+  const host = r1.host;
+  await clica([...host.querySelectorAll("button")].find(b => /Admirable Sequence/.test(txt(b))));
+  const modal = await abreOPlano(host);
+  ok(!!modal, "abre o plano de obra");
+  const t = txt(modal);
+  ok(/Budget da empreitada/.test(t), "pede o budget");
+  ok(t.includes("Fiscalização / mês") && t.includes("CSO / mês"), "pede as avenças mensais");
+  ok(/Euribor/.test(t) && /Spread/.test(t), "pede euribor e spread");
+  ok(/Comissão de avaliação/.test(t), "pede a comissão de avaliação");
+  ok(/Funding do banco/.test(t), "pede a percentagem de funding");
+  ok(/Meses por correr/.test(t), "mostra quantos meses faltam");
+  ok(/Dívida no fim/.test(t), "e a dívida projetada no fim");
+  ok(/E se a obra escorregar/.test(t), "e deixa simular um atraso");
+
+  // O quadro das linhas a lançar traz os seis tipos
+  ["Obra", "Fiscalização", "CSO", "Juros do financiamento",
+   "Comissão de avaliação", "IVA da obra"].forEach(r =>
+    ok(new RegExp(r).test(t), \`o plano inclui \${r}\`));
+  await limpa(r1);
+}
+
+{
+  // A confirmação tem de dizer o que apaga, pelo nome
+  const manual = pagamento({ id:"meu1", descricao:"Cosmik (1/5)", categoria:"Obras", valor: 134811.91 });
+  const alheio = pagamento({ id:"meu2", descricao:"Suprimentos", categoria:"Sócios", valor: 9000 });
+  const r2 = await monta(base([manual, alheio]));
+  const host = r2.host;
+  await clica([...host.querySelectorAll("button")].find(b => /Admirable Sequence/.test(txt(b))));
+  await abreOPlano(host);
+
+  const recalc = [...document.querySelectorAll("button")].find(b => /Recalcular o fluxo/.test(txt(b)));
+  ok(!!recalc, "tem botão para recalcular");
+  await clica(recalc);
+
+  const conf = [...document.querySelectorAll("div")].find(d => /Antes de aplicar/.test(txt(d)));
+  ok(!!conf, "não aplica logo: pede confirmação primeiro");
+  const tc = txt(conf);
+  ok(tc.includes("Cosmik (1/5)"), "e diz, pelo nome, qual previsão tua vai desaparecer");
+  ok(!tc.includes("Suprimentos"), "sem tocar nas de outras categorias");
+
+  globalThis.__criadas = null; globalThis.__apagadas = null;
+  await clica([...document.querySelectorAll("button")].find(b => /Sim, aplicar ao fluxo/.test(txt(b))));
+
+  ok(Array.isArray(globalThis.__apagadas), "ao aplicar, apaga");
+  ok((globalThis.__apagadas || []).includes("meu1"), "a previsão manual de obra");
+  ok(!(globalThis.__apagadas || []).includes("meu2"), "e não a de Sócios");
+  ok(Array.isArray(globalThis.__criadas) && globalThis.__criadas.length > 0, "e cria as linhas do plano");
+  ok(globalThis.__criadas.every(p => p.plano_obra === "adseq" && p.plano_tipo),
+     "todas marcadas como geradas pelo motor");
+  ok(globalThis.__criadas.some(p => p.plano_tipo === "funding" && p.tipo === "entrada"),
+     "com a libertação do banco como entrada própria");
+  ok(globalThis.__criadas.filter(p => p.plano_tipo === "obra").every(p => p.funding === false),
+     "e a obra sem marca de funding, para não duplicar a entrada");
+  ok(globalThis.__criadas.some(p => p.plano_tipo === "iva_obra" && p.tipo === "saida"),
+     "o IVA da obra como saída");
+  ok(globalThis.__criadas.some(p => p.plano_tipo === "funding_iva" && p.tipo === "entrada"),
+     "e o funding desse IVA como entrada");
+  const gravado = globalThis.__planoGravado[globalThis.__planoGravado.length - 1];
+  ok(gravado && gravado.calculado_em, "e grava quando foi calculado");
+  ok(gravado && gravado.gasto_no_calculo != null, "e quanto já estava gasto nessa altura");
+  await limpa(r2);
+}
+
+{
+  // Um viewer não mexe em nada disto
+  const { host } = await monta(base([pagamento()], { currentUser: { id:"u9", nome:"Olho", role:"viewer" } }));
+  ok(![...host.querySelectorAll("button")].some(b => /Plano de obra/.test(txt(b))),
+     "um viewer não vê o botão do plano de obra");
 }
 
 process.exit(mau ? 1 : 0);

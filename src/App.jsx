@@ -1320,7 +1320,7 @@ class TabErrorBoundary extends React.Component {
 export default function App() {
   const { user, profile, loading: authLoading, signIn, signOut } = useAuth();
   const { faturas, loading: faturasLoading, addFatura, addFaturas, updateFatura, deleteFatura } = useFaturas();
-  const { pagamentos: pagamentosExtras, loading: pagamentosLoading, addPagamento, updatePagamento, deletePagamento } = usePagamentosExtras();
+  const { pagamentos: pagamentosExtras, loading: pagamentosLoading, addPagamento, updatePagamento, deletePagamento, addPagamentos, apagarPagamentos } = usePagamentosExtras();
   const { contas: supaContas, updateSaldo, upsertConta } = useContas();
   const { counts: movCounts, reload: reloadMovCounts } = useMovimentosCounts();
   const { profiles } = useProfiles();
@@ -1565,7 +1565,7 @@ export default function App() {
           {tab==="comercial" && <ComercialView currentUser={currentUser} onAddFatura={addFatura} empresasVisiveis={empresasVisiveis}/>}
           {tab==="ir"        && <IRView currentUser={currentUser} empresasVisiveis={empresasVisiveis}/>}
           {tab==="fotos"     && <FotosView currentUser={currentUser} empresasVisiveis={empresasVisiveis}/>}
-          {tab==="fluxo"     && <FluxoFuturo faturas={faturas} faturasLoading={faturasLoading} pagamentosExtras={pagamentosExtras} pagamentosLoading={pagamentosLoading} onAddPagamento={addPagamento} onUpdatePagamento={updatePagamento} onDeletePagamento={deletePagamento} onUpdateFatura={updateFatura} onDeleteFatura={deleteFatura} currentUser={currentUser} EMPRESAS={empresasVisiveis} caixaUnico={caixaUnico}/>}
+          {tab==="fluxo"     && <FluxoFuturo faturas={faturas} faturasLoading={faturasLoading} pagamentosExtras={pagamentosExtras} pagamentosLoading={pagamentosLoading} onAddPagamento={addPagamento} onUpdatePagamento={updatePagamento} onDeletePagamento={deletePagamento} onAddPagamentos={addPagamentos} onApagarPagamentos={apagarPagamentos} onUpdateFatura={updateFatura} onDeleteFatura={deleteFatura} currentUser={currentUser} EMPRESAS={empresasVisiveis} caixaUnico={caixaUnico}/>}
           {tab==="receber"   && <ContasReceber currentUser={currentUser} empresasVisiveis={empresasVisiveis}/>}
           {tab==="pagar"     && <ContasPagar canEdit={canEdit && !isInvestidor} EMPRESAS={empresasVisiveis} faturas={faturas} setFaturas={handleSetFaturas} addFatura={addFatura} updateFatura={updateFatura} deleteFatura={deleteFatura}/>}
           {tab==="pagamentos"&& <PagamentosView faturas={faturas.filter(f=>empresasVisiveis.some(e=>e.id===f.empresa)||!f.empresa)} pagamentosExtras={pagamentosExtras.filter(p=>empresasVisiveis.some(e=>e.id===p.empresa)||!p.empresa)} currentUser={currentUser} profiles={profiles}/>}

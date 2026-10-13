@@ -212,7 +212,42 @@ export function usePagamentosExtras() {
     if (error) console.error('deletePagamento error:', error)
     return { data, error }
   }
-  return { pagamentos: data, loading, addPagamento, updatePagamento, deletePagamento }
+  // Em lote, para o plano de obra: um recálculo apaga dezenas de linhas e
+  // cria outras tantas. Uma chamada por linha seria lento e deixaria o fluxo
+  // a meio caminho se falhasse a meio.
+  const addPagamentos = async (arr) => {
+    if (!arr?.length) return { data: [], error: null }
+    const { data, error } = await supabase.from('pagamentos_extras').insert(arr).select()
+    if (error) console.error('addPagamentos error:', error)
+    return { data, error }
+  }
+  const apagarPagamentos = async (ids) => {
+    if (!ids?.length) return { data: [], error: null }
+    const { data, error } = await supabase.from('pagamentos_extras')
+      .delete().in('id', ids).select()
+    if (error) console.error('apagarPagamentos error:', error)
+    return { data, error }
+  }
+  return { pagamentos: data, loading, addPagamento, updatePagamento, deletePagamento,
+           addPagamentos, apagarPagamentos }
+}
+
+// ─── PLANOS DE OBRA ──────────────────────────────────────────────────────────
+// Um plano por projeto com obra. Os inputs do utilizador vivem aqui; as
+// previsões que saem deles vão para pagamentos_extras, marcadas.
+export function useObraPlanos() {
+  const { data, loading, error } = useRealtimeTable('obra_planos',
+    () => supabase.from('obra_planos').select('*').order('empresa'))
+
+  const guardarPlano = async (plano) => {
+    const linha = { ...plano, id: plano.id || plano.empresa, updated_at: new Date().toISOString() }
+    const { data: r, error: e } = await supabase.from('obra_planos')
+      .upsert([linha], { onConflict: 'empresa' }).select()
+    if (e) console.error('guardarPlano:', e)
+    return { data: r, error: e }
+  }
+
+  return { planos: data, loading, error, guardarPlano }
 }
 
 // ─── MAPAS DE PAGAMENTO ──────────────────────────────────────────────────────
