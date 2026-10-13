@@ -1,0 +1,224 @@
+// ─────────────────────────────────────────────────────────────────────────────
+// REAL × ORÇADO
+//
+// Três colunas, três naturezas diferentes:
+//
+//   ORÇADO     o que se contratou com os investidores. É ESTÁTICO: escreve-se
+//              uma vez por rubrica e fica. Só muda quando há uma revisão de
+//              orçamento, e isso é uma decisão, não um cálculo.
+//
+//   REAL       o que já saiu ou entrou na conta. Vem do extrato, pela vida
+//              toda do projeto — não do período escolhido no filtro, que é
+//              para os gráficos. Um orçamento compara-se com o acumulado.
+//
+//   FORECAST   o Real mais tudo o que já está comprometido e ainda não passou
+//              pela conta: faturas por pagar, previsões do Fluxo Futuro (onde
+//              entra o plano de obra) e as despesas recorrentes. É VIVO: muda
+//              sozinho sempre que se lança uma previsão ou se recalcula um
+//              plano de obra.
+//
+// As rubricas são as mesmas de todo o sistema (src/rubricas.js) — as do
+// Categorias.xlsx de cada empresa. O gráfico, o extrato e esta tabela falam a
+// mesma língua, senão não se consegue cruzar nada.
+//
+// SINAIS. Por dentro é tudo com sinal de caixa: entradas positivas, saídas
+// negativas. O ecrã mostra valores absolutos, agrupados em Entradas e Saídas,
+// que é como as planilhas de fluxo operacional estão feitas — e é assim que o
+// orçado se escreve, sem ter de pensar em sinais.
+// ─────────────────────────────────────────────────────────────────────────────
+
+import { rubricasDa, rubricaDe, chaveRubrica, rubricaNoPlano } from "./rubricas.js";
+import { ocorrenciasDe } from "./recorrentes.js";
+
+const arred2 = (v) => Math.round(((Number(v) || 0) + Number.EPSILON) * 100) / 100;
+const num = (v) => { const n = Number(v); return Number.isFinite(n) ? n : 0; };
+
+// Estados que já não contam como compromisso por vir.
+const FATURA_PAGA = /^(paga|pago|liquidada|liquidado)$/i;
+const FATURA_MORTA = /anulada|cancelada|rejeitada/i;
+const PREVISAO_FORA = /^(convertida|paga|pago)$/i;
+
+export const id_orcamento = (empresaId, rubrica) =>
+  `orc_${empresaId}_${chaveRubrica(rubrica).replace(/[^a-z0-9]+/g, "_")}`;
+
+/**
+ * A tabela do Real × Orçado de uma empresa.
+ *
+ * @param empresaId    a empresa
+ * @param movimentos   extrato (vida toda do projeto)
+ * @param faturas      Contas a Pagar
+ * @param pagamentos   pagamentos_extras (previsões do Fluxo Futuro)
+ * @param recorrentes  despesas_recorrentes
+ * @param orcamento    linhas da tabela `orcamento` (o estático)
+ * @param hoje         data de referência, injetável para os testes
+ * @param horizonte    até quando contar as recorrentes (ISO). Por omissão,
+ *                     três anos — o mesmo horizonte do Fluxo Futuro.
+ */
+export function calcularRealOrcado({
+  empresaId, movimentos = [], faturas = [], pagamentos = [], recorrentes = [],
+  orcamento = [], hoje = new Date().toISOString().slice(0, 10), horizonte = null,
+} = {}) {
+  const ate = horizonte || `${Number(String(hoje).slice(0, 4)) + 3}${String(hoje).slice(4, 10)}`;
+
+  // Um balde por rubrica. Começa-se pelo plano, para que uma rubrica orçada e
+  // ainda sem um único movimento apareça à mesma — é precisamente essa que
+  // interessa ver numa reunião de investidores.
+  const baldes = new Map();
+  const balde = (r) => {
+    if (!baldes.has(r)) baldes.set(r, {
+      rubrica: r, orcado: 0, real: 0,
+      faturasPorPagar: 0, previsoes: 0, recorrentes: 0,
+      nMovimentos: 0, nFaturas: 0, nPrevisoes: 0, nRecorrentes: 0,
+      noPlano: rubricaNoPlano(empresaId, r),
+    });
+    return baldes.get(r);
+  };
+  rubricasDa(empresaId).forEach(balde);
+
+  // ── Orçado ────────────────────────────────────────────────────────────────
+  // Guardado em módulo (sempre positivo); a rubrica é a chave.
+  (orcamento || []).forEach(o => {
+    if (o?.empresa_id !== empresaId) return;
+    const r = rubricasDa(empresaId).find(c => chaveRubrica(c) === chaveRubrica(o.categoria))
+            || String(o.categoria || "").trim();
+    if (!r) return;
+    balde(r).orcado = Math.abs(num(o.orcado));
+  });
+
+  // ── Real ──────────────────────────────────────────────────────────────────
+  (movimentos || []).forEach(m => {
+    const r = rubricaDe(empresaId, m?.categoria, m?.subcategoria);
+    if (r === null) return;
+    const b = balde(r);
+    b.real += num(m?.valor);
+    b.nMovimentos++;
+  });
+
+  // ── Comprometido: faturas por pagar ──────────────────────────────────────
+  (faturas || []).forEach(f => {
+    if (f?.empresa !== empresaId) return;
+    const estado = String(f?.status || "").trim();
+    if (FATURA_PAGA.test(estado) || FATURA_MORTA.test(estado)) return;
+    const r = rubricaDe(empresaId, f?.categoria, f?.subcategoria);
+    if (r === null) return;
+    const b = balde(r);
+    b.faturasPorPagar -= Math.abs(num(f?.valor));   // uma fatura por pagar é saída
+    b.nFaturas++;
+  });
+
+  // ── Comprometido: previsões do Fluxo Futuro (inclui o plano de obra) ─────
+  (pagamentos || []).forEach(p => {
+    if (p?.empresa !== empresaId) return;
+    if (PREVISAO_FORA.test(String(p?.status || "").trim())) return;
+    const r = rubricaDe(empresaId, p?.categoria, p?.subcategoria);
+    if (r === null) return;
+    const b = balde(r);
+    const v = Math.abs(num(p?.valor));
+    b.previsoes += p?.tipo === "entrada" ? v : -v;
+    b.nPrevisoes++;
+  });
+
+  // ── Comprometido: despesas recorrentes ───────────────────────────────────
+  // Só o que falta acontecer: o que já passou está no extrato ou nas faturas.
+  (recorrentes || []).forEach(reg => {
+    if (reg?.empresa !== empresaId) return;
+    if (reg?.ativa === false) return;
+    const r = rubricaDe(empresaId, reg?.categoria, reg?.subcategoria);
+    if (r === null) return;
+    const oc = ocorrenciasDe(reg, { de: hoje, ate: reg?.data_fim || ate });
+    if (!oc.length) return;
+    const b = balde(r);
+    const total = oc.reduce((s, o) => s + Math.abs(o.valor), 0);
+    b.recorrentes += reg?.tipo === "entrada" ? total : -total;
+    b.nRecorrentes += oc.length;
+  });
+
+  // ── Fechar as contas de cada rubrica ─────────────────────────────────────
+  const linhas = [...baldes.values()].map(b => {
+    const real = arred2(b.real);
+    const comprometido = arred2(b.faturasPorPagar + b.previsoes + b.recorrentes);
+    const forecast = arred2(real + comprometido);
+
+    // Em que lado da tabela esta rubrica vive. Decide o forecast; sem
+    // movimento nenhum, decide o real; sem nada, fica nas saídas, que é o que
+    // uma rubrica de custo orçada e ainda por gastar é.
+    const referencia = Math.abs(forecast) > 0.005 ? forecast
+                     : Math.abs(real) > 0.005 ? real : -1;
+    const lado = referencia >= 0 ? "entrada" : "saida";
+
+    // O ecrã trabalha em módulo: o orçado escreve-se sem sinal e o desvio
+    // lê-se como "acima" ou "abaixo", que é o que se pergunta numa reunião.
+    const orcado = arred2(b.orcado);
+    const realAbs = Math.abs(real), forecastAbs = Math.abs(forecast);
+    const desvio = arred2(forecastAbs - orcado);
+    const desvioPct = orcado > 0.005 ? arred2(desvio / orcado * 100) : null;
+
+    return {
+      rubrica: b.rubrica, lado, noPlano: b.noPlano,
+      orcado, real, realAbs, comprometido, forecast, forecastAbs,
+      desvio, desvioPct,
+      // Gastar menos do que o orçado é bom numa saída; vender menos do que o
+      // orçado é mau numa entrada. O ecrã pinta por aqui, não pelo sinal.
+      bom: orcado <= 0.005 ? null : (lado === "saida" ? desvio <= 0 : desvio >= 0),
+      detalhe: {
+        faturasPorPagar: arred2(b.faturasPorPagar),
+        previsoes: arred2(b.previsoes),
+        recorrentes: arred2(b.recorrentes),
+        nMovimentos: b.nMovimentos, nFaturas: b.nFaturas,
+        nPrevisoes: b.nPrevisoes, nRecorrentes: b.nRecorrentes,
+      },
+      // Uma rubrica sem orçado e sem nada que se lhe diga não vale uma linha.
+      vazia: orcado <= 0.005 && Math.abs(real) <= 0.005 && Math.abs(comprometido) <= 0.005,
+    };
+  });
+
+  const soma = (ls, campo) => arred2(ls.reduce((s, l) => s + l[campo], 0));
+  const entradas = linhas.filter(l => l.lado === "entrada");
+  const saidas = linhas.filter(l => l.lado === "saida");
+
+  const totalDe = (ls) => ({
+    orcado: soma(ls, "orcado"),
+    real: arred2(ls.reduce((s, l) => s + Math.abs(l.real), 0)),
+    forecast: arred2(ls.reduce((s, l) => s + Math.abs(l.forecast), 0)),
+  });
+  const tE = totalDe(entradas), tS = totalDe(saidas);
+
+  return {
+    linhas,
+    entradas, saidas,
+    totais: {
+      entradas: tE, saidas: tS,
+      resultado: {
+        orcado: arred2(tE.orcado - tS.orcado),
+        real: arred2(tE.real - tS.real),
+        forecast: arred2(tE.forecast - tS.forecast),
+      },
+    },
+    // Quanto do orçado já está escrito: numa empresa sem orçado nenhum, o
+    // ecrã tem de dizer isso em vez de mostrar uma coluna de zeros.
+    nOrcadas: linhas.filter(l => l.orcado > 0.005).length,
+    nComMovimento: linhas.filter(l => !l.vazia).length,
+  };
+}
+
+// ─── Semear o orçado a partir do modelo antigo ──────────────────────────────
+// Os números que estavam escritos à mão em src/modeloRealOrcado.js foram
+// transcritos dos business plans. Onde o rótulo do modelo bate numa rubrica da
+// empresa, aproveita-se — poupa reescrever catorze linhas por projeto. Onde
+// não bate, fica em branco: inventar um orçado seria pior do que não ter.
+export function semearDoModelo(modelo, empresaId) {
+  if (!modelo?.linhas) return [];
+  const plano = rubricasDa(empresaId);
+  const out = [];
+  modelo.linhas.forEach(l => {
+    if (l.tipo !== "item" || !l.rotulo) return;
+    const valor = Number(l.orcado);
+    if (!Number.isFinite(valor) || Math.abs(valor) <= 0.005) return;
+    const r = plano.find(c => chaveRubrica(c) === chaveRubrica(l.rotulo));
+    if (!r) return;
+    out.push({ rubrica: r, orcado: Math.abs(valor) });
+  });
+  return out;
+}
+
+export default { calcularRealOrcado, semearDoModelo, id_orcamento };

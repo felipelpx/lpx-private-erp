@@ -75,7 +75,12 @@ export const useAuth = () => ({ user: null, profile: null, loading: false, signI
 export const useContas = () => ({ contas: [], updateSaldo: async()=>{}, upsertConta: async()=>{} });
 export const useFaturas = () => ({ faturas: FATURAS, loading: false, addFatura: async()=>({}), addFaturas: async()=>({}), updateFatura: async()=>({}), deleteFatura: async()=>({}) });
 export const usePagamentosExtras = () => ({ pagamentos: PAGS, loading: false, addPagamento: async()=>({}), updatePagamento: async()=>({}), deletePagamento: async()=>({}) });
-export const useOrcamento = () => ({ orcamento: [], loading: false, upsertOrcamento: async()=>({}) });
+export const useOrcamento = () => ({ orcamento: [], loading: false,
+  upsertOrcamento: async()=>({ data:[], error:null }), deleteOrcamento: async()=>({}) });
+export const useDespesasRecorrentes = () => ({ recorrentes: [], loading: false, error: null,
+  guardarRecorrente: async()=>({ data:[], error:null }),
+  apagarRecorrente: async()=>({ data:[], error:null }),
+  pararRecorrente: async()=>({ data:[], error:null }) });
 export const useMovimentosCounts = () => ({ counts: {}, reload: ()=>{} });
 export const useProfiles = () => ({ profiles: [], loading: false, updateProfile: async()=>({}) });
 export const useMovimentosByConta = () => ({ movimentos: MOVS, loading: false, reload: ()=>{}, total: MOVS.length });
@@ -115,7 +120,7 @@ import ExtratosView from "SRC/ExtratosView.jsx";
 import Questoes, { ModalQuestionar, porLer } from "SRC/Questoes.jsx";
 import ContasReceber from "SRC/ContasReceber.jsx";
 import ComercialView from "SRC/ComercialView.jsx";
-import { RealOrcado } from "SRC/RealOrcadoView.jsx";
+import RealOrcadoTabela from "SRC/RealOrcadoTabela.jsx";
 import { EMPRESAS } from "SRC/empresas.js";
 import { QUESTOES_TESTE, MOVS_TESTE } from "SRC/hooks.js";
 
@@ -143,7 +148,7 @@ const casos = [
       currentUser={investidor} existentes={[QUESTOES_TESTE[0]]} onClose={()=>{}} onEnviar={async()=>({error:null})} />],
   ["Contas a Receber",      <ContasReceber currentUser={gestor} empresasVisiveis={emp} />],
   ["Comercial",             <ComercialView currentUser={gestor} onAddFatura={async()=>({})} empresasVisiveis={emp} />],
-  ["Real x Orçado",         <RealOrcado empresasAtivas={emp} />],
+  ["Real x Orçado",         <RealOrcadoTabela empresaId="favcloset" />],
   ["IVA (gestor)",          <IVAView currentUser={gestor} empresasVisiveis={emp} />],
 ];
 

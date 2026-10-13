@@ -359,11 +359,33 @@ export const temPlanoProprio = (empresaId) =>
 
 export const usaSubcategoria = (empresaId) => !!CAT_SUB_POR_EMPRESA[empresaId];
 
+// Comparação de rubricas à prova de espaços a mais, acentos, underscores e
+// maiúsculas: "Financiamento" com um espaço à frente, vindo de uma importação,
+// é a mesma rubrica — não é razão para a assinalar como estranha ao plano.
+const chave = (s) => String(s || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+  .toLowerCase().trim().replace(/[\s_]+/g, " ");
+
 // As categorias de uma empresa, pela ordem do Excel. null = sem plano próprio.
+//
+// Sai sem duplicados: o Excel traz, na Favorite Closet, "Impostos e taxas" e
+// "Impostos e Taxas" — a mesma rubrica escrita de duas maneiras. Fica a
+// primeira. Se ficassem as duas, o extrato dava a escolher entre duas opções
+// indistinguíveis, o Real × Orçado mostrava duas linhas (uma sempre a zero) e
+// o gráfico desenhava duas barras com o mesmo nome. Esta função é a única
+// fonte das rubricas em todo o sistema — extratos, Caixa Único, Fluxo Futuro,
+// despesas recorrentes, cascata e Real × Orçado —, por isso é aqui que a
+// limpeza se faz, e não em cada ecrã.
 export function categoriasDa(empresaId) {
   const sub = CAT_SUB_POR_EMPRESA[empresaId];
-  if (sub) return Object.keys(sub);
-  return CATEGORIAS_POR_EMPRESA[empresaId] || null;
+  const lista = sub ? Object.keys(sub) : CATEGORIAS_POR_EMPRESA[empresaId];
+  if (!lista) return null;
+  const vistas = new Set();
+  return lista.filter(c => {
+    const k = chave(c);
+    if (vistas.has(k)) return false;
+    vistas.add(k);
+    return true;
+  });
 }
 
 // As subcategorias de uma categoria. Numa empresa sem subcategorias devolve
@@ -379,12 +401,6 @@ export function subcategoriasDa(empresaId, categoria) {
 
 // Um valor que já está gravado mas não pertence ao plano da empresa não é
 // apagado nem escondido: é assinalado, para ser revisto à mão.
-// A comparação ignora espaços a mais, acentos e maiúsculas: "Financiamento"
-// com um espaço à frente, vindo de uma importação, é a mesma categoria — não
-// é razão para a assinalar como estranha ao plano.
-const chave = (s) => String(s || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "")
-  .toLowerCase().trim().replace(/[\s_]+/g, " ");
-
 export function foraDoPlano(empresaId, categoria) {
   const cats = categoriasDa(empresaId);
   if (!cats || !categoria) return false;

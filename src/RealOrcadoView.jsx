@@ -1,191 +1,84 @@
 import React, { useState, useMemo } from "react";
 import { EMPRESAS, agruparPorGrupo } from "./empresas.js";
-import { useMovimentosPeriodo, usePagamentosExtras, useFaturas } from "./hooks.js";
-import { MODELO_REAL_ORCADO } from "./modeloRealOrcado.js";
-import { faturaPaga } from "./status.js";
-import { fmtEUR0, fmtNum } from "./formato.js";
+import { useMovimentosPeriodo, usePagamentosExtras, useFaturas,
+         useOrcamento, useDespesasRecorrentes } from "./hooks.js";
+import RealOrcadoTabela from "./RealOrcadoTabela.jsx";
+import { COR, RAIO } from "./brand.js";
 
 // ─────────────────────────────────────────────────────────────────────────────
-// REAL × ORÇADO — partilhado pelo separador próprio e pelo Investor Relations
+// REAL × ORÇADO — o separador próprio
 //
-// O orçado é o único número guardado (tabela `orcamento`, vem do business plan).
-// O realizado e o a realizar são calculados em tempo real a partir do ERP, para
-// que lançar uma despesa no Fluxo Futuro se reflita aqui de imediato.
+// A tabela vive em src/RealOrcadoTabela.jsx, partilhada com o Investor
+// Relations: os dois ecrãs mostram exatamente o mesmo, para não haver duas
+// versões da verdade.
+//
+// Aqui só se vai buscar os dados. O período é de propósito a vida toda do
+// projeto: um orçamento compara-se com o acumulado, não com o mês escolhido
+// no filtro de um gráfico.
 // ─────────────────────────────────────────────────────────────────────────────
 
-const COR = {
-  tinta: "#091C2A", entrada: "#1F7A54", saida: "#A93226",
-  saldo: "#2C4A63", texto: "#7E8388",
-};
+const DESDE_SEMPRE = "2000-01-01";
 
-const Vazio = ({ texto }) => (
-  <div style={{ padding: 40, textAlign: "center", color: "#C4C7CA", fontSize: 12 }}>{texto}</div>
-);
+export function useDadosRealOrcado(empresaId, empresas) {
+  const empresa = useMemo(
+    () => (empresas || EMPRESAS).find(e => e.id === empresaId) || null, [empresas, empresaId]);
+  const contaIds = useMemo(
+    () => empresa?.contas?.map(c => c.id).filter(Boolean) || [], [empresa]);
 
-// Realizado por categoria, ao vivo a partir do ERP.
-// Devolve também o comprometido (faturas por pagar + previsões do Fluxo Futuro).
-export function useRealOrcado(empresasAtivas) {
-  const idsAtivos = useMemo(() => empresasAtivas.map(e => e.id), [empresasAtivas]);
-  const contaIds = useMemo(() => empresasAtivas.flatMap(e => e.contas?.map(c => c.id) || []), [empresasAtivas]);
+  const hoje = new Date().toISOString().slice(0, 10);
+  const { movimentos, loading: mLoad } = useMovimentosPeriodo(contaIds, DESDE_SEMPRE, hoje);
+  const { faturas, loading: fLoad } = useFaturas();
+  const { pagamentos, loading: pLoad } = usePagamentosExtras();
+  const { recorrentes } = useDespesasRecorrentes();
+  const { orcamento, upsertOrcamento } = useOrcamento();
 
-  const { pagamentos: pagamentosExtras } = usePagamentosExtras();
-  const { faturas } = useFaturas();
-  // Acumulado do projeto — o Real × Orçado não segue filtros de período
-  const { movimentos, loading } = useMovimentosPeriodo(contaIds, "2000-01-01", new Date().toISOString().slice(0, 10));
-
-  const realizadoPorCategoria = useMemo(() => {
-    const m = {};
-    movimentos.forEach(x => {
-      const k = (x.categoria || "").trim();
-      if (!k) return;
-      m[k] = (m[k] || 0) + (Number(x.valor) || 0);
-    });
-    return m;
-  }, [movimentos]);
-
-  const comprometidoPorCategoria = useMemo(() => {
-    const m = {};
-    const toca = (cat, v) => { const k = (cat || "").trim(); if (k) m[k] = (m[k] || 0) + v; };
-    (pagamentosExtras || [])
-      .filter(p => idsAtivos.includes(p.empresa))
-      .filter(p => !["Convertida", "Paga", "Pago"].includes(p.status))
-      .forEach(p => toca(p.categoria, p.tipo === "entrada" ? Math.abs(Number(p.valor) || 0) : -Math.abs(Number(p.valor) || 0)));
-    (faturas || [])
-      .filter(f => idsAtivos.includes(f.empresa))
-      .filter(f => !faturaPaga(f))
-      .forEach(f => toca(f.categoria, -Math.abs(Number(f.valor) || 0)));
-    return m;
-  }, [pagamentosExtras, faturas, idsAtivos]);
-
-  return { realizadoPorCategoria, comprometidoPorCategoria, loading };
+  return { empresa, movimentos, faturas, pagamentos, recorrentes, orcamento,
+           upsertOrcamento, loading: mLoad || fLoad || pLoad, hoje };
 }
 
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Quadro ORÇADO × FORECAST, estático, igual à folha do business plan.
-// Todas as linhas aparecem, pela ordem da folha. Nada vem do ERP.
-// ─────────────────────────────────────────────────────────────────────────────
-export function RealOrcado({ modelo }) {
-  if (!modelo) return <Vazio texto="Sem quadro de Real × Orçado para este projeto. Os quadros vivem em src/modeloRealOrcado.js." />;
-
-  // Quando a folha não traz o subtotal, soma-se pelos filhos
-  const porRotulo = {};
-  modelo.linhas.forEach(l => { if (l.rotulo) porRotulo[l.rotulo] = l; });
-  const valor = (l, campo) => {
-    if (l[campo] != null) return l[campo];
-    if (l.tipo === "subtotal" && l.filhos)
-      return l.filhos.reduce((s, c) => s + (porRotulo[c]?.[campo] ?? 0), 0);
-    return null;
-  };
-
-  const temForecast = modelo.linhas.some(l => l.forecast != null);
-
-  const Cel = ({ v, negrito, cor }) => (
-    <td style={{ padding: "7px 12px", textAlign: "right", fontFamily: "var(--fonte-numero)", fontSize: 11.5,
-                 color: cor || "#4A5055", fontWeight: negrito ? 700 : 400, whiteSpace: "nowrap" }}>
-      {v == null ? "—" : fmtEUR0(v)}
-    </td>
-  );
-
-  return (
-    <div style={{ overflowX: "auto" }}>
-      {!temForecast && (
-        <div style={{ background: "#FBF6EC", border: "1px solid #E3CE9F", borderRadius: 8,
-                      padding: "10px 14px", fontSize: 11.5, color: "#7A5A22", marginBottom: 12, maxWidth: 820 }}>
-          Este projeto ainda não tem forecast no business plan — só aparece a coluna Orçado.
-        </div>
-      )}
-
-      <table style={{ width: "100%", maxWidth: 820, borderCollapse: "collapse", fontSize: 11.5 }}>
-        <thead>
-          <tr style={{ background: "#FAF6F0" }}>
-            <th style={{ padding: "9px 12px", borderBottom: "1px solid #E7DED2" }} />
-            {["Orçado", "Forecast", "Δ", "Δ %"].map(h => (
-              <th key={h} style={{ padding: "9px 12px", textAlign: "right", color: "#9DA2A6", fontSize: 9,
-                                   textTransform: "uppercase", fontFamily: "var(--fonte-numero)",
-                                   letterSpacing: "0.06em", borderBottom: "1px solid #E7DED2" }}>{h}</th>
-            ))}
-          </tr>
-        </thead>
-        <tbody>
-          {modelo.linhas.map((l, i) => {
-            if (l.tipo === "espaco") return <tr key={i} style={{ height: 10 }}><td colSpan={5} /></tr>;
-
-            const sub = l.tipo === "subtotal", res = l.tipo === "resultado";
-            const orc = valor(l, "orcado");
-            const fc = valor(l, "forecast");
-            const delta = (orc != null && fc != null) ? fc - orc : null;
-            // Favorável: receitas acima do orçado, ou custos menos negativos
-            const receita = (orc ?? 0) >= 0;
-            const bom = delta == null ? null : (receita ? delta >= 0 : delta >= 0);
-            const pctD = (delta != null && orc) ? (delta / Math.abs(orc)) * 100 : null;
-
-            return (
-              <tr key={i} style={{
-                borderBottom: sub || res ? "1px solid #E7DED2" : "1px solid #FBF7F1",
-                background: sub ? "#FAF6F0" : res ? "#EDF1F5" : "transparent",
-              }}>
-                <td style={{ padding: "7px 12px", color: COR.tinta, fontWeight: sub || res ? 700 : 400,
-                             paddingLeft: l.tipo === "item" ? 26 : 12 }}>{l.rotulo}</td>
-                <Cel v={orc} negrito={sub || res} />
-                <Cel v={fc} negrito={sub || res} cor={sub || res ? COR.tinta : "#4A5055"} />
-                <Cel v={delta} negrito
-                     cor={delta == null ? "#D8CCBB" : bom ? COR.entrada : COR.saida} />
-                <td style={{ padding: "7px 12px", textAlign: "right", fontFamily: "var(--fonte-numero)", fontSize: 11,
-                             fontWeight: sub || res ? 700 : 400,
-                             color: pctD == null ? "#D8CCBB" : bom ? COR.entrada : COR.saida }}>
-                  {pctD == null ? "—" : (pctD >= 0 ? "+" : "") + fmtNum(pctD, 1) + "%"}
-                </td>
-              </tr>
-            );
-          })}
-        </tbody>
-      </table>
-
-      <div style={{ fontSize: 10.5, color: "#9DA2A6", marginTop: 12, lineHeight: 1.6, maxWidth: 820 }}>
-        Quadro estático do business plan: <strong>Orçado</strong> contra <strong>Forecast</strong>
-        {modelo.fonteForecast ? ` (${modelo.fonteForecast})` : ""}. Δ é a diferença entre os dois —
-        verde quando o forecast é melhor que o orçamento, vermelho quando é pior.
-      </div>
-    </div>
-  );
-}
-
-// ─── ECRÃ COMPLETO (separador próprio) ───────────────────────────────────────
-export default function RealOrcadoView({ empresasVisiveis }) {
+export default function RealOrcadoView({ empresasVisiveis, currentUser }) {
   const empresas = Array.isArray(empresasVisiveis) ? empresasVisiveis : EMPRESAS;
-  const [empSel, setEmpSel] = useState("todas");
-  const empresasAtivas = empSel === "todas" ? empresas : empresas.filter(e => e.id === empSel);
-  const { realizadoPorCategoria, comprometidoPorCategoria, loading } = useRealOrcado(empresasAtivas);
-  const modelo = MODELO_REAL_ORCADO[empSel];
+  const [empSel, setEmpSel] = useState(empresas[0]?.id || "");
+  const d = useDadosRealOrcado(empSel, empresas);
+  const podeEditar = currentUser?.role === "admin" || currentUser?.role === "gestor";
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
-      <div style={{ background: "#fff", border: "1px solid #E7DED2", borderRadius: 12, padding: "13px 18px", display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap" }}>
+      <div style={{ background: COR.papel, border: `1px solid ${COR.linha}`,
+                    borderRadius: RAIO.grande, padding: "13px 18px", display: "flex",
+                    gap: 12, alignItems: "center", flexWrap: "wrap" }}>
         <select value={empSel} onChange={e => setEmpSel(e.target.value)}
-          style={{ background: "#fff", border: "1px solid #E3D9CC", borderRadius: 8, padding: "8px 12px", fontSize: 13, outline: "none", minWidth: 240 }}>
-          <option value="todas">Todas as empresas</option>
+          style={{ background: COR.papel, border: `1px solid ${COR.linhaForte}`,
+                   borderRadius: 8, padding: "8px 12px", fontSize: 13, outline: "none",
+                   minWidth: 240, color: COR.texto }}>
           {agruparPorGrupo(empresas).map(b => (
             <optgroup key={b.grupo} label={b.info.nome}>
               {b.empresas.map(e => <option key={e.id} value={e.id}>{e.nome}</option>)}
             </optgroup>
           ))}
         </select>
-        {loading && <span style={{ fontSize: 11, color: "#9DA2A6", fontFamily: "var(--fonte-numero)" }}>a carregar movimentos…</span>}
+        {d.loading && <span style={{ fontSize: 11, color: COR.textoTenue }}>a carregar…</span>}
         <button onClick={() => window.print()}
-          style={{ marginLeft: "auto", background: COR.tinta, color: "#fff", border: "none", borderRadius: 8, padding: "7px 16px", fontSize: 12, fontWeight: 600, cursor: "pointer" }}>
-          Imprimir / PDF
-        </button>
+          style={{ marginLeft: "auto", background: COR.navy, color: COR.creme, border: "none",
+                   borderRadius: 8, padding: "7px 16px", fontSize: 12, fontWeight: 600,
+                   cursor: "pointer" }}>Imprimir / PDF</button>
       </div>
 
-      <div style={{ background: "#fff", border: "1px solid #E7DED2", borderRadius: 14, padding: 20 }}>
-        <div style={{ fontSize: 15, fontWeight: 700, color: COR.tinta, fontFamily: "var(--fonte-titulo)", marginBottom: 4 }}>
+      <div style={{ background: COR.papel, border: `1px solid ${COR.linha}`,
+                    borderRadius: RAIO.grande, padding: 20 }}>
+        <div style={{ fontSize: 15, fontWeight: 700, color: COR.texto,
+                      fontFamily: "var(--fonte-titulo)", marginBottom: 4 }}>
           Real × Orçado
         </div>
-        <div style={{ fontSize: 11, color: "#9DA2A6", marginBottom: 16 }}>
-          {empSel === "todas" ? "Todas as empresas" : empresasAtivas[0]?.nome} · realizado e a realizar calculados em tempo real a partir do ERP
+        <div style={{ fontSize: 11, color: COR.textoTenue, marginBottom: 16 }}>
+          {d.empresa?.nome || "—"} · pelas rubricas da empresa · desde o início do projeto
         </div>
-        <RealOrcado modelo={modelo} />
+        <RealOrcadoTabela
+          empresaId={empSel} nomeEmpresa={d.empresa?.nome}
+          movimentos={d.movimentos} faturas={d.faturas} pagamentos={d.pagamentos}
+          recorrentes={d.recorrentes} orcamento={d.orcamento}
+          podeEditar={podeEditar} onGravarOrcado={d.upsertOrcamento}
+          loading={d.loading} hoje={d.hoje} />
       </div>
     </div>
   );

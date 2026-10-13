@@ -232,6 +232,38 @@ export function usePagamentosExtras() {
            addPagamentos, apagarPagamentos }
 }
 
+// ─── DESPESAS RECORRENTES ────────────────────────────────────────────────────
+// A regra, não as linhas (ver src/recorrentes.js). O fluxo expande-a ao
+// desenhar, por isso aqui só se guarda e se lê.
+export function useDespesasRecorrentes() {
+  const { data, loading, error } = useRealtimeTable('despesas_recorrentes',
+    () => supabase.from('despesas_recorrentes').select('*').order('descricao'))
+
+  const guardarRecorrente = async (r) => {
+    const linha = { ...r, id: r.id || `rec_${Date.now()}_${Math.random().toString(36).slice(2, 7)}` }
+    const { data, error } = await supabase.from('despesas_recorrentes')
+      .upsert([linha], { onConflict: 'id' }).select()
+    if (error) console.error('guardarRecorrente error:', error)
+    return { data, error }
+  }
+  const apagarRecorrente = async (id) => {
+    const { data, error } = await supabase.from('despesas_recorrentes')
+      .delete().eq('id', id).select()
+    if (error) console.error('apagarRecorrente error:', error)
+    return { data, error }
+  }
+  // Parar é pôr-lhe uma data de fim, não apagar: o que já passou continua a
+  // fazer parte da história do projeto.
+  const pararRecorrente = async (id, dataFim) => {
+    const { data, error } = await supabase.from('despesas_recorrentes')
+      .update({ data_fim: dataFim, ativa: true }).eq('id', id).select()
+    if (error) console.error('pararRecorrente error:', error)
+    return { data, error }
+  }
+
+  return { recorrentes: data, loading, error, guardarRecorrente, apagarRecorrente, pararRecorrente }
+}
+
 // ─── CAIXA ÚNICO ─────────────────────────────────────────────────────────────
 // Todos os lançamentos, de todas as empresas e bancos, numa lista só.
 //
@@ -454,9 +486,20 @@ export function useVendas() {
 export function useOrcamento() {
   const { data, loading } = useRealtimeTable('orcamento',
     () => supabase.from('orcamento').select('*').order('empresa_id').order('categoria'))
-  const upsertOrcamento = (row) =>
-    supabase.from('orcamento').upsert({ ...row, updated_at: new Date().toISOString() })
-  const deleteOrcamento = (id) => supabase.from('orcamento').delete().eq('id', id)
+  // Devolve { data, error } como os outros: o ecrã do Real × Orçado precisa
+  // de saber se a gravação passou para pintar a célula e não mentir ao
+  // utilizador que o número ficou guardado.
+  const upsertOrcamento = async (row) => {
+    const { data, error } = await supabase.from('orcamento')
+      .upsert({ ...row, updated_at: new Date().toISOString() }, { onConflict: 'id' }).select()
+    if (error) console.error('upsertOrcamento error:', error)
+    return { data, error }
+  }
+  const deleteOrcamento = async (id) => {
+    const { data, error } = await supabase.from('orcamento').delete().eq('id', id).select()
+    if (error) console.error('deleteOrcamento error:', error)
+    return { data, error }
+  }
   return { orcamento: data, loading, upsertOrcamento, deleteOrcamento }
 }
 

@@ -38,6 +38,11 @@ const PLANOS = Object.freeze({ planos: [
 ], loading:false, error:null,
   guardarPlano: async (pl) => { globalThis.__planoGravado.push(pl); return { data:[pl], error:null }; } });
 export const useObraPlanos = () => PLANOS;
+const RECORRENTES = Object.freeze({ recorrentes: [], loading:false, error:null,
+  guardarRecorrente: async (r) => { globalThis.__recorrentes?.push(r); return { data:[r], error:null }; },
+  apagarRecorrente: async () => ({ data:[], error:null }),
+  pararRecorrente: async () => ({ data:[], error:null }) });
+export const useDespesasRecorrentes = () => RECORRENTES;
 const MOVS = Object.freeze({ movimentos: [
   { data:"2026-07-15", categoria:"Obras", valor:-123000 },
   { data:"2026-07-05", categoria:"Financiamento", subcategoria:"Inflow - Obra", valor: 250000 },

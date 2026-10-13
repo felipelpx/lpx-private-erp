@@ -2,11 +2,11 @@ import React, { useState, useMemo } from "react";
 import { EMPRESAS, agruparPorGrupo, GRUPOS_INFO } from "./empresas.js";
 import { useMovimentosPeriodo, useFracoes, useVendas, useSaldosNaData, usePagamentosExtras, useFaturas, useOrcamento, useRecebiveis } from "./hooks.js";
 import { CRONOGRAMAS, ESTADO_MARCO, TIR_PROJETO } from "./cronogramas.js";
-import { RealOrcado } from "./RealOrcadoView.jsx";
-import { MODELO_REAL_ORCADO } from "./modeloRealOrcado.js";
+import RealOrcadoTabela from "./RealOrcadoTabela.jsx";
+import { useDadosRealOrcado } from "./RealOrcadoView.jsx";
 import { statusFatura, faturaPaga } from "./status.js";
 import { valorFunding, temFunding } from "./funding.js";
-import { rotuloGrafico, FUNDING } from "./nomenclatura.js";
+import { agruparPorRubrica, passosDaCascata } from "./rubricas.js";
 import { larguraGrafico, colocarRotulos } from "./rotulos.js";
 import { fmtEUR, fmtEUR0, fmtNum, fmtInt, fmtCompacto, fmtData, fmtPctSinal } from "./formato.js";
 
@@ -67,16 +67,25 @@ const Vazio = ({ texto }) => (
 
 // ─── GRÁFICO EM CASCATA (saldo inicial → receitas → custos → saldo final) ────
 function Cascata({ inicial, entradas, saidas, final }) {
-  const altura = 300, margemY = 40, margemX = 10;
-  // Largura em função do número de barras: com 12 rubricas em 900 px os
-  // valores não cabiam lado a lado por mais alternativas que tentassem.
-  const largura = larguraGrafico(entradas.length + saidas.length + 2, 88, 900);
+  const nBarras = entradas.length + saidas.length + 2;
+  // O plano de contas de uma SPV chega às trinta rubricas. Com muitas barras,
+  // aperta-se o passo e dá-se mais altura aos rótulos, que ficam mais
+  // inclinados; o gráfico rola na horizontal em vez de truncar a lista.
+  const muitas = nBarras > 14;
+  const alturaRotulos = muitas ? 108 : 62;
+  const altura = 260 + alturaRotulos, margemY = 40, margemX = 10;
+  const porPonto = muitas ? 64 : 88;
+  const anguloRotulo = muitas ? -45 : -30;
+  const maxLetras = muitas ? 26 : 18;
+  const largura = larguraGrafico(nBarras, porPonto, 900);
 
   // Barras: inicial (total), cada entrada (sobe), cada saída (desce), final (total)
   const passos = [
     { rotulo: "Saldo inicial", valor: inicial, tipo: "total" },
-    ...entradas.map(e => ({ rotulo: e.nome, valor: e.valor, tipo: "entrada" })),
-    ...saidas.map(e => ({ rotulo: e.nome, valor: -Math.abs(e.valor), tipo: "saida" })),
+    ...entradas.map(e => ({ rotulo: e.nome, valor: e.valor, tipo: "entrada",
+                            foraDoPlano: e.noPlano === false, n: e.n })),
+    ...saidas.map(e => ({ rotulo: e.nome, valor: -Math.abs(e.valor), tipo: "saida",
+                          foraDoPlano: e.noPlano === false, n: e.n })),
     { rotulo: "Saldo final", valor: final, tipo: "total" },
   ];
 
@@ -126,14 +135,17 @@ function Cascata({ inicial, entradas, saidas, final }) {
               )}
               <rect x={x} y={yTopo} width={larguraBarra} height={alt} fill={cor}
                     rx="2" opacity={b.tipo === "total" ? 1 : 0.9}>
-                <title>{`${b.rotulo}: ${fmtEUR(b.valor)}`}</title>
+                <title>{`${b.rotulo}: ${fmtEUR(b.valor)}` +
+                        (b.n ? ` · ${b.n} movimento${b.n === 1 ? "" : "s"}` : "") +
+                        (b.foraDoPlano ? " · fora do plano de contas" : "")}</title>
               </rect>
 
               {/* rótulo */}
-              <text x={cx} y={altura - 18} textAnchor="middle" fontSize="10" fill={COR.texto}
-                    transform={`rotate(-30 ${cx} ${altura - 18})`}>
-                {b.rotulo.length > 18 ? b.rotulo.slice(0, 17) + "…" : b.rotulo}
-                <title>{b.rotulo}</title>
+              <text x={cx} y={altura - alturaRotulos + 16} textAnchor="end" fontSize={muitas ? 9.5 : 10}
+                    fill={b.foraDoPlano ? COR.saida : COR.texto}
+                    transform={`rotate(${anguloRotulo} ${cx} ${altura - alturaRotulos + 16})`}>
+                {b.rotulo.length > maxLetras ? b.rotulo.slice(0, maxLetras - 1) + "…" : b.rotulo}
+                <title>{b.foraDoPlano ? `${b.rotulo} — fora do plano de contas da empresa` : b.rotulo}</title>
               </text>
             </g>
           );
@@ -146,7 +158,7 @@ function Cascata({ inicial, entradas, saidas, final }) {
           const cor = b.tipo === "total" ? COR.saldo : b.tipo === "entrada" ? COR.entrada : COR.saida;
           return { x: cx, y: yTopo - 7, texto: fmtCompacto(b.valor), fontSize: 10.5, cor,
                    alternativas: [0, -14, -28, -42] };
-        }), { margemX: 3, margemY: 2, limites: { x0: 2, y0: 2, x1: largura - 2, y1: altura - 34 } })} />
+        }), { margemX: 3, margemY: 2, limites: { x0: 2, y0: 2, x1: largura - 2, y1: altura - alturaRotulos - 6 } })} />
       </svg>
     </div>
   );
@@ -165,8 +177,11 @@ function BarrasCentroCusto({ dados }) {
         const varPct = temAnterior ? (Math.abs(d.atual) - Math.abs(d.anterior)) / Math.abs(d.anterior) * 100 : null;
         return (
           <div key={d.nome} style={{ display: "flex", alignItems: "center", gap: 12 }}>
-            <div style={{ width: 150, fontSize: 11, color: COR.tinta, textAlign: "right", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
-                 title={d.nome}>{d.nome}</div>
+            <div style={{ width: 170, fontSize: 11, color: d.noPlano === false ? COR.saida : COR.tinta,
+                          textAlign: "right", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
+                 title={d.noPlano === false
+                   ? `${d.nome} — fora do plano de contas da empresa`
+                   : d.nome}>{d.nome}{d.noPlano === false ? " ⚠" : ""}</div>
             <div style={{ flex: 1, background: COR.fundo, borderRadius: 5, height: 22, position: "relative", overflow: "hidden" }}>
               <div style={{ width: `${pct}%`, height: "100%", background: corCategoria(d.nome, i), borderRadius: 5, transition: "width .3s" }} />
             </div>
@@ -794,65 +809,36 @@ export default function IRView({ currentUser, empresasVisiveis }) {
     [saldosIniciais]
   );
 
-  // Agregações do período
-  // As rubricas são agrupadas pelo que são, não pelo nome que levaram no
-  // extrato (ver src/nomenclatura.js). Os ajustes e transferências intra-grupo
-  // ficam de fora, mas o total do que foi excluído é mostrado no rodapé do
-  // gráfico — senão a cascata deixava de fechar sem se perceber porquê.
-  const agregado = useMemo(() => {
-    const porCat = {};
-    let entradas = 0, saidas = 0, excluido = 0, nExcluidos = 0;
-    movimentos.forEach(m => {
-      const cat = rotuloGrafico(m.categoria, m.subcategoria);
-      if (!cat) { excluido += m.valor; nExcluidos++; return; }
-      if (!porCat[cat]) porCat[cat] = { entrada: 0, saida: 0 };
-      if (m.valor >= 0) { porCat[cat].entrada += m.valor; entradas += m.valor; }
-      else { porCat[cat].saida += m.valor; saidas += m.valor; }
-    });
-    return { porCat, entradas, saidas, resultado: entradas + saidas, excluido, nExcluidos };
-  }, [movimentos]);
+  // Agregações do período, pelas RUBRICAS da empresa (ver src/rubricas.js):
+  // as mesmas do Categorias.xlsx, pela ordem do plano, sem renomear nada. Os
+  // ajustes e transferências intra-grupo ficam de fora, mas o que foi excluído
+  // diz-se no rodapé do gráfico — senão a cascata deixava de fechar sem se
+  // perceber porquê.
+  const agregado = useMemo(
+    () => agruparPorRubrica(movimentos, { empresaId: empSel }), [movimentos, empSel]);
+  const resultado = agregado.entradas + agregado.saidas;
 
-  const anteriorPorCat = useMemo(() => {
+  const anteriorPorRubrica = useMemo(() => {
     const p = {};
-    movsAnterior.forEach(m => {
-      if (m.valor >= 0) return;
-      const cat = rotuloGrafico(m.categoria, m.subcategoria);
-      if (!cat) return;
-      p[cat] = (p[cat] || 0) + m.valor;
-    });
+    agruparPorRubrica(movsAnterior, { empresaId: empSel }).linhas
+      .forEach(l => { p[l.rubrica] = l.saida; });
     return p;
-  }, [movsAnterior]);
+  }, [movsAnterior, empSel]);
 
-  // Top de entradas e saídas para a cascata (o resto agrega-se em "Outros")
-  // Uma categoria de custo pode ter entradas E saídas — típico da Obra, onde
-  // as entradas são desembolsos do banco. Sem distinguir, a cascata mostrava
-  // duas barras chamadas "Obra". As entradas de categorias que também têm
-  // saídas passam a aparecer como "Funding — <categoria>".
-  const topN = (obj, chave, n = 5) => {
-    const lista = Object.entries(obj)
-      .map(([nome, v]) => {
-        // Uma rubrica pode ter entradas E saídas (típico da Obra, onde as
-        // entradas são desembolsos do banco). Sem distinguir, a cascata
-        // mostrava duas barras com o mesmo nome.
-        const temAmbos = Math.abs(v.entrada) > 0.005 && Math.abs(v.saida) > 0.005;
-        const rotulo = (chave === "entrada" && temAmbos && nome !== FUNDING)
-          ? `${FUNDING} — ${nome}` : nome;
-        return { nome: rotulo, valor: v[chave] };
-      })
-      .filter(x => Math.abs(x.valor) > 0.005)
-      .sort((a, b) => Math.abs(b.valor) - Math.abs(a.valor));
-    if (lista.length <= n) return lista;
-    const resto = lista.slice(n).reduce((s, x) => s + x.valor, 0);
-    return [...lista.slice(0, n), { nome: "Outros", valor: resto }];
-  };
-  const entradasTop = useMemo(() => topN(agregado.porCat, "entrada"), [agregado]);
-  const saidasTop = useMemo(() => topN(agregado.porCat, "saida"), [agregado]);
+  // Os passos da cascata: todas as rubricas com movimento, entradas primeiro e
+  // saídas a seguir, cada bloco pela ordem do plano. Sem teto e sem balde de
+  // "Outros" — numa apresentação a investidores, a rubrica que falta é
+  // precisamente a que vai ser perguntada.
+  const passos = useMemo(() => passosDaCascata(agregado), [agregado]);
+  const entradasCascata = useMemo(() => passos.filter(p => p.valor > 0), [passos]);
+  const saidasCascata = useMemo(() => passos.filter(p => p.valor < 0), [passos]);
 
-  const centrosCusto = useMemo(() => Object.entries(agregado.porCat)
-    .map(([nome, v]) => ({ nome, atual: v.saida, anterior: anteriorPorCat[nome] || 0 }))
-    .filter(d => Math.abs(d.atual) > 0.005)
-    .sort((a, b) => Math.abs(b.atual) - Math.abs(a.atual))
-    .slice(0, 12), [agregado, anteriorPorCat]);
+  // Centros de custo: as mesmas rubricas, só as saídas, pela ordem do plano.
+  const centrosCusto = useMemo(() => agregado.linhas
+    .filter(l => Math.abs(l.saida) > 0.005)
+    .map(l => ({ nome: l.rubrica, atual: l.saida,
+                 anterior: anteriorPorRubrica[l.rubrica] || 0, noPlano: l.noPlano })),
+    [agregado, anteriorPorRubrica]);
 
   // Evolução mensal do saldo consolidado
   const evolucao = useMemo(() => {
@@ -986,7 +972,14 @@ export default function IRView({ currentUser, empresasVisiveis }) {
   const totalPrevSaidas = futuro.reduce((s, m) => s + m.saidas, 0);
 
   // ─── Real × Orçado ────────────────────────────────────────────────────────
-  // Real × Orçado — mesmo cálculo do separador próprio (RealOrcadoView)
+  // Exatamente a mesma tabela do separador próprio, com os mesmos dados: dois
+  // sítios a mostrar o mesmo não podem discordar.
+  //
+  // Repare-se que o período NÃO é o do filtro desta página. Um orçamento
+  // compara-se com o acumulado desde o início do projeto; o filtro de datas
+  // serve os gráficos.
+  const dadosOrcado = useDadosRealOrcado(empSel, empresas);
+  const podeEditarOrcado = currentUser?.role === "admin" || currentUser?.role === "gestor";
 
   // ─── Timeline ─────────────────────────────────────────────────────────────
   const empresaTimeline = empSel;
@@ -1048,8 +1041,8 @@ export default function IRView({ currentUser, empresasVisiveis }) {
         <Kpi rotulo="Saldo inicial" valor={fmtEUR0(saldoInicial)} cor={COR.neutro} nota={fmtData(de)} />
         <Kpi rotulo="Entradas" valor={fmtEUR0(agregado.entradas)} cor={COR.entrada} />
         <Kpi rotulo="Saídas" valor={fmtEUR0(Math.abs(agregado.saidas))} cor={COR.saida} />
-        <Kpi rotulo="Variação" valor={fmtEUR0(agregado.resultado)} cor={agregado.resultado >= 0 ? COR.entrada : COR.saida} />
-        <Kpi rotulo="Saldo final" valor={fmtEUR0(saldoInicial + agregado.resultado)} cor={COR.saldo} nota={fmtData(ate)} />
+        <Kpi rotulo="Variação" valor={fmtEUR0(resultado)} cor={resultado >= 0 ? COR.entrada : COR.saida} />
+        <Kpi rotulo="Saldo final" valor={fmtEUR0(saldoInicial + resultado)} cor={COR.saldo} nota={fmtData(ate)} />
       </div>
 
       {loading && <div style={{ fontSize: 11, color: "#9DA2A6", fontFamily: "var(--fonte-numero)" }}>a carregar movimentos…</div>}
@@ -1078,13 +1071,15 @@ export default function IRView({ currentUser, empresasVisiveis }) {
               subtitulo={`${fmtData(de)} a ${fmtData(ate)} · ${fmtInt(movimentos.length)} movimentos`}>
           {movimentos.length === 0
             ? <Vazio texto="Sem movimentos no período selecionado." />
-            : <Cascata inicial={saldoInicial} entradas={entradasTop} saidas={saidasTop}
-                       final={saldoInicial + agregado.resultado} />}
+            : <Cascata inicial={saldoInicial} entradas={entradasCascata} saidas={saidasCascata}
+                       final={saldoInicial + resultado} />}
           {agregado.nExcluidos > 0 && (
             <div style={{ fontSize: 10.5, color: "#9DA2A6", marginTop: 10, textAlign: "right" }}>
-              Excluídos {fmtInt(agregado.nExcluidos)} movimentos de ajuste e transferência
-              intra-grupo ({fmtEUR0(agregado.excluido)} líquidos) — entram e saem pelo mesmo
-              valor e não são fluxo do projeto.
+              Excluídos {fmtInt(agregado.nExcluidos)} movimentos de{" "}
+              {agregado.nomesExcluidos.length ? agregado.nomesExcluidos.join(", ")
+                                              : "ajuste e transferência intra-grupo"}{" "}
+              ({fmtEUR0(agregado.excluido)} líquidos) — entram e saem pelo mesmo valor
+              e não são fluxo do projeto.
             </div>
           )}
         </Card>
@@ -1099,15 +1094,21 @@ export default function IRView({ currentUser, empresasVisiveis }) {
 
       {seccao === "custos" && (
         <Card titulo="Centros de custo"
-              subtitulo={`Saídas por categoria · variação face ao período anterior (${fmtData(periodoAnterior.de)} a ${fmtData(periodoAnterior.ate)})`}>
+              subtitulo={`Saídas pelas rubricas da empresa · variação face ao período anterior (${fmtData(periodoAnterior.de)} a ${fmtData(periodoAnterior.ate)})`}>
           <BarrasCentroCusto dados={centrosCusto} />
         </Card>
       )}
 
       {seccao === "orcado" && (
         <Card titulo="Real × Orçado"
-              subtitulo={`${empresaAtiva?.nome || ""} · realizado e a realizar calculados em tempo real a partir do ERP`}>
-          <RealOrcado modelo={MODELO_REAL_ORCADO[empSel]} />
+              subtitulo={`${empresaAtiva?.nome || ""} · pelas rubricas da empresa · o orçado é estático, o forecast acompanha o Fluxo Futuro`}>
+          <RealOrcadoTabela
+            empresaId={empSel} nomeEmpresa={empresaAtiva?.nome}
+            movimentos={dadosOrcado.movimentos} faturas={dadosOrcado.faturas}
+            pagamentos={dadosOrcado.pagamentos} recorrentes={dadosOrcado.recorrentes}
+            orcamento={dadosOrcado.orcamento} podeEditar={podeEditarOrcado}
+            onGravarOrcado={dadosOrcado.upsertOrcamento}
+            loading={dadosOrcado.loading} hoje={dadosOrcado.hoje} />
         </Card>
       )}
 

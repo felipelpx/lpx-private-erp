@@ -1,6 +1,9 @@
 import React, { useState, useMemo, useEffect } from "react";
-import { useVendas, useSaldosAtuais, useRecebiveis, useObraPlanos } from "./hooks.js";
+import { useVendas, useSaldosAtuais, useRecebiveis, useObraPlanos,
+         useDespesasRecorrentes } from "./hooks.js";
 import ModalPlanoObra, { BotaoPlanoObra } from "./ObraPlano.jsx";
+import ModalRecorrentes, { BotaoRecorrentes } from "./Recorrentes.jsx";
+import { ocorrenciasDe } from "./recorrentes.js";
 import { CATEGORIAS } from "./categorias.js";
 import { categoriasDa, comOValorAtual } from "./categoriasEmpresa.js";
 import { faturaPaga, faturaAtrasada, statusFatura } from "./status.js";
@@ -152,6 +155,13 @@ export default function FluxoFuturo({ faturas: faturasTodas, faturasLoading, pag
   // plano é de um projeto, não do consolidado.
   const [planoAberto, setPlanoAberto] = useState(false);
   const { planos: obraPlanos, guardarPlano } = useObraPlanos();
+
+  // ── Despesas recorrentes ─────────────────────────────────────────────────
+  // A regra fica gravada; é aqui que se expande para o fluxo (ver mais abaixo
+  // e src/recorrentes.js). Como nenhuma linha é gravada, parar uma despesa é
+  // mexer na data de fim de um registo só.
+  const [recorrentesAberto, setRecorrentesAberto] = useState(false);
+  const { recorrentes, guardarRecorrente, apagarRecorrente } = useDespesasRecorrentes();
   const planoDaEmpresa = (obraPlanos || []).find(p => p.empresa === empresa) || null;
   const grupoDaEmpresa = EMPRESAS_TODAS.find(e => e.id === empresa)?.grupo || "LPX";
   const nomeDaEmpresa = EMPRESAS_TODAS.find(e => e.id === empresa)?.nome || empresa;
@@ -681,6 +691,40 @@ export default function FluxoFuturo({ faturas: faturasTodas, faturasLoading, pag
     }
   });
 
+  // ── Despesas recorrentes ─────────────────────────────────────────────────
+  // A regra não tem linhas gravadas: expande-se aqui, para a janela do fluxo.
+  // Cada ocorrência entra como uma previsão normal, com a marca de onde veio,
+  // para o detalhe do mês poder dizer "recorrente" e levar ao painel.
+  const fimDoFluxo = meses.length
+    ? `${meses[meses.length - 1].key}-28`
+    : hojeISO;
+  (recorrentes || []).forEach(r => {
+    if (empresa !== "all" && r.empresa !== empresa) return;
+    if (r.ativa === false) return;
+    ocorrenciasDe(r, { de: hojeISO, ate: fimDoFluxo }).forEach(oc => {
+      const m = meses.find(x => x.key === oc.data.slice(0, 7));
+      if (!m) return;
+      const base = {
+        desc: r.descricao,
+        valor: Math.abs(oc.valor),
+        cat: r.categoria || "",
+        subcategoria: r.subcategoria || "",
+        origem: "Recorrente",
+        natureza: "previsto",
+        recorrenteId: r.id,
+        recorrente: r,
+        vencimento: oc.data,
+      };
+      if (r.tipo === "entrada") {
+        m.entradas += base.valor;
+        m.items.push({ ...base, tipo: "entrada" });
+      } else {
+        m.saidas += base.valor;
+        m.items.push({ ...base, tipo: "saida" });
+      }
+    });
+  });
+
   // ── Filtro Real / Previsto ────────────────────────────────────────────────
   // Os totais são recalculados a partir dos itens que sobrevivem ao filtro,
   // para que o gráfico e o saldo acumulado reflictam a mesma seleção.
@@ -908,6 +952,8 @@ export default function FluxoFuturo({ faturas: faturasTodas, faturasLoading, pag
               faturas={faturas} grupo={grupoDaEmpresa}
               onAbrir={() => setPlanoAberto(true)} />
           )}
+          <BotaoRecorrentes empresa={empresa} recorrentes={recorrentes}
+            onAbrir={() => setRecorrentesAberto(true)} />
           {/* Real (com fatura) vs Previsto (estimativa lançada à mão) */}
           <div style={{ display: "flex", gap: 2, background: "#E7DED2", borderRadius: 8, padding: 2, marginLeft: 4 }}>
             {[["todos", "Tudo"], ["real", "Custo real"], ["previsto", "Forecast"]].map(([v, lbl]) => (
@@ -1226,6 +1272,15 @@ export default function FluxoFuturo({ faturas: faturasTodas, faturasLoading, pag
                             🏦 funding
                           </span>
                         )}
+                        {/* Uma ocorrência de recorrente não se edita sozinha:
+                            o que se edita é a regra, no painel. */}
+                        {item.origem === "Recorrente" && item.recorrente && (
+                          <button onClick={(e) => { e.stopPropagation(); setRecorrentesAberto(true); }}
+                            title={`Despesa recorrente "${item.recorrente.descricao}" — abrir o painel para alterar o valor ou a data de fim`}
+                            style={{ background: "#F6F0E8", border: "1px solid #E7DED2", color: "#7E8388",
+                                     padding: "2px 8px", borderRadius: 5, fontSize: 10, cursor: "pointer",
+                                     marginLeft: 4 }}>↻ recorrente</button>
+                        )}
                         {isAdmin && item.origem === "Manual" && item.pagamento && (
                           <>
                             <button onClick={(e) => { e.stopPropagation(); handleMarkAsPaid(item.pagamento); }}
@@ -1355,6 +1410,14 @@ export default function FluxoFuturo({ faturas: faturasTodas, faturasLoading, pag
       </div>
 
       {/* Painel de aproximação em lote */}
+      {recorrentesAberto && (
+        <ModalRecorrentes
+          empresa={empresa} nomeEmpresa={nomeDaEmpresa}
+          recorrentes={recorrentes} currentUser={currentUser}
+          onGuardar={guardarRecorrente} onApagar={apagarRecorrente}
+          onFechar={() => setRecorrentesAberto(false)} />
+      )}
+
       {planoAberto && (
         <ModalPlanoObra
           empresa={empresa} grupo={grupoDaEmpresa} nomeEmpresa={nomeDaEmpresa}
