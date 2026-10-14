@@ -190,6 +190,51 @@ console.log("\nUma rubrica fora do plano aparece, marcada:");
      "e as do plano continuam todas lá");
 }
 
+console.log("\nA tabela é da operação: de Vendas para baixo");
+{
+  const r = calcularRealOrcado({ ...base, movimentos: [
+    { categoria: "Aporte Big Mouse", valor: 160000 },
+    { categoria: "Mútuo Rio Capital", valor: 48000 },
+    { categoria: "Resgate Findmore", valor: -11000 },
+    { categoria: "Funding", valor: 800000 },
+    { categoria: "Amortização", valor: -120000 },
+    { categoria: "Vendas", valor: 430000 },
+    { categoria: "Obra", valor: -300000 },
+    { categoria: "Comissão", valor: -21500 },
+  ]});
+
+  const nomes = r.operacao.map(l => l.rubrica);
+  ok(nomes[0] === "Vendas", `a operação abre nas vendas (abriu em "${nomes[0]}")`);
+  ok(!nomes.some(n => /^(Aporte|Resgate|Mútuo)/.test(n)), "sem aportes, resgates nem mútuos");
+  ok(!nomes.includes("Funding") && !nomes.includes("Amortização"),
+     "sem funding nem amortização");
+  ok(nomes.includes("Obra") && nomes.includes("Comissão"), "mas com a operação toda");
+
+  const capital = r.capital.filter(l => !l.vazia).map(l => l.rubrica);
+  ok(capital.includes("Aporte Big Mouse") && capital.includes("Funding"),
+     "o capital não se perde: fica à parte");
+  ok(r.nCapital === 5, `cinco rubricas de capital com movimento (deu ${r.nCapital})`);
+  ok(r.operacao.length + r.capital.length === r.linhas.length,
+     "e as duas metades dão o plano inteiro");
+
+  // Os totais e o resultado são SÓ da operação
+  ok(perto(r.totais.entradas.real, 430000), "as entradas são só as vendas");
+  ok(perto(r.totais.saidas.real, 321500), "as saídas são a obra e a comissão");
+  ok(perto(r.totais.resultado.real, 108500), "e o resultado é da operação, sem o capital");
+  ok(perto(r.totaisCapital.real, 160000 + 48000 + 11000 + 800000 + 120000),
+     "o capital tem o seu próprio total");
+
+  // As linhas saem pela ordem do plano, não por ordem de aparecimento
+  const plano = rubricasDa("favcloset");
+  const pos = r.operacao.map(l => plano.indexOf(l.rubrica)).filter(i => i >= 0);
+  ok(pos.every((x, i) => i === 0 || x > pos[i - 1]), "pela ordem do Excel");
+
+  // Uma empresa sem "Vendas" no plano não fica sem tabela
+  const semVendas = calcularRealOrcado({ empresaId: "blessed", hoje: HOJE,
+    movimentos: [{ categoria: "Administrativos", valor: -5000 }] });
+  ok(semVendas.operacao.length > 0, "uma empresa sem rubrica Vendas tem operação à mesma");
+}
+
 console.log("\nSemear o orçado a partir do modelo antigo:");
 {
   const s = semearDoModelo(MODELO_REAL_ORCADO.favcloset, "favcloset");

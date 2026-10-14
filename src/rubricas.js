@@ -82,6 +82,49 @@ export function rubricaDe(empresaId, categoria, subcategoria) {
   return ocultarNoGrafico(categoria, subcategoria) ? null : bruta;
 }
 
+// ─── Famílias de rubricas ────────────────────────────────────────────────────
+// Um plano de contas tem nove linhas de "Aporte <investidor>" e cinco de
+// "Mútuo <quem>". Isso serve para classificar um lançamento, mas num gráfico
+// para investidor são catorze barras a dizer a mesma coisa: entrou capital.
+//
+// Isto é uma camada de APRESENTAÇÃO, e só dos gráficos. A classificação do
+// extrato, do Caixa Único e do Real × Orçado continua rubrica a rubrica — não
+// se perde detalhe nenhum, só se junta na hora de desenhar.
+export const FAMILIAS = [
+  { nome: "Aportes e Mútuos", teste: (k) =>
+      /^(aporte|mutuo|suprimento)/.test(k) || / - aporte\/resgate$/.test(k) },
+  { nome: "Resgates", teste: (k) => /^(resgate|devolucao)/.test(k) },
+];
+
+// A família de uma rubrica, ou a própria rubrica quando não pertence a nenhuma.
+export function familiaDe(rubrica) {
+  const k = chaveRubrica(rubrica);
+  const f = FAMILIAS.find(x => x.teste(k));
+  return f ? f.nome : rubrica;
+}
+
+export const ehFamilia = (nome) => FAMILIAS.some(f => f.nome === nome);
+
+// ─── Capital e financiamento ────────────────────────────────────────────────
+// O bloco que abre todos os planos: aportes, resgates, mútuos, funding e
+// amortização. Não é operação do projeto — é como o projeto é pago. O Real ×
+// Orçado mostra a operação, e por isso corta este bloco de cima.
+const CAPITAL = /^(aporte|resgate|mutuo|suprimento|funding|financiamento|amortizacao|devolucao)/;
+
+export function ehCapital(rubrica) {
+  const k = chaveRubrica(rubrica);
+  return CAPITAL.test(k) || / - aporte\/resgate$/.test(k);
+}
+
+// Onde é que a operação começa no plano desta empresa: a seguir ao bloco de
+// capital que abre a lista. Na Favorite Closet é o "Vendas", que vem depois
+// de nove aportes, nove resgates, cinco mútuos, a amortização e o funding.
+export function inicioDaOperacao(empresaId) {
+  const plano = rubricasDa(empresaId);
+  const i = plano.findIndex(c => !ehCapital(c));
+  return i < 0 ? 0 : i;
+}
+
 // ─── Agrupar movimentos por rubrica ──────────────────────────────────────────
 // Devolve as rubricas com movimento, pela ordem do plano, cada uma com o que
 // entrou, o que saiu e o líquido. As que o plano não conhece vão no fim,
@@ -89,34 +132,50 @@ export function rubricaDe(empresaId, categoria, subcategoria) {
 //
 // `excluidas` é o que ficou de fora e porquê — o rodapé do gráfico precisa
 // disso para dizer o que não está lá.
-export function agruparPorRubrica(movimentos, { empresaId } = {}) {
+export function agruparPorRubrica(movimentos, { empresaId, agrupar = false } = {}) {
   const porRubrica = new Map();
   let excluido = 0, nExcluidos = 0;
   const nomesExcluidos = new Set();
 
   (movimentos || []).forEach(m => {
     const v = Number(m?.valor) || 0;
-    const r = rubricaDe(empresaId, m?.categoria, m?.subcategoria);
-    if (r === null) {
+    const r0 = rubricaDe(empresaId, m?.categoria, m?.subcategoria);
+    if (r0 === null) {
       excluido += v; nExcluidos++;
       if (m?.categoria) nomesExcluidos.add(String(m.categoria).trim());
       return;
     }
-    const a = porRubrica.get(r) || { rubrica: r, entrada: 0, saida: 0, n: 0 };
+    // Com `agrupar`, catorze rubricas de capital tornam-se uma barra só. A
+    // rubrica original fica guardada em `inclui`, para a dica poder dizer o
+    // que está lá dentro — juntar não é esconder.
+    const r = agrupar ? familiaDe(r0) : r0;
+    const a = porRubrica.get(r) || { rubrica: r, entrada: 0, saida: 0, n: 0, inclui: new Set() };
     if (v >= 0) a.entrada += v; else a.saida += v;
     a.n++;
+    a.inclui.add(r0);
     porRubrica.set(r, a);
   });
 
-  const linhas = [...porRubrica.values()].map(a => ({
-    ...a,
-    entrada: arred2(a.entrada),
-    saida: arred2(a.saida),
-    liquido: arred2(a.entrada + a.saida),
-    noPlano: rubricaNoPlano(empresaId, a.rubrica),
-    ordem: ordemDaRubrica(empresaId, a.rubrica),
-  })).sort((x, y) => x.ordem - y.ordem ||
-                     String(x.rubrica).localeCompare(String(y.rubrica), "pt"));
+  const linhas = [...porRubrica.values()].map(a => {
+    const familia = agrupar && ehFamilia(a.rubrica);
+    // A família ocupa o lugar da primeira das suas rubricas no plano, para
+    // continuar a sair pela ordem do Excel.
+    const ordem = familia
+      ? Math.min(...[...a.inclui].map(r => ordemDaRubrica(empresaId, r)))
+      : ordemDaRubrica(empresaId, a.rubrica);
+    return {
+      rubrica: a.rubrica, n: a.n,
+      entrada: arred2(a.entrada),
+      saida: arred2(a.saida),
+      liquido: arred2(a.entrada + a.saida),
+      noPlano: familia ? true : rubricaNoPlano(empresaId, a.rubrica),
+      familia,
+      inclui: [...a.inclui].sort((x, y) =>
+        ordemDaRubrica(empresaId, x) - ordemDaRubrica(empresaId, y)),
+      ordem,
+    };
+  }).sort((x, y) => x.ordem - y.ordem ||
+                    String(x.rubrica).localeCompare(String(y.rubrica), "pt"));
 
   return {
     linhas,
@@ -138,12 +197,15 @@ export function agruparPorRubrica(movimentos, { empresaId } = {}) {
 // sinal fica com o nome limpo.
 export function passosDaCascata(agregado) {
   const temAmbos = (l) => Math.abs(l.entrada) > 0.005 && Math.abs(l.saida) > 0.005;
+  const passo = (l, lado) => ({
+    nome: temAmbos(l) ? `${l.rubrica} (${lado === "entrada" ? "entradas" : "saídas"})` : l.rubrica,
+    rubrica: l.rubrica, valor: l[lado], noPlano: l.noPlano, n: l.n,
+    familia: !!l.familia, inclui: l.inclui || [],
+  });
   const entradas = agregado.linhas.filter(l => Math.abs(l.entrada) > 0.005)
-    .map(l => ({ nome: temAmbos(l) ? `${l.rubrica} (entradas)` : l.rubrica,
-                 rubrica: l.rubrica, valor: l.entrada, noPlano: l.noPlano, n: l.n }));
+    .map(l => passo(l, "entrada"));
   const saidas = agregado.linhas.filter(l => Math.abs(l.saida) > 0.005)
-    .map(l => ({ nome: temAmbos(l) ? `${l.rubrica} (saídas)` : l.rubrica,
-                 rubrica: l.rubrica, valor: l.saida, noPlano: l.noPlano, n: l.n }));
+    .map(l => passo(l, "saida"));
   return [...entradas, ...saidas];
 }
 

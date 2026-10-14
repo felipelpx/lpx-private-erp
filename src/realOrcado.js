@@ -27,7 +27,8 @@
 // orçado se escreve, sem ter de pensar em sinais.
 // ─────────────────────────────────────────────────────────────────────────────
 
-import { rubricasDa, rubricaDe, chaveRubrica, rubricaNoPlano } from "./rubricas.js";
+import { rubricasDa, rubricaDe, chaveRubrica, rubricaNoPlano,
+         ehCapital, ordemDaRubrica } from "./rubricas.js";
 import { ocorrenciasDe } from "./recorrentes.js";
 
 const arred2 = (v) => Math.round(((Number(v) || 0) + Number.EPSILON) * 100) / 100;
@@ -169,12 +170,23 @@ export function calcularRealOrcado({
       },
       // Uma rubrica sem orçado e sem nada que se lhe diga não vale uma linha.
       vazia: orcado <= 0.005 && Math.abs(real) <= 0.005 && Math.abs(comprometido) <= 0.005,
+      // Capital e financiamento: aportes, resgates, mútuos, funding e
+      // amortização. É como o projeto é PAGO, não o que o projeto FAZ, e por
+      // isso não entra na conta de exploração. O ecrã mostra-os à parte.
+      capital: ehCapital(b.rubrica),
+      ordem: ordemDaRubrica(empresaId, b.rubrica),
     };
-  });
+  }).sort((a, b) => a.ordem - b.ordem ||
+                    String(a.rubrica).localeCompare(String(b.rubrica), "pt"));
 
+  // A tabela mostra a operação: de "Vendas" para baixo, que é onde o bloco de
+  // capital que abre todos os planos acaba. O capital fica guardado à parte,
+  // para quem o quiser ver sem o misturar com a exploração.
   const soma = (ls, campo) => arred2(ls.reduce((s, l) => s + l[campo], 0));
-  const entradas = linhas.filter(l => l.lado === "entrada");
-  const saidas = linhas.filter(l => l.lado === "saida");
+  const operacao = linhas.filter(l => !l.capital);
+  const capital = linhas.filter(l => l.capital);
+  const entradas = operacao.filter(l => l.lado === "entrada");
+  const saidas = operacao.filter(l => l.lado === "saida");
 
   const totalDe = (ls) => ({
     orcado: soma(ls, "orcado"),
@@ -183,9 +195,12 @@ export function calcularRealOrcado({
   });
   const tE = totalDe(entradas), tS = totalDe(saidas);
 
+  const tC = totalDe(capital);
+
   return {
-    linhas,
+    linhas, operacao, capital,
     entradas, saidas,
+    totaisCapital: tC,
     totais: {
       entradas: tE, saidas: tS,
       resultado: {
@@ -196,8 +211,9 @@ export function calcularRealOrcado({
     },
     // Quanto do orçado já está escrito: numa empresa sem orçado nenhum, o
     // ecrã tem de dizer isso em vez de mostrar uma coluna de zeros.
-    nOrcadas: linhas.filter(l => l.orcado > 0.005).length,
-    nComMovimento: linhas.filter(l => !l.vazia).length,
+    nOrcadas: operacao.filter(l => l.orcado > 0.005).length,
+    nComMovimento: operacao.filter(l => !l.vazia).length,
+    nCapital: capital.filter(l => !l.vazia).length,
   };
 }
 

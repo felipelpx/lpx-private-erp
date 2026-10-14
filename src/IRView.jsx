@@ -66,26 +66,46 @@ const Vazio = ({ texto }) => (
 );
 
 // ─── GRÁFICO EM CASCATA (saldo inicial → receitas → custos → saldo final) ────
+// Juntar rubricas numa família não é escondê-las: a dica diz o que está lá
+// dentro, para ninguém ter de adivinhar o que são os "Aportes e Mútuos".
+const dicaDe = (e) => {
+  if (e.noPlano === false) return `${e.nome} — fora do plano de contas da empresa`;
+  if (e.familia && e.inclui?.length > 1)
+    return `${e.nome} — ${e.inclui.length} rubricas: ${e.inclui.join(", ")}`;
+  return e.nome;
+};
+
 function Cascata({ inicial, entradas, saidas, final }) {
   const nBarras = entradas.length + saidas.length + 2;
   // O plano de contas de uma SPV chega às trinta rubricas. Com muitas barras,
   // aperta-se o passo e dá-se mais altura aos rótulos, que ficam mais
   // inclinados; o gráfico rola na horizontal em vez de truncar a lista.
   const muitas = nBarras > 14;
-  const alturaRotulos = muitas ? 108 : 62;
-  const altura = 260 + alturaRotulos, margemY = 40, margemX = 10;
+  // O desenho tem duas zonas que NÃO se sobrepõem: a área do gráfico, em
+  // cima, e a faixa dos nomes, em baixo. A versão anterior esticava a escala
+  // por toda a altura e os nomes acabavam por cima das barras — era isso que
+  // estava a estourar o gráfico.
+  const alturaRotulos = muitas ? 128 : 74;
+  const alturaGrafico = 260;
+  const altura = alturaGrafico + alturaRotulos;
+  const margemY = 34, margemX = 10;
+  const baseRotulos = alturaGrafico + 14;      // onde a faixa dos nomes começa
   const porPonto = muitas ? 64 : 88;
-  const anguloRotulo = muitas ? -45 : -30;
-  const maxLetras = muitas ? 26 : 18;
+  const anguloRotulo = muitas ? -45 : -32;
+  const maxLetras = muitas ? 28 : 20;
   const largura = larguraGrafico(nBarras, porPonto, 900);
+  // Os nomes estão inclinados e ancorados pelo fim, por isso correm para a
+  // esquerda da sua barra. O primeiro deles passaria para fora do desenho:
+  // abre-se o viewBox à esquerda o suficiente para ele caber.
+  const folgaEsq = Math.round(maxLetras * (muitas ? 9.5 : 10) * 0.63 * 0.71) + 8;
 
   // Barras: inicial (total), cada entrada (sobe), cada saída (desce), final (total)
   const passos = [
     { rotulo: "Saldo inicial", valor: inicial, tipo: "total" },
     ...entradas.map(e => ({ rotulo: e.nome, valor: e.valor, tipo: "entrada",
-                            foraDoPlano: e.noPlano === false, n: e.n })),
+                            foraDoPlano: e.noPlano === false, n: e.n, dica: dicaDe(e) })),
     ...saidas.map(e => ({ rotulo: e.nome, valor: -Math.abs(e.valor), tipo: "saida",
-                          foraDoPlano: e.noPlano === false, n: e.n })),
+                          foraDoPlano: e.noPlano === false, n: e.n, dica: dicaDe(e) })),
     { rotulo: "Saldo final", valor: final, tipo: "total" },
   ];
 
@@ -105,16 +125,25 @@ function Cascata({ inicial, entradas, saidas, final }) {
   const valores = barras.flatMap(b => [b.base, b.topo]).concat([0]);
   const max = Math.max(...valores), min = Math.min(...valores);
   const amplitude = (max - min) || 1;
-  const y = (v) => margemY + (max - v) / amplitude * (altura - margemY * 2);
+  // A escala vive dentro da área do gráfico e nunca entra na faixa dos nomes.
+  const y = (v) => margemY + (max - v) / amplitude * (alturaGrafico - margemY * 2);
 
   const larguraBarra = Math.min(34, (largura - margemX * 2) / barras.length - 16);
   const passo = (largura - margemX * 2) / barras.length;
 
   return (
     <div style={{ overflowX: "auto" }}>
-      <svg viewBox={`0 0 ${largura} ${altura}`} width={largura} height={altura} style={{ minWidth: "100%", height: "auto", display: "block" }}>
+      {/* O viewBox encolhe para a largura do cartão em vez de rolar: com vinte
+          rubricas, o desenho saía 140 px para fora e os últimos nomes ficavam
+          escondidos atrás da margem. Escalar mantém tudo visível, e a dica de
+          cada barra continua a dar o nome por extenso. */}
+      <svg viewBox={`${-folgaEsq} 0 ${largura + folgaEsq} ${altura}`} preserveAspectRatio="xMidYMid meet"
+           style={{ width: "100%", maxWidth: "100%", height: "auto", display: "block" }}>
         {/* linha do zero */}
         <line x1={margemX} y1={y(0)} x2={largura - margemX} y2={y(0)} stroke="#D8CCBB" strokeWidth="1" />
+        {/* o chão do gráfico: abaixo desta linha só há nomes */}
+        <line x1={-folgaEsq} y1={alturaGrafico} x2={largura} y2={alturaGrafico}
+              stroke="#EDE4D8" strokeWidth="1" />
 
         {barras.map((b, i) => {
           const cx = margemX + passo * i + passo / 2;
@@ -135,17 +164,16 @@ function Cascata({ inicial, entradas, saidas, final }) {
               )}
               <rect x={x} y={yTopo} width={larguraBarra} height={alt} fill={cor}
                     rx="2" opacity={b.tipo === "total" ? 1 : 0.9}>
-                <title>{`${b.rotulo}: ${fmtEUR(b.valor)}` +
-                        (b.n ? ` · ${b.n} movimento${b.n === 1 ? "" : "s"}` : "") +
-                        (b.foraDoPlano ? " · fora do plano de contas" : "")}</title>
+                <title>{`${b.dica || b.rotulo}: ${fmtEUR(b.valor)}` +
+                        (b.n ? ` · ${b.n} movimento${b.n === 1 ? "" : "s"}` : "")}</title>
               </rect>
 
               {/* rótulo */}
-              <text x={cx} y={altura - alturaRotulos + 16} textAnchor="end" fontSize={muitas ? 9.5 : 10}
+              <text x={cx} y={baseRotulos} textAnchor="end" fontSize={muitas ? 9.5 : 10}
                     fill={b.foraDoPlano ? COR.saida : COR.texto}
-                    transform={`rotate(${anguloRotulo} ${cx} ${altura - alturaRotulos + 16})`}>
+                    transform={`rotate(${anguloRotulo} ${cx} ${baseRotulos})`}>
                 {b.rotulo.length > maxLetras ? b.rotulo.slice(0, maxLetras - 1) + "…" : b.rotulo}
-                <title>{b.foraDoPlano ? `${b.rotulo} — fora do plano de contas da empresa` : b.rotulo}</title>
+                <title>{b.dica || b.rotulo}</title>
               </text>
             </g>
           );
@@ -158,7 +186,7 @@ function Cascata({ inicial, entradas, saidas, final }) {
           const cor = b.tipo === "total" ? COR.saldo : b.tipo === "entrada" ? COR.entrada : COR.saida;
           return { x: cx, y: yTopo - 7, texto: fmtCompacto(b.valor), fontSize: 10.5, cor,
                    alternativas: [0, -14, -28, -42] };
-        }), { margemX: 3, margemY: 2, limites: { x0: 2, y0: 2, x1: largura - 2, y1: altura - alturaRotulos - 6 } })} />
+        }), { margemX: 3, margemY: 2, limites: { x0: 2, y0: 2, x1: largura - 2, y1: alturaGrafico - 4 } })} />
       </svg>
     </div>
   );
@@ -181,7 +209,9 @@ function BarrasCentroCusto({ dados }) {
                           textAlign: "right", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
                  title={d.noPlano === false
                    ? `${d.nome} — fora do plano de contas da empresa`
-                   : d.nome}>{d.nome}{d.noPlano === false ? " ⚠" : ""}</div>
+                   : d.familia && d.inclui?.length > 1
+                     ? `${d.nome} — ${d.inclui.length} rubricas: ${d.inclui.join(", ")}`
+                     : d.nome}>{d.nome}{d.noPlano === false ? " ⚠" : ""}</div>
             <div style={{ flex: 1, background: COR.fundo, borderRadius: 5, height: 22, position: "relative", overflow: "hidden" }}>
               <div style={{ width: `${pct}%`, height: "100%", background: corCategoria(d.nome, i), borderRadius: 5, transition: "width .3s" }} />
             </div>
@@ -815,12 +845,13 @@ export default function IRView({ currentUser, empresasVisiveis }) {
   // diz-se no rodapé do gráfico — senão a cascata deixava de fechar sem se
   // perceber porquê.
   const agregado = useMemo(
-    () => agruparPorRubrica(movimentos, { empresaId: empSel }), [movimentos, empSel]);
+    () => agruparPorRubrica(movimentos, { empresaId: empSel, agrupar: true }),
+    [movimentos, empSel]);
   const resultado = agregado.entradas + agregado.saidas;
 
   const anteriorPorRubrica = useMemo(() => {
     const p = {};
-    agruparPorRubrica(movsAnterior, { empresaId: empSel }).linhas
+    agruparPorRubrica(movsAnterior, { empresaId: empSel, agrupar: true }).linhas
       .forEach(l => { p[l.rubrica] = l.saida; });
     return p;
   }, [movsAnterior, empSel]);
@@ -837,7 +868,8 @@ export default function IRView({ currentUser, empresasVisiveis }) {
   const centrosCusto = useMemo(() => agregado.linhas
     .filter(l => Math.abs(l.saida) > 0.005)
     .map(l => ({ nome: l.rubrica, atual: l.saida,
-                 anterior: anteriorPorRubrica[l.rubrica] || 0, noPlano: l.noPlano })),
+                 anterior: anteriorPorRubrica[l.rubrica] || 0, noPlano: l.noPlano,
+                 familia: l.familia, inclui: l.inclui })),
     [agregado, anteriorPorRubrica]);
 
   // Evolução mensal do saldo consolidado

@@ -77,6 +77,9 @@ export default function RealOrcadoTabela({
   loading = false, hoje,
 }) {
   const [soComDados, setSoComDados] = useState(true);
+  // O capital (aportes, resgates, mútuos, funding, amortização) fica fechado:
+  // a tabela é da operação, de "Vendas" para baixo.
+  const [verCapital, setVerCapital] = useState(false);
   const [aSemear, setASemear] = useState(false);
   const [erro, setErro] = useState("");
 
@@ -122,6 +125,7 @@ export default function RealOrcadoTabela({
   const visiveis = (ls) => soComDados ? ls.filter(l => !l.vazia) : ls;
   const entradas = visiveis(r.entradas);
   const saidas = visiveis(r.saidas);
+  const capital = visiveis(r.capital);
 
   const Secao = ({ titulo, linhas, total, cor }) => (
     <>
@@ -190,8 +194,17 @@ export default function RealOrcadoTabela({
           Só as rubricas com orçamento ou movimento
         </label>
         <span style={{ fontSize: 11, color: COR.textoApagado }}>
-          {r.nOrcadas} de {r.linhas.length} rubricas orçadas
+          {r.nOrcadas} de {r.operacao.length} rubricas orçadas
         </span>
+        {r.nCapital > 0 && (
+          <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 11,
+                          color: COR.textoSuave, cursor: "pointer" }}
+                 title="Aportes, resgates, mútuos, funding e amortização — como o projeto é pago, não o que o projeto faz">
+            <input type="checkbox" checked={verCapital} onChange={e => setVerCapital(e.target.checked)}
+              style={{ width: 14, height: 14, accentColor: COR.navy }} />
+            Incluir capital e financiamento ({r.nCapital})
+          </label>
+        )}
         {podeEditar && porSemear.length > 0 && (
           <button onClick={semear} disabled={aSemear}
             title="Preenche o orçado das rubricas que batem com o business plan que já estava no sistema. Não toca no que já estiver escrito."
@@ -236,9 +249,14 @@ export default function RealOrcadoTabela({
                    cor={COR.positivoForte} />
             <Secao titulo="Saídas" linhas={saidas} total={r.totais.saidas}
                    cor={COR.negativoForte} />
+            {verCapital && (
+              <Secao titulo="Capital e financiamento" linhas={capital}
+                     total={r.totaisCapital} cor={COR.infoForte} />
+            )}
             <tr style={{ borderTop: `2px solid ${COR.navy}`, background: COR.navy }}>
               <td style={{ ...td, textAlign: "left", fontWeight: 700, color: COR.creme,
-                           padding: "10px 12px" }}>Resultado</td>
+                           padding: "10px 12px" }}>
+                Resultado da operação{verCapital ? " (sem o capital)" : ""}</td>
               <td style={{ ...td, fontWeight: 700, color: COR.creme }}>
                 {Math.abs(res.orcado) > 0.005 ? fmtEUR0(res.orcado) : "—"}</td>
               <td style={{ ...td, fontWeight: 700, color: COR.sobreEscuroTenue }}>
@@ -256,9 +274,11 @@ export default function RealOrcadoTabela({
 
       <div style={{ fontSize: 10.5, color: COR.textoApagado, marginTop: 11, lineHeight: 1.6 }}>
         As rubricas são as do plano de contas desta empresa — as mesmas do extrato e dos
-        gráficos. O <strong>Orçado</strong> é estático. O <strong>Forecast</strong> soma ao
-        realizado as faturas por pagar, as previsões do Fluxo Futuro (onde entra o plano de
-        obra) e as despesas recorrentes, por isso muda sozinho sempre que uma delas muda.
+        gráficos —, da operação: começa nas vendas, que é onde acaba o bloco de capital e
+        financiamento que abre o plano. O <strong>Orçado</strong> é estático. O{" "}
+        <strong>Forecast</strong> soma ao realizado as faturas por pagar, as previsões do
+        Fluxo Futuro (onde entra o plano de obra) e as despesas recorrentes, por isso muda
+        sozinho sempre que uma delas muda.
       </div>
     </div>
   );

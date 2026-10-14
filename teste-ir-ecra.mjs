@@ -30,6 +30,19 @@ const M = (data, categoria, valor, subcategoria = "") =>
      banco: "BCP", data, movimento: categoria, valor, saldo: 0, categoria, subcategoria });
 // Rubricas reais do plano da Favorite Closet (src/categoriasEmpresa.js)
 const MOVS = [
+  // os aportes e mútuos que enchiam o gráfico de barras repetidas
+  M("2025-01-10","Aporte Ideias Vidradas", 160000),
+  M("2025-01-20","Aporte Parcela Emergente", 100000),
+  M("2025-02-10","Aporte Magic Biz", 100000),
+  M("2025-02-20","Aporte Pompous Measures", 48000),
+  M("2025-03-10","Aporte Morning Steps", 40000),
+  M("2025-03-20","Aporte Efeito Impecável", 111000),
+  M("2025-04-10","Aporte Big Mouse", 50000),
+  M("2025-04-20","Mútuo Bombastic Gadget", 37000),
+  M("2025-05-10","Mútuo Vanillapotential", 71000),
+  M("2025-05-20","Mútuo Findmore", 220000),
+  M("2025-06-10","Resgate Efeito Impecável", -11000),
+  M("2025-06-20","Resgate Enchanted", -8000),
   M("2026-01-10","Funding", 800000),
   M("2026-02-10","Amortização", -120000),
   M("2026-02-20","Funding", -40000),
@@ -191,6 +204,75 @@ ok(custos.some(c => /Rubrica Fantasma .* fora do plano/.test(c)),
 ok(!custos.some(c => /^Outros$/.test(c)), "sem balde de Outros aqui também");
 const txtCustos = await p.evaluate(() => document.body.innerText);
 ok(/rubricas da empresa/.test(txtCustos), "o subtítulo diz que são as rubricas da empresa");
+
+// ── Os nomes ficam ABAIXO do gráfico, nunca por cima das barras ───────────
+await aba("Fluxo de caixa");          // voltar à cascata
+const geometria = await p.evaluate(() => {
+  const svg = document.querySelector("svg");
+  if (!svg) return null;
+  const vb = svg.getAttribute("viewBox").split(" ").map(Number);
+  // o "chão" do gráfico é a linha horizontal que atravessa toda a largura
+  // o chão é a linha que atravessa o desenho todo (o viewBox abre à esquerda
+  // para os nomes inclinados caberem, por isso x1 é negativo)
+  const chao = [...svg.querySelectorAll("line")]
+    .map(l => ({ x1: +l.getAttribute("x1"), x2: +l.getAttribute("x2"), y: +l.getAttribute("y1") }))
+    .filter(l => Math.abs(l.x2 - l.x1) > vb[2] * 0.9)[0];
+  const barras = [...svg.querySelectorAll("rect")].map(r => ({
+    topo: +r.getAttribute("y"), fundo: +r.getAttribute("y") + +r.getAttribute("height") }));
+  const nomes = [...svg.querySelectorAll("text")]
+    .filter(t => t.getAttribute("transform"))
+    .map(t => ({ y: +t.getAttribute("y"), texto: t.textContent.trim() }));
+  return { altura: vb[3], chao: chao ? chao.y : null, barras, nomes };
+});
+ok(!!geometria?.chao, "o gráfico tem um chão a separar as barras dos nomes");
+ok(geometria.barras.every(b => b.fundo <= geometria.chao + 1),
+   `nenhuma barra passa o chão (${geometria.barras.filter(b => b.fundo > geometria.chao + 1).length} passam)`);
+ok(geometria.nomes.every(n => n.y > geometria.chao),
+   `todos os ${geometria.nomes.length} nomes ficam abaixo do chão`);
+ok(geometria.nomes.every(n => n.y < geometria.altura),
+   "e nenhum sai pelo fundo do desenho");
+// Nada do desenho pode sair da caixa: nem uma barra, nem um nome.
+const transbordo = await p.evaluate(() => {
+  const svg = document.querySelector("svg");
+  const c = svg.parentElement.getBoundingClientRect();
+  return [...svg.querySelectorAll("text, rect")].filter(el => {
+    const b = el.getBoundingClientRect();
+    return b.right > c.right + 1 || b.left < c.left - 1 || b.bottom > c.bottom + 1;
+  }).map(el => el.textContent.trim().slice(0, 30) || el.tagName);
+});
+ok(transbordo.length === 0, `nada transborda da caixa do gráfico (${transbordo.join(", ") || "nada"})`);
+const rola = await p.evaluate(() => {
+  const c = document.querySelector("svg").parentElement;
+  return c.scrollWidth > c.clientWidth + 1;
+});
+ok(!rola, "e o gráfico cabe sem rolar na horizontal");
+
+// ── Aportes e mútuos numa barra só ────────────────────────────────────────
+// o rótulo de uma família traz a dica atrás, por isso compara-se pelo início
+ok(semSaldos.filter(n => n.startsWith("Aportes e Mútuos")).length === 1,
+   "os dez aportes e mútuos passam a ser uma barra: «Aportes e Mútuos»");
+ok(!semSaldos.some(n => /^Aporte /.test(n) || /^Mútuo /.test(n)),
+   "e já não há uma barra por investidor");
+ok(semSaldos.filter(n => n.startsWith("Resgates")).length === 1,
+   "os resgates ficam na sua própria barra");
+ok(!semSaldos.some(n => /^Resgate /.test(n)), "sem um por investidor");
+// a dica diz o que está lá dentro
+const dicaFamilia = await p.evaluate(() => {
+  const t = [...document.querySelectorAll("svg text")].find(x =>
+    /Aportes e Mútuos/.test(x.querySelector("title")?.textContent || ""));
+  return t ? t.querySelector("title").textContent : "";
+});
+ok(/10 rubricas/.test(dicaFamilia), `a dica diz quantas rubricas junta: ${dicaFamilia.slice(0, 60)}…`);
+ok(/Aporte Big Mouse/.test(dicaFamilia), "e nomeia-as, uma a uma");
+
+// ── Centros de custo com as mesmas famílias ───────────────────────────────
+await aba("Centros de custo");
+await p.waitForTimeout(300);
+const titulosCusto = await p.evaluate(() =>
+  [...document.querySelectorAll("div[title]")].map(d => d.getAttribute("title")));
+ok(titulosCusto.some(t => /^Resgates —/.test(t)),
+   "o centro de custo também junta os resgates, e diz quais");
+ok(!titulosCusto.some(t => /^Resgate [A-Z]/.test(t)), "sem um por investidor");
 
 // ── Real × Orçado ──────────────────────────────────────────────────────────
 await aba("Real × Orçado");

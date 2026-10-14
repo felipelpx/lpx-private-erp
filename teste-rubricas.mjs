@@ -2,7 +2,8 @@
 // que fica de fora do gráfico diz-se.
 //   node teste-rubricas.mjs
 import { rubricasDa, rubricaDe, agruparPorRubrica, passosDaCascata,
-         rubricaNoPlano, ordemDaRubrica, chaveRubrica, SEM_RUBRICA } from "./src/rubricas.js";
+         rubricaNoPlano, ordemDaRubrica, chaveRubrica, SEM_RUBRICA,
+         familiaDe, ehFamilia, ehCapital, inicioDaOperacao } from "./src/rubricas.js";
 import { CATEGORIAS_POR_EMPRESA, CAT_SUB_POR_EMPRESA } from "./src/categoriasEmpresa.js";
 
 let mau = 0;
@@ -132,6 +133,70 @@ console.log("\nA cascata: entradas, depois saídas, sem rótulos repetidos:");
   ok(perto(passos.reduce((s, p) => s + p.valor, 0), 470000),
      "a soma dos passos é o resultado do período");
   ok(saidas.length === 2, "duas saídas: obra e a amortização do funding");
+}
+
+console.log("\nFamílias: os catorze aportes são uma barra só");
+{
+  ok(familiaDe("Aporte Big Mouse") === "Aportes e Mútuos", "um aporte é da família");
+  ok(familiaDe("Mútuo Rio Capital") === "Aportes e Mútuos", "um mútuo também");
+  ok(familiaDe("Suprimentos") === "Aportes e Mútuos", "e um suprimento");
+  ok(familiaDe("Blessed - Aporte/Resgate") === "Aportes e Mútuos",
+     "a grafia das SPV novas (\"X - Aporte/Resgate\") também entra");
+  ok(familiaDe("Resgate Findmore") === "Resgates", "os resgates ficam na sua família");
+  ok(familiaDe("Obra") === "Obra", "e o que não é capital fica como está");
+  ok(ehFamilia("Aportes e Mútuos") && !ehFamilia("Obra"), "sabe o que é família e o que não é");
+
+  const movs = [
+    { categoria: "Aporte Big Mouse", valor: 160000 },
+    { categoria: "Aporte Findmore", valor: 100000 },
+    { categoria: "Mútuo Rio Capital", valor: 48000 },
+    { categoria: "Resgate Findmore", valor: -11000 },
+    { categoria: "Obra", valor: -300000 },
+  ];
+  const solto = agruparPorRubrica(movs, { empresaId: "favcloset" });
+  const junto = agruparPorRubrica(movs, { empresaId: "favcloset", agrupar: true });
+
+  ok(solto.linhas.length === 5, "sem agrupar, cinco linhas");
+  ok(junto.linhas.length === 3, `a agrupar, três: ${junto.linhas.map(l => l.rubrica).join(" · ")}`);
+
+  const cap = junto.linhas.find(l => l.rubrica === "Aportes e Mútuos");
+  ok(perto(cap.entrada, 308000), "a família soma os três: 160 + 100 + 48 = 308 000 €");
+  ok(cap.n === 3, "com os três movimentos");
+  ok(cap.familia === true, "marcada como família");
+  ok(cap.inclui.length === 3, "e diz que rubricas lá estão dentro");
+  ok(cap.inclui.includes("Aporte Big Mouse") && cap.inclui.includes("Mútuo Rio Capital"),
+     "pelos nomes: juntar não é esconder");
+  ok(cap.noPlano === true, "uma família nunca é marcada como fora do plano");
+
+  ok(junto.linhas.find(l => l.rubrica === "Obra").familia === false,
+     "uma rubrica solta não vira família");
+  ok(perto(solto.entradas, junto.entradas) && perto(solto.saidas, junto.saidas),
+     "agrupar não muda um cêntimo dos totais");
+
+  // A família sai no lugar da primeira das suas rubricas
+  const nomes = junto.linhas.map(l => l.rubrica);
+  ok(nomes.indexOf("Aportes e Mútuos") < nomes.indexOf("Obra"),
+     "e sai pela ordem do plano, no lugar da primeira que a compõe");
+
+  const passos = passosDaCascata(junto).map(p => p.nome);
+  ok(passos.filter(n => /Aportes e M/.test(n)).length === 1,
+     `uma barra só para o capital: ${passos.join(" · ")}`);
+}
+
+console.log("\nCapital e financiamento: onde começa a operação");
+{
+  ok(ehCapital("Aporte Big Mouse") && ehCapital("Mútuo Lpx") && ehCapital("Resgate Findmore"),
+     "aportes, mútuos e resgates são capital");
+  ok(ehCapital("Funding") && ehCapital("Amortização"), "funding e amortização também");
+  ok(ehCapital("Blessed - Aporte/Resgate"), "e a grafia das SPV novas");
+  ok(!ehCapital("Vendas") && !ehCapital("Obra") && !ehCapital("Comissão"),
+     "vendas, obra e comissão são operação");
+
+  const i = inicioDaOperacao("favcloset");
+  const plano = rubricasDa("favcloset");
+  ok(plano[i] === "Vendas", `na Favorite Closet a operação começa em "${plano[i]}"`);
+  ok(plano.slice(0, i).every(ehCapital), `as ${i} rubricas antes são todas de capital`);
+  ok(inicioDaOperacao("adseq") >= 0, "e nas HDG também há um corte");
 }
 
 console.log("\nCasos de fronteira:");
