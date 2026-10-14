@@ -1,7 +1,7 @@
 import React, { useState, useMemo } from "react";
 import { EMPRESAS, agruparPorGrupo } from "./empresas.js";
-import { useMovimentosPeriodo, usePagamentosExtras, useFaturas,
-         useOrcamento, useDespesasRecorrentes } from "./hooks.js";
+import { useMovimentosPeriodo, usePagamentosExtras, useFaturas, useOrcamento,
+         useDespesasRecorrentes, useVendas, useRecebiveis } from "./hooks.js";
 import RealOrcadoTabela from "./RealOrcadoTabela.jsx";
 import { podeEditarOrcado } from "./realOrcado.js";
 import { COR, RAIO } from "./brand.js";
@@ -31,10 +31,12 @@ export function useDadosRealOrcado(empresaId, empresas) {
   const { faturas, loading: fLoad } = useFaturas();
   const { pagamentos, loading: pLoad } = usePagamentosExtras();
   const { recorrentes } = useDespesasRecorrentes();
+  const { vendas } = useVendas();
+  const { recebiveis } = useRecebiveis();
   const { orcamento, upsertOrcamento } = useOrcamento();
 
-  return { empresa, movimentos, faturas, pagamentos, recorrentes, orcamento,
-           upsertOrcamento, loading: mLoad || fLoad || pLoad, hoje };
+  return { empresa, movimentos, faturas, pagamentos, recorrentes, vendas, recebiveis,
+           orcamento, upsertOrcamento, loading: mLoad || fLoad || pLoad, hoje };
 }
 
 export default function RealOrcadoView({ empresasVisiveis, currentUser }) {
@@ -77,7 +79,8 @@ export default function RealOrcadoView({ empresasVisiveis, currentUser }) {
         <RealOrcadoTabela
           empresaId={empSel} nomeEmpresa={d.empresa?.nome}
           movimentos={d.movimentos} faturas={d.faturas} pagamentos={d.pagamentos}
-          recorrentes={d.recorrentes} orcamento={d.orcamento}
+          recorrentes={d.recorrentes} vendas={d.vendas} recebiveis={d.recebiveis}
+          orcamento={d.orcamento}
           podeEditar={podeEditar} onGravarOrcado={d.upsertOrcamento}
           loading={d.loading} hoje={d.hoje} />
       </div>

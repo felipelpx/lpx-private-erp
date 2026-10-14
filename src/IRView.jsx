@@ -7,7 +7,7 @@ import { useDadosRealOrcado } from "./RealOrcadoView.jsx";
 import { podeEditarOrcado } from "./realOrcado.js";
 import { statusFatura, faturaPaga } from "./status.js";
 import { valorFunding, temFunding } from "./funding.js";
-import { agruparPorRubrica, passosDaCascata } from "./rubricas.js";
+import { agruparPorRubrica, passosDaCascata, chaveRubrica } from "./rubricas.js";
 import { larguraGrafico, colocarRotulos } from "./rotulos.js";
 import { fmtEUR, fmtEUR0, fmtNum, fmtInt, fmtCompacto, fmtData, fmtPctSinal } from "./formato.js";
 
@@ -430,6 +430,22 @@ const ESTADO_COR = {
   "Escriturada": { fundo: "#EFF5F1", borda: "#7FBE9C", texto: "#1B6A49" },
 };
 
+// O estado por extenso, ao lado da letra da fração. A cor sozinha obriga a
+// olhar para a legenda e a traduzir; escrito, lê-se de uma vez. Quando a
+// fração é estreita de mais para o nome todo, entra a forma curta — e o que
+// nunca falta é a dica, que traz sempre o estado por extenso.
+const ESTADO_ROTULO = {
+  "Disponível":  { longo: "Disponível",     curto: "Disp." },
+  "Reservada":   { longo: "Reservada",      curto: "Resv." },
+  "CPCV":        { longo: "CPCV assinado",  curto: "CPCV" },
+  "Escriturada": { longo: "Escriturada",    curto: "Escr." },
+};
+const rotuloEstado = (st) => ESTADO_ROTULO[st] || { longo: st || "—", curto: st || "—" };
+
+// Quanto espaço um rótulo ocupa ao lado da letra, em píxeis de SVG: a letra
+// (12 px a negrito), o separador, e o rótulo a 8,5 px em monoespaçado.
+const cabeORotulo = (largura, texto) => largura > 24 + texto.length * 5.3;
+
 function Predinho({ fracoes }) {
   if (!fracoes.length) return <Vazio texto="Sem frações neste projeto." />;
 
@@ -500,10 +516,21 @@ function Predinho({ fracoes }) {
                     <g key={f.id}>
                       <rect x={xi} y={y} width={largura} height={ALTURA_PISO - 14}
                             fill={c.fundo} stroke={c.borda} strokeWidth="1.2" rx="3">
-                        <title>{`${f.fracao} · ${f.tipologia || "—"} · ${fmtNum(f.area)} m² · ${fmtEUR0(f.preco_tabela)} · ${f.status}`}</title>
+                        <title>{`${f.fracao} · ${f.tipologia || "—"} · ${fmtNum(f.area)} m² · ${fmtEUR0(f.preco_tabela)} · ${rotuloEstado(f.status).longo}`}</title>
                       </rect>
                       <text x={xi + largura / 2} y={y + 15} textAnchor="middle"
-                            fontSize="12" fontWeight="800" fill={c.texto} pointerEvents="none">{f.fracao}</text>
+                            fontSize="12" fontWeight="800" fill={c.texto} pointerEvents="none">
+                        {f.fracao}
+                        {(() => {
+                          const r = rotuloEstado(f.status);
+                          const txt = cabeORotulo(largura, r.longo) ? r.longo
+                                    : cabeORotulo(largura, r.curto) ? r.curto : null;
+                          return txt ? (
+                            <tspan fontSize="8.5" fontWeight="600" fontFamily="monospace"
+                                   opacity="0.78">{"  "}{txt}</tspan>
+                          ) : null;
+                        })()}
+                      </text>
                       {cabe && (
                         <text x={xi + largura / 2} y={y + 28} textAnchor="middle"
                               fontSize="8.5" fontFamily="monospace" fill={c.texto} opacity="0.85" pointerEvents="none">
@@ -540,7 +567,7 @@ function Predinho({ fracoes }) {
         {Object.keys(ESTADO_COR).map(st => (
           <span key={st} style={{ fontSize: 10.5, color: COR.texto, display: "flex", alignItems: "center", gap: 5 }}>
             <span style={{ width: 11, height: 11, borderRadius: 3, background: ESTADO_COR[st].fundo, border: `1px solid ${ESTADO_COR[st].borda}` }} />
-            {st} <strong style={{ color: COR.tinta }}>{resumo[st] || 0}</strong>
+            {rotuloEstado(st).longo} <strong style={{ color: COR.tinta }}>{resumo[st] || 0}</strong>
           </span>
         ))}
         <span style={{ marginLeft: "auto", fontSize: 10.5, color: "#9DA2A6", fontFamily: "var(--fonte-numero)" }}>
@@ -881,9 +908,12 @@ export default function IRView({ currentUser, empresasVisiveis }) {
 
   // Centros de custo: as mesmas rubricas, só as saídas, pela ordem do plano.
   // Pelo líquido, como a cascata: uma rubrica que recebeu mais do que gastou
-  // não é um centro de custo, é o contrário.
+  // não é um centro de custo, é o contrário. Do maior custo para o menor, que
+  // é a pergunta que se faz a um quadro destes.
   const centrosCusto = useMemo(() => agregado.linhas
     .filter(l => l.liquido < -0.005)
+    .slice()
+    .sort((a, b) => Math.abs(b.liquido) - Math.abs(a.liquido))
     .map(l => ({ nome: l.rubrica, atual: l.liquido,
                  anterior: anteriorPorRubrica[l.rubrica] || 0, noPlano: l.noPlano,
                  familia: l.familia, inclui: l.inclui,
@@ -964,14 +994,33 @@ export default function IRView({ currentUser, empresasVisiveis }) {
   const futuro = useMemo(() => {
     const hojeISO = new Date().toISOString().slice(0, 10);
     const porMes = {};
-    const junta = (data, valor, tipo) => {
+    const junta = (data, valor, tipo, escritura = false) => {
       const k = String(data || "").slice(0, 7);
       if (!k || k.length !== 7) return;
       if (!Number(valor)) return;   // despesa sem funding não abre mês nenhum
-      if (!porMes[k]) porMes[k] = { entradas: 0, saidas: 0, itens: 0 };
-      if (tipo === "entrada") porMes[k].entradas += Math.abs(valor);
-      else porMes[k].saidas -= Math.abs(valor);
-      porMes[k].itens++;
+      if (!porMes[k]) porMes[k] = { entradas: 0, saidas: 0, itens: 0,
+                                    entradasOp: 0, saidasOp: 0, itensOp: 0 };
+      const m = porMes[k];
+      if (tipo === "entrada") m.entradas += Math.abs(valor);
+      else m.saidas -= Math.abs(valor);
+      m.itens++;
+      // A segunda leitura, sem a escritura: a venda e o pagamento ao banco
+      // são um acontecimento único e enorme, e esmagam a escala de tudo o
+      // resto. Vistos à parte, lê-se a operação mês a mês.
+      if (!escritura) {
+        if (tipo === "entrada") m.entradasOp += Math.abs(valor);
+        else m.saidasOp -= Math.abs(valor);
+        m.itensOp++;
+      }
+    };
+
+    // O que conta como escritura: a venda e a amortização da dívida, venham
+    // elas do plano de obra, de uma previsão lançada à mão ou dos recebíveis.
+    const ehEscritura = (x) => {
+      if (x?.plano_tipo === "venda" || x?.plano_tipo === "amortizacao") return true;
+      const k = chaveRubrica(x?.categoria);
+      return k === "vendas" || /^amortizacao/.test(k) ||
+             /repagamento|amortizacao/.test(chaveRubrica(x?.subcategoria));
     };
 
     // Despesas financiadas pelo banco trazem a entrada do banco no mesmo mês —
@@ -982,8 +1031,9 @@ export default function IRView({ currentUser, empresasVisiveis }) {
       .filter(p => !["Convertida", "Paga", "Pago"].includes(p.status))
       .forEach(p => {
         const ehEntrada = p.tipo === "entrada";
-        junta(p.data_inicio, Number(p.valor) || 0, ehEntrada ? "entrada" : "saida");
-        if (!ehEntrada) junta(p.data_inicio, valorFunding(p, p.valor), "entrada");
+        const esc = ehEscritura(p);
+        junta(p.data_inicio, Number(p.valor) || 0, ehEntrada ? "entrada" : "saida", esc);
+        if (!ehEntrada) junta(p.data_inicio, valorFunding(p, p.valor), "entrada", esc);
       });
 
     (faturas || [])
@@ -991,22 +1041,23 @@ export default function IRView({ currentUser, empresasVisiveis }) {
       .filter(f => !faturaPaga(f))
       .forEach(f => {
         const data = f.previsao_pagamento || f.vencimento;
-        junta(data, Number(f.valor) || 0, "saida");
-        junta(data, valorFunding(f, f.valor), "entrada");
+        const esc = ehEscritura(f);
+        junta(data, Number(f.valor) || 0, "saida", esc);
+        junta(data, valorFunding(f, f.valor), "entrada", esc);
       });
 
     // Entradas: carteira de Contas a Receber (só o que ainda está previsto)
     (recebiveis || [])
       .filter(r => idsAtivos.includes(r.empresa))
       .filter(r => (r.status || "Previsto") === "Previsto")
-      .forEach(r => junta(r.data_prevista, Number(r.valor) || 0, "entrada"));
+      .forEach(r => junta(r.data_prevista, Number(r.valor) || 0, "entrada", true));
 
     // Mais os recebíveis das vendas que ainda não estejam na carteira
     (vendas || [])
       .filter(v => empresasAtivas.some(e => e.nome === v.projeto || e.projeto === v.projeto))
       .forEach(v => {
         if ((Number(v.falta_receber) || 0) > 0 && v.previsao_escritura)
-          junta(v.previsao_escritura, Number(v.falta_receber), "entrada");
+          junta(v.previsao_escritura, Number(v.falta_receber), "entrada", true);
       });
 
     return Object.keys(porMes).sort().map(k => {
@@ -1021,6 +1072,13 @@ export default function IRView({ currentUser, empresasVisiveis }) {
   );
   const totalPrevEntradas = futuro.reduce((s, m) => s + m.entradas, 0);
   const totalPrevSaidas = futuro.reduce((s, m) => s + m.saidas, 0);
+
+  // A mesma lista, vista sem a escritura: só os meses que ainda têm alguma
+  // coisa depois de tirar a venda e a amortização.
+  const futuroOperacao = useMemo(() => futuro
+    .map(m => ({ ...m, entradas: m.entradasOp, saidas: m.saidasOp, itens: m.itensOp }))
+    .filter(m => m.itens > 0), [futuro]);
+  const temEscrituraNoFluxo = futuro.some(m => m.itens !== m.itensOp);
 
   // ─── Real × Orçado ────────────────────────────────────────────────────────
   // Exatamente a mesma tabela do separador próprio, com os mesmos dados: dois
@@ -1137,10 +1195,28 @@ export default function IRView({ currentUser, empresasVisiveis }) {
       )}
 
       {seccao === "futuro" && (
-        <Card titulo="Fluxo futuro — entradas e saídas previstas"
-              subtitulo={`Previsões e faturas por liquidar · entradas ${fmtEUR0(totalPrevEntradas)} · saídas ${fmtEUR0(Math.abs(totalPrevSaidas))} · saldo de partida ${fmtEUR0(saldoHoje)}`}>
-          <BarrasFluxoFuturo meses={futuro} saldoArranque={saldoHoje} />
-        </Card>
+        <>
+          <Card titulo="Fluxo futuro — tudo, incluindo a escritura"
+                subtitulo={`Previsões e faturas por liquidar · entradas ${fmtEUR0(totalPrevEntradas)} · saídas ${fmtEUR0(Math.abs(totalPrevSaidas))} · saldo de partida ${fmtEUR0(saldoHoje)}`}>
+            <BarrasFluxoFuturo meses={futuro} saldoArranque={saldoHoje} />
+          </Card>
+
+          {/* A venda e o pagamento ao banco são um acontecimento único e
+              enorme: na mesma escala, achatam tudo o resto a uma linha. O
+              segundo gráfico tira-os, para se ver a operação mês a mês. */}
+          {temEscrituraNoFluxo && (
+            <Card titulo="Fluxo futuro — a operação, sem vendas nem amortização"
+                  subtitulo={`O mesmo período sem a escritura · entradas ${fmtEUR0(futuroOperacao.reduce((s, m) => s + m.entradas, 0))} · saídas ${fmtEUR0(Math.abs(futuroOperacao.reduce((s, m) => s + m.saidas, 0)))}`}>
+              <BarrasFluxoFuturo meses={futuroOperacao} saldoArranque={saldoHoje} />
+            </Card>
+          )}
+          {!temEscrituraNoFluxo && (
+            <div style={{ fontSize: 11, color: "#9DA2A6", textAlign: "center", padding: "4px 0" }}>
+              Não há vendas nem amortização no fluxo deste projeto — o segundo gráfico,
+              sem elas, seria igual a este.
+            </div>
+          )}
+        </>
       )}
 
       {seccao === "custos" && (
@@ -1157,6 +1233,7 @@ export default function IRView({ currentUser, empresasVisiveis }) {
             empresaId={empSel} nomeEmpresa={empresaAtiva?.nome}
             movimentos={dadosOrcado.movimentos} faturas={dadosOrcado.faturas}
             pagamentos={dadosOrcado.pagamentos} recorrentes={dadosOrcado.recorrentes}
+            vendas={dadosOrcado.vendas} recebiveis={dadosOrcado.recebiveis}
             orcamento={dadosOrcado.orcamento} podeEditar={podeMexerNoOrcado}
             onGravarOrcado={dadosOrcado.upsertOrcamento}
             loading={dadosOrcado.loading} hoje={dadosOrcado.hoje} />

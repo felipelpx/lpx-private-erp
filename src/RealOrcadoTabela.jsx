@@ -130,7 +130,8 @@ function Orcado({ valor, onGravar, podeEditar, rubrica, quemPode }) {
 // ─── A tabela ────────────────────────────────────────────────────────────────
 export default function RealOrcadoTabela({
   empresaId, nomeEmpresa, movimentos = [], faturas = [], pagamentos = [],
-  recorrentes = [], orcamento = [], podeEditar = false, onGravarOrcado,
+  recorrentes = [], vendas = [], recebiveis = [],
+  orcamento = [], podeEditar = false, onGravarOrcado,
   loading = false, hoje,
 }) {
   const [soComDados, setSoComDados] = useState(true);
@@ -143,8 +144,10 @@ export default function RealOrcadoTabela({
   const quemPode = DONOS_DO_ORCAMENTO.join(" ou ");
 
   const r = useMemo(() => calcularRealOrcado({
-    empresaId, movimentos, faturas, pagamentos, recorrentes, orcamento, hoje,
-  }), [empresaId, movimentos, faturas, pagamentos, recorrentes, orcamento, hoje]);
+    empresaId, nomeEmpresa, movimentos, faturas, pagamentos, recorrentes,
+    vendas, recebiveis, orcamento, hoje,
+  }), [empresaId, nomeEmpresa, movimentos, faturas, pagamentos, recorrentes,
+       vendas, recebiveis, orcamento, hoje]);
 
   const gravar = (rubrica) => async (valor) => {
     const res = await onGravarOrcado?.({
@@ -215,6 +218,7 @@ export default function RealOrcadoTabela({
                 l.detalhe.faturasPorPagar ? `faturas por pagar ${fmtEUR0(Math.abs(l.detalhe.faturasPorPagar))}` : null,
                 l.detalhe.previsoes ? `previsões do fluxo ${fmtEUR0(Math.abs(l.detalhe.previsoes))}` : null,
                 l.detalhe.recorrentes ? `recorrentes ${fmtEUR0(Math.abs(l.detalhe.recorrentes))} (${l.detalhe.nRecorrentes}×)` : null,
+                l.detalhe.porReceber ? `por receber ${fmtEUR0(Math.abs(l.detalhe.porReceber))} (${l.detalhe.nPorReceber}×)` : null,
               ].filter(Boolean).join(" · ")}>
             {Math.abs(l.forecast) > 0.005 ? fmtEUR0(l.forecastAbs) : "—"}
           </td>
@@ -345,9 +349,10 @@ export default function RealOrcadoTabela({
         As rubricas são as do plano de contas desta empresa — as mesmas do extrato e dos
         gráficos —, da operação: começa nas vendas, que é onde acaba o bloco de capital e
         financiamento que abre o plano. O <strong>Orçado</strong> é estático. O{" "}
-        <strong>Forecast</strong> soma ao realizado as faturas por pagar, as previsões do
-        Fluxo Futuro (onde entra o plano de obra) e as despesas recorrentes, por isso muda
-        sozinho sempre que uma delas muda.
+        <strong>Forecast</strong> soma ao realizado tudo o que já está comprometido: as
+        vendas por receber, as faturas por pagar, as previsões do Fluxo Futuro (onde entra
+        o plano de obra) e as despesas recorrentes. Por isso muda sozinho sempre que uma
+        delas muda.
       </div>
     </div>
   );

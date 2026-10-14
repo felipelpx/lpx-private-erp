@@ -216,8 +216,8 @@ export function agruparPorRubrica(movimentos, { empresaId, agrupar = false } = {
 //
 // O bruto não se perde: vai na dica de cada barra, para quem quiser abrir.
 //
-// Primeiro as que somam, depois as que subtraem, cada bloco pela ordem do
-// plano — a cascata sobe e depois desce, como se lê.
+// Primeiro as que somam, depois as que subtraem, e dentro de cada bloco da
+// maior para a menor — a cascata sobe em degrau e depois desce.
 export function passosDaCascata(agregado) {
   const passos = agregado.linhas
     .filter(l => Math.abs(l.liquido) > 0.005)
@@ -229,7 +229,11 @@ export function passosDaCascata(agregado) {
       bruto: (Math.abs(l.entrada) > 0.005 && Math.abs(l.saida) > 0.005)
         ? { entrada: l.entrada, saida: l.saida } : null,
     }));
-  return [...passos.filter(p => p.valor > 0), ...passos.filter(p => p.valor < 0)];
+  // Dentro de cada bloco, da maior para a menor: numa cascata lê-se o que
+  // pesa primeiro, e as barras ficam em degrau em vez de serra.
+  const porGrandeza = (a, b) => Math.abs(b.valor) - Math.abs(a.valor);
+  return [...passos.filter(p => p.valor > 0).sort(porGrandeza),
+          ...passos.filter(p => p.valor < 0).sort(porGrandeza)];
 }
 
 export default { rubricasDa, rubricaDe, agruparPorRubrica, passosDaCascata };

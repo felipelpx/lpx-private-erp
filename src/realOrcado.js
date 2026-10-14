@@ -50,13 +50,18 @@ export const id_orcamento = (empresaId, rubrica) =>
  * @param faturas      Contas a Pagar
  * @param pagamentos   pagamentos_extras (previsões do Fluxo Futuro)
  * @param recorrentes  despesas_recorrentes
+ * @param vendas       vendas registadas (o que falta receber de cada fração)
+ * @param recebiveis   Contas a Receber ainda por entrar
+ * @param nomeEmpresa  o nome do projeto, que é a chave das vendas
  * @param orcamento    linhas da tabela `orcamento` (o estático)
  * @param hoje         data de referência, injetável para os testes
  * @param horizonte    até quando contar as recorrentes (ISO). Por omissão,
  *                     três anos — o mesmo horizonte do Fluxo Futuro.
  */
 export function calcularRealOrcado({
-  empresaId, movimentos = [], faturas = [], pagamentos = [], recorrentes = [],
+  empresaId, nomeEmpresa = "",
+  movimentos = [], faturas = [], pagamentos = [], recorrentes = [],
+  vendas = [], recebiveis = [],
   orcamento = [], hoje = new Date().toISOString().slice(0, 10), horizonte = null,
 } = {}) {
   const ate = horizonte || `${Number(String(hoje).slice(0, 4)) + 3}${String(hoje).slice(4, 10)}`;
@@ -68,8 +73,8 @@ export function calcularRealOrcado({
   const balde = (r) => {
     if (!baldes.has(r)) baldes.set(r, {
       rubrica: r, orcado: 0, real: 0,
-      faturasPorPagar: 0, previsoes: 0, recorrentes: 0,
-      nMovimentos: 0, nFaturas: 0, nPrevisoes: 0, nRecorrentes: 0,
+      faturasPorPagar: 0, previsoes: 0, recorrentes: 0, porReceber: 0,
+      nMovimentos: 0, nFaturas: 0, nPrevisoes: 0, nRecorrentes: 0, nPorReceber: 0,
       noPlano: rubricaNoPlano(empresaId, r),
     });
     return baldes.get(r);
@@ -121,6 +126,48 @@ export function calcularRealOrcado({
     b.nPrevisoes++;
   });
 
+  // ── Comprometido: as vendas por receber ──────────────────────────────────
+  // Esta é a entrada que faltava. O "Real" das vendas só conta o que já
+  // entrou na conta; mas um CPCV assinado com escritura marcada é dinheiro
+  // contratado, e é assim que ele aparece nos fluxos operacionais. Sem isto,
+  // o forecast das vendas ficava igual ao realizado e o projeto parecia
+  // vender menos de metade do orçado até ao dia da escritura.
+  //
+  // Duas origens, sem se pisarem: as VENDAS (por projeto, o que falta receber
+  // de cada fração) e os RECEBÍVEIS (faturas emitidas e entradas previstas no
+  // Contas a Receber).
+  const rubricaVendas = rubricasDa(empresaId).find(c => chaveRubrica(c) === "vendas") || "Vendas";
+  const rubricaComissao = rubricasDa(empresaId).find(c => chaveRubrica(c) === "comissao") || null;
+
+  (vendas || []).forEach(v => {
+    if (!nomeEmpresa || v?.projeto !== nomeEmpresa) return;
+    const falta = num(v?.falta_receber);
+    if (falta > 0.005) {
+      const b = balde(rubricaVendas);
+      b.porReceber += falta;
+      b.nPorReceber++;
+    }
+    // A comissão do mediador ainda por pagar é um compromisso como outro.
+    if (rubricaComissao) {
+      const com = num(v?.comissao_pendente_sinal) + num(v?.comissao_pendente_escritura);
+      if (com > 0.005) {
+        const b = balde(rubricaComissao);
+        b.porReceber -= com;
+        b.nPorReceber++;
+      }
+    }
+  });
+
+  (recebiveis || []).forEach(rc => {
+    if (rc?.empresa !== empresaId) return;
+    if (/^(recebido|cancelado|anulada)$/i.test(String(rc?.status || "").trim())) return;
+    const valor = Math.abs(num(rc?.valor));
+    if (!(valor > 0.005)) return;
+    const b = balde(rubricaVendas);
+    b.porReceber += valor;
+    b.nPorReceber++;
+  });
+
   // ── Comprometido: despesas recorrentes ───────────────────────────────────
   // Só o que falta acontecer: o que já passou está no extrato ou nas faturas.
   (recorrentes || []).forEach(reg => {
@@ -139,7 +186,7 @@ export function calcularRealOrcado({
   // ── Fechar as contas de cada rubrica ─────────────────────────────────────
   const linhas = [...baldes.values()].map(b => {
     const real = arred2(b.real);
-    const comprometido = arred2(b.faturasPorPagar + b.previsoes + b.recorrentes);
+    const comprometido = arred2(b.faturasPorPagar + b.previsoes + b.recorrentes + b.porReceber);
     const forecast = arred2(real + comprometido);
 
     // Em que lado da tabela esta rubrica vive. Decide o forecast; sem
@@ -167,8 +214,10 @@ export function calcularRealOrcado({
         faturasPorPagar: arred2(b.faturasPorPagar),
         previsoes: arred2(b.previsoes),
         recorrentes: arred2(b.recorrentes),
+        porReceber: arred2(b.porReceber),
         nMovimentos: b.nMovimentos, nFaturas: b.nFaturas,
         nPrevisoes: b.nPrevisoes, nRecorrentes: b.nRecorrentes,
+        nPorReceber: b.nPorReceber,
       },
       // Uma rubrica sem orçado e sem nada que se lhe diga não vale uma linha.
       vazia: orcado <= 0.005 && Math.abs(real) <= 0.005 && Math.abs(comprometido) <= 0.005,

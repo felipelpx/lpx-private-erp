@@ -28,7 +28,8 @@ export const temObra = (empresaId) => EMPRESAS_COM_OBRA.includes(empresaId);
 // Os seis tipos de linha que o motor gera. A marca `plano_tipo` fica gravada
 // em cada previsão: é por ela que um recálculo sabe o que é dele e o que é do
 // utilizador.
-export const TIPOS = ["obra", "funding", "fiscalizacao", "cso", "juros", "comissao", "iva_obra", "funding_iva"];
+export const TIPOS = ["obra", "funding", "fiscalizacao", "cso", "juros", "comissao",
+                      "iva_obra", "funding_iva", "fecho", "venda", "amortizacao"];
 
 export const ROTULO_TIPO = {
   obra:         "Obra",
@@ -39,6 +40,9 @@ export const ROTULO_TIPO = {
   comissao:     "Comissão de avaliação",
   iva_obra:     "IVA da obra",
   funding_iva:  "Funding banco (IVA)",
+  fecho:        "Despesas de fecho de obra",
+  venda:        "Vendas na escritura",
+  amortizacao:  "Amortização da dívida",
 };
 
 // Onde cada linha cai no plano de contas. Os projetos da LPX e os da HDG têm
@@ -52,6 +56,9 @@ const CATEGORIAS_LPX = {
   comissao:     { categoria: "Encargos financeiros" },
   iva_obra:     { categoria: "IVA construção" },
   funding_iva:  { categoria: "Funding" },
+  fecho:        { categoria: "Obra" },          // cada despesa pode trazer a sua
+  venda:        { categoria: "Vendas" },
+  amortizacao:  { categoria: "Amortização" },
 };
 
 const CATEGORIAS_HDG = {
@@ -63,6 +70,9 @@ const CATEGORIAS_HDG = {
   comissao:     { categoria: "Financiamento",    subcategoria: "Outflow - Taxas e comissões" },
   iva_obra:     { categoria: "Impostos e taxas", subcategoria: "IVA" },
   funding_iva:  { categoria: "Financiamento",    subcategoria: "Inflow - Obra" },
+  fecho:        { categoria: "Obras",            subcategoria: "Buffer/Outros" },
+  venda:        { categoria: "Vendas",           subcategoria: "Vendas" },
+  amortizacao:  { categoria: "Financiamento",    subcategoria: "Outlow - Repagamento" },
 };
 
 export const classificacaoDe = (tipo, grupo) =>
@@ -287,6 +297,14 @@ export const PLANO_VAZIO = {
   fiscalizacao_mensal: 0, cso_mensal: 0, taxa_iva_servicos: 23, comissao_avaliacao: 0,
   euribor: 0, spread: 0, funding_pct: 0, divida_inicial: 0,
   recuperar_iva: true,
+  // ── A escritura ──────────────────────────────────────────────────────────
+  // O projeto não acaba quando a obra acaba: vende-se, paga-se o banco e
+  // fecham-se contas. A escritura é o mês em que isso acontece, e o
+  // utilizador diz quantos meses depois do fim da obra ela cai.
+  meses_ate_escritura: 0,
+  valor_venda: 0,
+  amortizar_divida: true,
+  despesas_fecho: [],        // [{ descricao, valor, categoria }]
 };
 
 /**
@@ -401,6 +419,7 @@ export function planearObra(plano, { gastoObra = 0, hoje = hojeISO(), grupo = "L
   const taxaAnual  = num(p.euribor) + num(p.spread);
   const financiaIva = p.recuperar_iva !== false;
   let divida       = arred2(num(p.divida_inicial));
+  let mesFimDaObra = "";
 
   // O calendário do IVA tem de estar pronto ANTES de andar pelos meses: um
   // pagamento de IVA que caia num mês de obra conta no saldo desse mês, e
@@ -477,8 +496,11 @@ export function planearObra(plano, { gastoObra = 0, hoje = hojeISO(), grupo = "L
     }
     divida = dividaFim;
 
-    if (ultimo) avisos.push(`A obra termina em ${rotuloMes(mes)}: é até aí que ` +
-      `se pagam fiscalização, CSO e juros.`);
+    // A mensagem certa depende de haver ou não escritura marcada para depois:
+    // a fiscalização e o CSO param com a obra, mas os juros correm enquanto a
+    // dívida existir. Dizer "até aqui" quando não é verdade seria pior do que
+    // não dizer nada.
+    if (ultimo) mesFimDaObra = mes;
   });
 
   // 6. O IVA da obra: autoliquidado, entregue no dia 25 da data-limite do
@@ -507,13 +529,120 @@ export function planearObra(plano, { gastoObra = 0, hoje = hojeISO(), grupo = "L
     }
   });
 
-  if (pagamentosIva.some(e => mesDe(e.data) > ultimoMesObra))
-    avisos.push("Há IVA a pagar depois do fim da obra. Aparece no fluxo, mas " +
-                "os juros só são calculados até ao último mês de obra.");
+  if (mesFimDaObra) {
+    const jurosMaisLonge = Math.max(0, Math.round(num(p.meses_ate_escritura))) > 0;
+    avisos.push(`A obra termina em ${rotuloMes(mesFimDaObra)}: é até aí que se pagam ` +
+      (jurosMaisLonge
+        ? `fiscalização e CSO. Os juros continuam até à escritura, porque a dívida continua lá.`
+        : `fiscalização, CSO e juros.`));
+  }
+
+  // ── 7. Da obra à escritura ───────────────────────────────────────────────
+  // A obra acaba, mas o projeto não: há despesas de fecho, a venda e o
+  // pagamento ao banco. A escritura cai `meses_ate_escritura` meses depois do
+  // último mês de obra — zero quer dizer no próprio mês em que a obra acaba.
+  const mesesAteEscritura = Math.max(0, Math.round(num(p.meses_ate_escritura)));
+  const despesasFecho = (Array.isArray(p.despesas_fecho) ? p.despesas_fecho : [])
+    .filter(d => Math.abs(num(d?.valor)) > 0.005);
+
+  // A escritura só existe quando o utilizador a definiu: pôs um prazo, um
+  // valor de venda ou despesas de fecho. Sem isso o plano fica exatamente
+  // como estava — um plano antigo não pode começar a amortizar a dívida toda
+  // sozinho só porque o motor aprendeu a fazê-lo.
+  const temEscritura = mesesAteEscritura > 0 ||
+                       Math.abs(num(p.valor_venda)) > 0.005 ||
+                       despesasFecho.length > 0;
+  const mesEscritura = (temEscritura && ultimoMesObra)
+    ? somarMeses(ultimoMesObra, mesesAteEscritura) : "";
+
+  // Enquanto não se vende, a dívida continua a vencer juros. Até aqui o motor
+  // parava no fim da obra e o custo desses meses desaparecia; agora cobra-se
+  // até à escritura, que é quando o banco é pago. A fiscalização e o CSO NÃO
+  // continuam: a obra acabou.
+  if (mesEscritura && mesesAteEscritura > 0 && taxaAnual > 0) {
+    // O IVA que ainda cai nestes meses também engrossa a dívida, no mês certo.
+    const ivaPorMes = new Map();
+    pagamentosIva.forEach(e => {
+      const m = mesDe(e.data);
+      if (m > ultimoMesObra && m <= mesEscritura && e.funding > 0)
+        ivaPorMes.set(m, arred2((ivaPorMes.get(m) || 0) + e.funding));
+    });
+    // A dívida já leva o funding de IVA pós-obra somado no passo anterior:
+    // tira-se aqui para o voltar a somar mês a mês, na data certa.
+    let saldo = arred2(divida - [...ivaPorMes.values()].reduce((a, b) => a + b, 0));
+    mesesEntre(somarMeses(ultimoMesObra, 1), `${mesEscritura}-28`).forEach(mes => {
+      const fim = arred2(saldo + (ivaPorMes.get(mes) || 0));
+      const medio = arred2((saldo + fim) / 2);
+      if (medio > 0) {
+        linhas.push(linha("juros", mes, arred2(medio * taxaAnual / 100 / 12), grupo, {
+          descricao: "Juros do financiamento",
+          obs: `Entre o fim da obra e a escritura · saldo médio ${medio} €`,
+          dia: "fim",
+        }));
+      }
+      saldo = fim;
+    });
+    divida = saldo;
+  }
+
+  // As despesas de fecho: licença de utilização, certificações, o que for.
+  // Cada uma pode ir para a sua rubrica — é assim que caem no sítio certo do
+  // Real × Orçado em vez de ficarem todas num balde.
+  if (mesEscritura) {
+    despesasFecho.forEach((d, i) => {
+      const valor = Math.abs(num(d?.valor));
+      const classe = String(d?.categoria || "").trim()
+        ? { categoria: d.categoria, ...(d.subcategoria ? { subcategoria: d.subcategoria } : {}) }
+        : null;
+      linhas.push({
+        ...linha("fecho", mesEscritura, valor, grupo, {
+          descricao: String(d?.descricao || "").trim() || `Despesa de fecho ${i + 1}`,
+          obs: "Fecho de obra, no mês da escritura",
+          dia: "fim",
+        }),
+        ...(classe || {}),
+      });
+    });
+
+    // A venda entra, e o banco é pago com ela.
+    const venda = Math.abs(num(p.valor_venda));
+    if (venda > 0.005) {
+      linhas.push({
+        ...linha("venda", mesEscritura, venda, grupo, {
+          descricao: "Venda — escritura",
+          obs: mesesAteEscritura > 0
+            ? `${mesesAteEscritura} ${mesesAteEscritura === 1 ? "mês" : "meses"} após o fim da obra`
+            : "No mês em que a obra acaba",
+          dia: "fim",
+        }),
+        tipo: "entrada",
+      });
+    }
+
+    if (p.amortizar_divida !== false && divida > 0.005) {
+      linhas.push(linha("amortizacao", mesEscritura, arred2(divida), grupo, {
+        descricao: "Amortização da dívida ao banco",
+        obs: "Toda a dívida em aberto, liquidada na escritura",
+        dia: "fim",
+      }));
+      if (venda > 0.005 && venda < divida)
+        avisos.push(`A venda (${arred2(venda)} €) não chega para pagar a dívida ` +
+                    `(${arred2(divida)} €) — faltam ${arred2(divida - venda)} €.`);
+      divida = 0;
+    }
+  }
+
+  if (pagamentosIva.some(e => mesDe(e.data) > (mesEscritura || ultimoMesObra)))
+    avisos.push(mesEscritura
+      ? "Há IVA a pagar depois da escritura. Aparece no fluxo, mas a essa " +
+        "altura já não há dívida a vencer juros."
+      : "Há IVA a pagar depois do fim da obra. Aparece no fluxo, mas os juros " +
+        "só são calculados até ao último mês de obra.");
 
   linhas.sort((a, b) => a.data.localeCompare(b.data) || TIPOS.indexOf(a.plano_tipo) - TIPOS.indexOf(b.plano_tipo));
   return { linhas, avisos, resumo: resumir(linhas, { budget, budgetBruto, ivaDoBudget, gasto, gastoBase, gastoIva,
-                    porGastar, porGastarBruto, ivaPorGastar, meses, dividaFinal: divida }) };
+                    porGastar, porGastarBruto, ivaPorGastar, meses, dividaFinal: divida,
+                    mesEscritura, mesesAteEscritura }) };
 }
 
 function linha(tipo, mes, valor, grupo, extra = {}) {
@@ -540,7 +669,8 @@ export function rotuloMes(mes) {
 function resumir(linhas, { budget, budgetBruto = 0, ivaDoBudget = 0,
                            gasto, gastoBase = 0, gastoIva = 0,
                            porGastar, porGastarBruto = 0, ivaPorGastar = 0,
-                           meses, dividaFinal = 0 }) {
+                           meses, dividaFinal = 0, mesEscritura = null,
+                           mesesAteEscritura = 0 }) {
   const soma = (t) => arred2(linhas.filter(l => l.plano_tipo === t)
     .reduce((s, l) => s + (l.tipo === "entrada" ? -l.valor : l.valor), 0));
   const totais = Object.fromEntries(TIPOS.map(t => [t, soma(t)]));
@@ -557,6 +687,7 @@ function resumir(linhas, { budget, budgetBruto = 0, ivaDoBudget = 0,
     totais,
     custoTotal,
     dividaFinal: arred2(dividaFinal),
+    mesEscritura: mesEscritura || null, mesesAteEscritura,
     nLinhas: linhas.length,
   };
 }

@@ -5,7 +5,9 @@ import {
   compararPrazos, categoriasDoMotor, classificacaoDe, temObra, rotuloMes,
   obraRealizada, fundingLibertado, PLANO_VAZIO, TIPOS, ROTULO_TIPO,
 } from "./obra.js";
-import { useMovimentosPeriodo } from "./hooks.js";
+import { useMovimentosPeriodo, useFracoes } from "./hooks.js";
+import { categoriasDa } from "./categoriasEmpresa.js";
+import { CATEGORIAS } from "./categorias.js";
 import { hojeISO, arred2 } from "./iva.js";
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -69,6 +71,12 @@ function Numero({ rotulo, valor, onMudar, sufixo = "€", dica, sugestao, onSuge
 const nomeDoTipo = (t) => ROTULO_TIPO[t] || t;
 const num = (v) => { const n = Number(v); return Number.isFinite(n) ? n : 0; };
 
+const campoFecho = {
+  width: "100%", boxSizing: "border-box", background: "#fff",
+  border: "1px solid #E7DED2", borderRadius: 6, padding: "6px 8px",
+  fontSize: 11.5, outline: "none", color: "#23292D",
+};
+
 // ─── O ecrã ──────────────────────────────────────────────────────────────────
 export default function ModalPlanoObra({
   empresa, grupo = "LPX", nomeEmpresa, plano: planoGravado,
@@ -90,6 +98,7 @@ export default function ModalPlanoObra({
   // O extrato do projeto: é dele que sai o que já foi pago e o funding que o
   // banco já libertou. Sem ele, continua tudo a funcionar pelas faturas.
   const { movimentos, loading: movLoading } = useMovimentosPeriodo(contaIds);
+  const { fracoes } = useFracoes();
 
   const realizado = useMemo(
     () => obraRealizada(movimentos, faturas, {
@@ -105,6 +114,26 @@ export default function ModalPlanoObra({
   // O que consome o budget é o que já foi INCORRIDO, pago ou não: uma fatura
   // por pagar já está no fluxo, prevê-la outra vez contaria duas vezes.
   const gasto = realizado.jaIncorrido;
+
+  // ── As despesas de fecho ─────────────────────────────────────────────────
+  // Uma lista pequena e editável, cada linha com a sua rubrica — é assim que
+  // a comissão de venda cai em "Comissão" e a licença em "Legais", em vez de
+  // ficarem todas num balde chamado "Obra".
+  const planoDeContas = useMemo(
+    () => categoriasDa(empresa) || CATEGORIAS, [empresa]);
+  const fechos = Array.isArray(f.despesas_fecho) ? f.despesas_fecho : [];
+  const totalFecho = fechos.reduce((s, d) => s + Math.abs(num(d?.valor)), 0);
+  const porFecho = (lista) => setF(x => ({ ...x, despesas_fecho: lista }));
+  const mudaFecho = (i, campo, valor) =>
+    porFecho(fechos.map((d, k) => (k === i ? { ...d, [campo]: valor } : d)));
+  const juntarFecho = () => porFecho([...fechos, { descricao: "", valor: "", categoria: "" }]);
+  const apagarFecho = (i) => porFecho(fechos.filter((_, k) => k !== i));
+
+  // O VGV do espelho de vendas serve de sugestão para o valor da escritura:
+  // é o número que já está no sistema, não vale a pena reescrevê-lo.
+  const vgvDoProjeto = useMemo(() => (fracoes || [])
+    .filter(x => x.projeto === nomeEmpresa)
+    .reduce((s, x) => s + (Number(x.preco_tabela) || 0), 0), [fracoes, nomeEmpresa]);
 
   const sugFisc = useMemo(
     () => sugerirAvenca(faturas, { empresa, categorias: [catFisc] }), [faturas, empresa, catFisc]);
@@ -333,6 +362,74 @@ export default function ModalPlanoObra({
               )}
               <div style={{ fontSize: 11, color: "#7E8388", fontFamily: "var(--fonte-numero)" }}>
                 Taxa all-in: {arred2((Number(f.euribor) || 0) + (Number(f.spread) || 0))}% ao ano
+              </div>
+            </Caixa>
+
+            {/* ── A escritura ───────────────────────────────────────────── */}
+            <Caixa titulo="Escritura"
+                   nota="O projeto não acaba quando a obra acaba: vende-se, paga-se o banco e fecham-se contas. Tudo isto cai no mês da escritura.">
+              <Numero rotulo="Escritura — meses após o fim da obra" sufixo="meses"
+                valor={f.meses_ate_escritura} onMudar={muda("meses_ate_escritura")}
+                dica="Zero quer dizer no próprio mês em que a obra acaba." />
+              {resumo.mesEscritura && (
+                <div style={{ fontSize: 11, color: COR.banco, fontFamily: "var(--fonte-numero)",
+                              marginTop: -4 }}>
+                  Cai em {rotuloMes(resumo.mesEscritura)}
+                </div>
+              )}
+              <Numero rotulo="Vendas na escritura" valor={f.valor_venda}
+                onMudar={muda("valor_venda")}
+                dica="O que entra na escritura. Entra no fluxo como receita no mês acima."
+                sugestao={vgvDoProjeto > 0
+                  ? { valor: vgvDoProjeto, rotulo: "VGV do espelho de vendas" } : null}
+                onSugestao={muda("valor_venda")} />
+              <label style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer", fontSize: 12 }}>
+                <input type="checkbox" checked={f.amortizar_divida !== false}
+                  onChange={e => muda("amortizar_divida")(e.target.checked)}
+                  style={{ width: 15, height: 15, accentColor: COR.tinta }} />
+                Pagar toda a dívida ao banco na escritura
+              </label>
+              <div style={{ fontSize: 10.5, color: "#9DA2A6", lineHeight: 1.5 }}>
+                Enquanto não se vende, a dívida continua a vencer juros — a fiscalização
+                e o CSO param com a obra, os juros não.
+              </div>
+
+              {/* As despesas de fecho, cada uma na sua rubrica */}
+              <div style={{ borderTop: "1px solid #E7DED2", paddingTop: 10, marginTop: 2 }}>
+                <Rotulo dica="Licença de utilização, certificações, comissão de venda, o que for. Cada uma vai para a sua rubrica, para cair no sítio certo do Real × Orçado.">
+                  Despesas de fecho de obra
+                </Rotulo>
+                {(f.despesas_fecho || []).map((d, i) => (
+                  <div key={i} style={{ display: "grid", gridTemplateColumns: "1fr 92px 24px",
+                                        gap: 6, marginBottom: 6, alignItems: "center" }}>
+                    <input value={d.descricao || ""} placeholder="Licença de utilização"
+                      onChange={e => mudaFecho(i, "descricao", e.target.value)}
+                      style={{ ...campoFecho }} />
+                    <input value={d.valor ?? ""} placeholder="0" type="number" step="0.01"
+                      onChange={e => mudaFecho(i, "valor", e.target.value)}
+                      style={{ ...campoFecho, textAlign: "right" }} />
+                    <button onClick={() => apagarFecho(i)} title="Apagar esta despesa"
+                      style={{ background: "none", border: "none", color: "#B2B6B9",
+                               cursor: "pointer", fontSize: 15, padding: 0 }}>×</button>
+                    <select value={d.categoria || ""} onChange={e => mudaFecho(i, "categoria", e.target.value)}
+                      style={{ ...campoFecho, gridColumn: "1 / -1" }}>
+                      <option value="">Rubrica — usar a da obra</option>
+                      {planoDeContas.map(c => <option key={c} value={c}>{c}</option>)}
+                    </select>
+                  </div>
+                ))}
+                <button onClick={juntarFecho}
+                  style={{ background: "transparent", border: "1px dashed #D8CCBB", borderRadius: 7,
+                           padding: "6px 12px", fontSize: 11.5, color: "#7E8388", cursor: "pointer",
+                           width: "100%" }}>
+                  + Juntar despesa de fecho
+                </button>
+                {totalFecho > 0 && (
+                  <div style={{ fontSize: 11, color: "#7E8388", marginTop: 6,
+                                fontFamily: "var(--fonte-numero)" }}>
+                    Total de fecho: {fmtEUR(totalFecho)}
+                  </div>
+                )}
               </div>
             </Caixa>
           </div>

@@ -15,7 +15,7 @@
 
 // Marca a versão publicada. Serve para confirmar, no próprio ecrã, se o
 // deploy chegou — aparece ao lado do nome do utilizador na barra de cima.
-export const VERSAO = "v68";
+export const VERSAO = "v69";
 
 // ─── Paleta ──────────────────────────────────────────────────────────────────
 export const COR = {
