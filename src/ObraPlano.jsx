@@ -5,7 +5,8 @@ import {
   compararPrazos, categoriasDoMotor, classificacaoDe, temObra, rotuloMes,
   obraRealizada, fundingLibertado, PLANO_VAZIO, TIPOS, ROTULO_TIPO,
 } from "./obra.js";
-import { useMovimentosPeriodo, useFracoes } from "./hooks.js";
+import { useMovimentosPeriodo, useFracoes, useVendas, useRecebiveis } from "./hooks.js";
+import { vgvPorReceber } from "./vendas.js";
 import { categoriasDa } from "./categoriasEmpresa.js";
 import { CATEGORIAS } from "./categorias.js";
 import { hojeISO, arred2 } from "./iva.js";
@@ -99,6 +100,8 @@ export default function ModalPlanoObra({
   // banco já libertou. Sem ele, continua tudo a funcionar pelas faturas.
   const { movimentos, loading: movLoading } = useMovimentosPeriodo(contaIds);
   const { fracoes } = useFracoes();
+  const { vendas } = useVendas();
+  const { recebiveis } = useRecebiveis();
 
   const realizado = useMemo(
     () => obraRealizada(movimentos, faturas, {
@@ -129,11 +132,14 @@ export default function ModalPlanoObra({
   const juntarFecho = () => porFecho([...fechos, { descricao: "", valor: "", categoria: "" }]);
   const apagarFecho = (i) => porFecho(fechos.filter((_, k) => k !== i));
 
-  // O VGV do espelho de vendas serve de sugestão para o valor da escritura:
-  // é o número que já está no sistema, não vale a pena reescrevê-lo.
-  const vgvDoProjeto = useMemo(() => (fracoes || [])
-    .filter(x => x.projeto === nomeEmpresa)
-    .reduce((s, x) => s + (Number(x.preco_tabela) || 0), 0), [fracoes, nomeEmpresa]);
+  // O que falta receber na escritura, sugerido ao utilizador: o total da
+  // tabela de vendas, menos o que já foi recebido, menos o que já está
+  // lançado no Contas a Receber. Pôr aqui o VGV inteiro seria contar duas
+  // vezes os sinais que já entraram e os recebíveis que já estão no fluxo.
+  const vgv = useMemo(() => vgvPorReceber({
+    fracoes, vendas, recebiveis, projeto: nomeEmpresa, empresaId: empresa,
+  }), [fracoes, vendas, recebiveis, nomeEmpresa, empresa]);
+  const vgvDoProjeto = vgv.porReceber;
 
   const sugFisc = useMemo(
     () => sugerirAvenca(faturas, { empresa, categorias: [catFisc] }), [faturas, empresa, catFisc]);
@@ -381,8 +387,21 @@ export default function ModalPlanoObra({
                 onMudar={muda("valor_venda")}
                 dica="O que entra na escritura. Entra no fluxo como receita no mês acima."
                 sugestao={vgvDoProjeto > 0
-                  ? { valor: vgvDoProjeto, rotulo: "VGV do espelho de vendas" } : null}
+                  ? { valor: vgvDoProjeto, rotulo: "o que falta receber" } : null}
                 onSugestao={muda("valor_venda")} />
+              {vgv.total > 0 && (
+                <div style={{ background: "#FAF6F0", borderRadius: 9, padding: "9px 12px",
+                              fontSize: 11, marginTop: -2 }}>
+                  <Linha k="Tabela de vendas" v={fmtEUR(vgv.total)}
+                    dica={`${vgv.nFracoes} frações, ${vgv.nVendidas} vendidas. As vendidas pelo valor da venda, as outras pela venda estimada.`} />
+                  <Linha k="−  já recebido" v={`−${fmtEUR(vgv.recebido)}`}
+                    dica="Sinais e reforços já pagos, e o que estiver registado como recebido." />
+                  <Linha k="−  no Contas a Receber" v={`−${fmtEUR(vgv.naCarteira)}`}
+                    dica="Já está no fluxo por essa via — contá-lo aqui seria contá-lo duas vezes." />
+                  <div style={{ height: 1, background: "#D8CCBB", margin: "6px 0" }} />
+                  <Linha k="=  falta receber" v={fmtEUR(vgv.porReceber)} forte />
+                </div>
+              )}
               <label style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer", fontSize: 12 }}>
                 <input type="checkbox" checked={f.amortizar_divida !== false}
                   onChange={e => muda("amortizar_divida")(e.target.checked)}

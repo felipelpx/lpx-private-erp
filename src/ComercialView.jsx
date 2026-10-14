@@ -1,6 +1,7 @@
 import { useState, useMemo, useEffect } from "react";
 import { useFracoes, useVendas } from "./hooks.js";
 import { EMPRESAS, GRUPOS, GRUPOS_INFO } from "./empresas.js";
+import { precoDaFracao, contaDaVenda, comissaoDaVenda, parcelasDaVenda } from "./vendas.js";
 import { fmtEUR, fmtPct as fmtPctCfg, fmtNum, fmtArea, parseNumero } from "./formato.js";
 
 // Empresa a que são imputadas as faturas de comissão geradas a partir das vendas.
@@ -163,21 +164,39 @@ function ComissaoModal({ venda, fracao, onSave, onClose, onGerarFatura }) {
 
 // ─── EDIT VENDA MODAL ──────────────────────────────────────────────────────────
 function EditVendaModal({ venda, fracao, onSave, onClose }) {
-  const [f, setF] = useState({...venda});
-  const s = (k,v) => setF(prev=>({...prev,[k]:v}));
+  const [f, setF] = useState({ ...venda, parcelas: Array.isArray(venda?.parcelas) ? venda.parcelas : [] });
+  const s = (k, v) => setF(prev => ({ ...prev, [k]: v }));
+
+  // ── Sinal e reforços ─────────────────────────────────────────────────────
+  // O que o comprador paga antes da escritura. O resto do preço entra no mês
+  // da escritura — a conta está em src/vendas.js e mostra-se aqui em baixo,
+  // para se perceber o que vai parar ao fluxo antes de guardar.
+  const parcelas = f.parcelas || [];
+  const porParcela = (lista) => s("parcelas", lista);
+  const mudaParcela = (i, campo, valor) =>
+    porParcela(parcelas.map((p, k) => (k === i ? { ...p, [campo]: valor } : p)));
+  const juntarParcela = () => porParcela([...parcelas, {
+    desc: parcelas.length === 0 ? "Sinal" : `${parcelas.length}.º reforço`,
+    valor: "", data: "", pago: false }]);
+  const apagarParcela = (i) => porParcela(parcelas.filter((_, k) => k !== i));
+
+  const conta = contaDaVenda(f, fracao);
+  const com = comissaoDaVenda(f, fracao);
+
   return (
     <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.5)",zIndex:300,display:"flex",alignItems:"center",justifyContent:"center"}}
       onClick={e=>{if(e.target===e.currentTarget)onClose();}}>
-      <div style={{background:"#fff",borderRadius:16,padding:28,width:620,maxWidth:"95vw",maxHeight:"90vh",overflowY:"auto",boxShadow:"0 20px 60px rgba(0,0,0,0.25)"}}>
+      <div style={{background:"#fff",borderRadius:16,padding:28,width:720,maxWidth:"95vw",maxHeight:"92vh",overflowY:"auto",boxShadow:"0 20px 60px rgba(0,0,0,0.25)"}}>
         <div style={{display:"flex",justifyContent:"space-between",marginBottom:20}}>
-          <div style={{fontSize:16,fontWeight:700,color:"#091C2A",fontFamily: "var(--fonte-titulo)"}}>✎ Editar — {fracao?.fracao}</div>
+          <div style={{fontSize:16,fontWeight:700,color:"#091C2A",fontFamily:"var(--fonte-titulo)"}}>✎ Editar — {fracao?.fracao}</div>
           <button onClick={onClose} style={{background:"none",border:"none",fontSize:20,cursor:"pointer",color:"#9DA2A6"}}>✕</button>
         </div>
+
         <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:14}}>
           {[["Cliente","cliente","text"],["NIF","nif","text"],["Email","email","email"],["Telefone","telefone","text"],
             ["Valor de Venda (€)","valor_venda","number"],["Preço Tabela (€)","preco_tabela","number"],
-            ["Recebido (€)","recebemos","number"],["Prev. Escritura","previsao_escritura","date"],
-            ["Mediador","mediador","text"],["Data Venda","data","date"],
+            ["Prev. Escritura","previsao_escritura","date"],["Data Venda","data","date"],
+            ["Mediador","mediador","text"],
           ].map(([label,name,type])=>(
             <div key={name} style={{display:"flex",flexDirection:"column",gap:3}}>
               <label style={lbl}>{label}</label>
@@ -185,7 +204,96 @@ function EditVendaModal({ venda, fracao, onSave, onClose }) {
             </div>
           ))}
         </div>
-        <div style={{display:"flex",justifyContent:"flex-end",gap:10,marginTop:20}}>
+
+        {/* ── Como é que o dinheiro entra ─────────────────────────────────── */}
+        <div style={{marginTop:22,borderTop:"1px solid #E7DED2",paddingTop:16}}>
+          <div style={{fontSize:13,fontWeight:700,color:"#091C2A",marginBottom:4}}>Como o dinheiro entra</div>
+          <label style={{display:"flex",alignItems:"center",gap:8,fontSize:12.5,color:"#23292D",cursor:"pointer",marginBottom:12}}>
+            <input type="checkbox" checked={!!f.so_na_entrega}
+              onChange={e=>{ s("so_na_entrega", e.target.checked); if (e.target.checked) s("parcelas", []); }}
+              style={{width:15,height:15,accentColor:"#091C2A"}}/>
+            Só na entrega — o projeto recebe tudo no mês da escritura
+          </label>
+
+          {!f.so_na_entrega && (
+            <>
+              {parcelas.length === 0 && (
+                <div style={{fontSize:11.5,color:"#9DA2A6",marginBottom:8}}>
+                  Sem sinal nem reforços: tudo entra na escritura.
+                </div>
+              )}
+              {parcelas.map((p,i)=>(
+                <div key={i} style={{display:"grid",gridTemplateColumns:"1fr 110px 130px 70px 26px",gap:7,marginBottom:7,alignItems:"center"}}>
+                  <input value={p.desc||""} placeholder={i===0?"Sinal":`${i}.º reforço`}
+                    onChange={e=>mudaParcela(i,"desc",e.target.value)} style={{...inp,padding:"7px 9px",fontSize:12}}/>
+                  <input type="number" step="0.01" value={p.valor??""} placeholder="0"
+                    onChange={e=>mudaParcela(i,"valor",parseFloat(e.target.value)||0)}
+                    style={{...inp,padding:"7px 9px",fontSize:12,textAlign:"right"}}/>
+                  <input type="date" value={p.data||""}
+                    onChange={e=>mudaParcela(i,"data",e.target.value)} style={{...inp,padding:"7px 9px",fontSize:12}}/>
+                  <label style={{display:"flex",alignItems:"center",gap:4,fontSize:11,color:p.pago?"#1F7A54":"#9DA2A6",cursor:"pointer"}}>
+                    <input type="checkbox" checked={!!p.pago} onChange={e=>mudaParcela(i,"pago",e.target.checked)}
+                      style={{width:13,height:13,accentColor:"#1F7A54"}}/>
+                    pago
+                  </label>
+                  <button onClick={()=>apagarParcela(i)} title="Apagar"
+                    style={{background:"none",border:"none",color:"#B2B6B9",cursor:"pointer",fontSize:15,padding:0}}>×</button>
+                </div>
+              ))}
+              <button onClick={juntarParcela}
+                style={{background:"transparent",border:"1px dashed #D8CCBB",borderRadius:7,padding:"7px 13px",
+                        fontSize:11.5,color:"#7E8388",cursor:"pointer",width:"100%"}}>
+                + Juntar sinal ou reforço
+              </button>
+            </>
+          )}
+
+          <div style={{background:"#FAF6F0",borderRadius:9,padding:"10px 13px",fontSize:11.5,marginTop:12}}>
+            <LinhaConta k="Preço" v={fmtEUR(conta.preco)} />
+            <LinhaConta k="−  já recebido" v={`−${fmtEUR(conta.recebido)}`} />
+            {conta.porReceberEmParcelas > 0 &&
+              <LinhaConta k="−  reforços por receber" v={`−${fmtEUR(conta.porReceberEmParcelas)}`} />}
+            <div style={{height:1,background:"#D8CCBB",margin:"6px 0"}}/>
+            <LinhaConta k="=  entra na escritura" v={fmtEUR(conta.naEscritura)} forte />
+          </div>
+        </div>
+
+        {/* ── A comissão do mediador ──────────────────────────────────────── */}
+        <div style={{marginTop:20,borderTop:"1px solid #E7DED2",paddingTop:16}}>
+          <div style={{fontSize:13,fontWeight:700,color:"#091C2A",marginBottom:10}}>Comissão do mediador</div>
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:12}}>
+            <div style={{display:"flex",flexDirection:"column",gap:3}}>
+              <label style={lbl}>% sobre a venda</label>
+              <input type="number" step="0.01" value={f.comissao_pct??""}
+                onChange={e=>s("comissao_pct",parseFloat(e.target.value)||0)} style={inp}/>
+            </div>
+            <div style={{display:"flex",flexDirection:"column",gap:3}}>
+              <label style={lbl}>IVA da comissão (%)</label>
+              <input type="number" step="0.01" value={f.comissao_taxa_iva??23}
+                onChange={e=>s("comissao_taxa_iva",parseFloat(e.target.value)||0)} style={inp}/>
+            </div>
+            <div style={{display:"flex",flexDirection:"column",gap:3}}>
+              <label style={lbl}>Ou valor fixo (€)</label>
+              <input type="number" step="0.01" value={f.comissao_valor??""} placeholder="—"
+                onChange={e=>s("comissao_valor",parseFloat(e.target.value)||0)} style={inp}/>
+            </div>
+          </div>
+          <div style={{background:"#FAF6F0",borderRadius:9,padding:"10px 13px",fontSize:11.5,marginTop:12}}>
+            <LinhaConta k="Comissão" v={fmtEUR(com.base)} />
+            <LinhaConta k={`+  IVA a ${com.taxa}%`} v={fmtEUR(com.iva)} />
+            <div style={{height:1,background:"#D8CCBB",margin:"6px 0"}}/>
+            <LinhaConta k="=  a pagar ao mediador" v={fmtEUR(com.comIva)} forte />
+            {com.paga > 0.005 && <LinhaConta k="já pago" v={fmtEUR(com.pagaComIva)} />}
+            {com.porPagarComIva > 0.005 && (
+              <div style={{fontSize:10.5,color:"#96702A",marginTop:5,lineHeight:1.5}}>
+                {fmtEUR(com.porPagarComIva)} são pagos na escritura — é lá que se liquida
+                o que faltar ao mediador.
+              </div>
+            )}
+          </div>
+        </div>
+
+        <div style={{display:"flex",justifyContent:"flex-end",gap:10,marginTop:22}}>
           <button onClick={onClose} style={{background:"#E7DED2",color:"#5C6166",border:"none",padding:"10px 20px",borderRadius:8,fontSize:13,cursor:"pointer"}}>Cancelar</button>
           <button onClick={()=>onSave(f)} style={{background:"#091C2A",color:"#fff",border:"none",padding:"10px 24px",borderRadius:8,fontSize:13,cursor:"pointer",fontWeight:700}}>💾 Guardar</button>
         </div>
@@ -193,6 +301,19 @@ function EditVendaModal({ venda, fracao, onSave, onClose }) {
     </div>
   );
 }
+
+// As linhas da tabela levam campos só nossos (_frac, _semVenda) para o modal
+// saber de que fração se trata. Esses não existem na base de dados, por isso
+// caem aqui antes de gravar.
+const limparVenda = (v) => Object.fromEntries(
+  Object.entries(v || {}).filter(([k]) => !k.startsWith("_")));
+
+const LinhaConta = ({ k, v, forte }) => (
+  <div style={{display:"flex",justifyContent:"space-between",padding:"2px 0"}}>
+    <span style={{color:"#7E8388"}}>{k}</span>
+    <span style={{fontFamily:"var(--fonte-numero)",fontWeight:forte?700:400,color:"#23292D"}}>{v}</span>
+  </div>
+);
 
 // ─── TABELA DE VENDAS ──────────────────────────────────────────────────────────
 // ─── EXPORTAÇÃO PARA EXCEL ───────────────────────────────────────────────────
@@ -226,45 +347,55 @@ async function exportarComercialExcel({ linhas, vendaDe, projetoFiltro, statusFi
     ["Frações", linhas.length],
     ["Exportado em", new Date().toLocaleString("pt-PT")],
     [],
-    ["Projeto", "Fração", "Piso", "Tipologia", "Área (m²)", "Preço", "Preço/m²", "Status", "Cliente", "Valor venda", "Recebido", "Falta receber"],
+    ["Projeto", "Fração", "Piso", "Tipologia", "Área (m²)", "Preço", "Venda estimada",
+     "Preço/m²", "Status", "Cliente", "Valor venda", "Recebido", "Por receber",
+     "Na escritura", "Comissão c/ IVA"],
   ];
   const LINHA_CAB = cab.length;
+  const EUROS = [5, 6, 7, 10, 11, 12, 13, 14];
 
   const dados = linhas.map(f => {
     const v = vendaDe.get(f.id);
     const area = Number(f.area) || 0;
     const preco = Number(f.preco_tabela) || 0;
+    // As contas são as mesmas do ecrã e do fluxo — src/vendas.js.
+    const conta = v ? contaDaVenda(v, f) : null;
+    const com = v ? comissaoDaVenda(v, f) : null;
     return [
       f.projeto || "", f.fracao || "", f.piso || "", f.tipologia || "",
-      area, preco, area > 0 ? preco / area : null,
+      area, preco, precoDaFracao(f, v), area > 0 ? preco / area : null,
       f.status || "", v?.cliente || "",
       v ? Number(v.valor_venda) || 0 : null,
-      v ? Number(v.recebemos) || 0 : null,
-      v ? Number(v.falta_receber) || 0 : null,
+      conta ? conta.recebido : null,
+      conta ? conta.porReceber : null,
+      conta ? conta.naEscritura : null,
+      com ? com.comIva : null,
     ];
   });
 
-  const somaArea = dados.reduce((s, r) => s + (r[4] || 0), 0);
-  const somaPreco = dados.reduce((s, r) => s + (r[5] || 0), 0);
-  const totais = [[], ["TOTAIS", linhas.length, "", "", somaArea, somaPreco,
-                       somaArea > 0 ? somaPreco / somaArea : null]];
+  const soma = (c) => dados.reduce((s, r) => s + (Number(r[c]) || 0), 0);
+  const somaArea = soma(4), somaPreco = soma(5);
+  const totais = [[], ["TOTAIS", linhas.length, "", "", somaArea, somaPreco, soma(6),
+                       somaArea > 0 ? somaPreco / somaArea : null, "", "",
+                       soma(10), soma(11), soma(12), soma(13), soma(14)]];
 
   const ws = XLSX.utils.aoa_to_sheet([...cab, ...dados, ...totais]);
   dados.forEach((_, i) => {
-    [4, 5, 6, 9, 10, 11].forEach(c => {
+    [4, ...EUROS].forEach(c => {
       const cel = ws[XLSX.utils.encode_cell({ r: LINHA_CAB + i, c })];
       if (cel && cel.t === "n") cel.z = c === 4 ? "#,##0.00" : FMT_EUR_X;
     });
   });
-  [4, 5, 6].forEach(c => {
+  [4, ...EUROS].forEach(c => {
     const cel = ws[XLSX.utils.encode_cell({ r: LINHA_CAB + dados.length + 1, c })];
     if (cel && cel.t === "n") cel.z = c === 4 ? "#,##0.00" : FMT_EUR_X;
   });
   ws["!cols"] = [{ wch: 34 }, { wch: 9 }, { wch: 7 }, { wch: 12 }, { wch: 11 }, { wch: 15 },
-                 { wch: 13 }, { wch: 13 }, { wch: 26 }, { wch: 15 }, { wch: 14 }, { wch: 14 }];
+                 { wch: 15 }, { wch: 13 }, { wch: 13 }, { wch: 26 }, { wch: 15 },
+                 { wch: 14 }, { wch: 14 }, { wch: 14 }, { wch: 15 }];
   ws["!autofilter"] = { ref: XLSX.utils.encode_range(
     { r: LINHA_CAB - 1, c: 0 },
-    { r: LINHA_CAB + Math.max(dados.length - 1, 0), c: 11 }) };
+    { r: LINHA_CAB + Math.max(dados.length - 1, 0), c: 14 }) };
 
   // ─ Folha 2: Resumo por estado ─
   const porEstado = {};
@@ -379,8 +510,12 @@ function TabelaVendas({ fracoes, vendas, canEdit, onAddFatura, onUpdateFracao, o
   const totais = useMemo(() => {
     const area = rows.reduce((s, f) => s + (Number(f.area) || 0), 0);
     const preco = rows.reduce((s, f) => s + (Number(f.preco_tabela) || 0), 0);
-    return { area, preco, precoM2: area > 0 ? preco / area : 0 };
-  }, [rows]);
+    // O que se espera encaixar: cada fração pelo melhor número que há sobre
+    // ela — o valor da venda, a estimativa, ou o preço de tabela (src/vendas.js).
+    const vendaEstimada = rows.reduce(
+      (s, f) => s + precoDaFracao(f, vendaDe.get(f.id)), 0);
+    return { area, preco, vendaEstimada, precoM2: area > 0 ? preco / area : 0 };
+  }, [rows, vendaDe]);
 
   // Guarda uma célula na base de dados
   const guardar = async (frac, campo, valor) => {
@@ -513,21 +648,22 @@ function TabelaVendas({ fracoes, vendas, canEdit, onAddFatura, onUpdateFracao, o
         <div style={{ overflowX: "auto" }}>
           <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 11, tableLayout: "fixed" }}>
             <colgroup>
-              <col style={{ width: "17%" }} />{/* Projeto   */}
+              <col style={{ width: "15%" }} />{/* Projeto   */}
               <col style={{ width: "7%"  }} />{/* Fração    */}
               <col style={{ width: "6%"  }} />{/* Piso      */}
               <col style={{ width: "9%"  }} />{/* Tipologia */}
               <col style={{ width: "9%"  }} />{/* Área      */}
-              <col style={{ width: "12%" }} />{/* Preço     */}
-              <col style={{ width: "11%" }} />{/* Preço/m²  */}
-              <col style={{ width: "10%" }} />{/* Status    */}
-              <col style={{ width: "12%" }} />{/* Cliente   */}
+              <col style={{ width: "11%" }} />{/* Preço     */}
+              <col style={{ width: "11%" }} />{/* Venda est.*/}
+              <col style={{ width: "9%"  }} />{/* Preço/m²  */}
+              <col style={{ width: "9%"  }} />{/* Status    */}
+              <col style={{ width: "11%" }} />{/* Cliente   */}
               <col style={{ width: "7%"  }} />{/* Ações     */}
             </colgroup>
             <thead>
               <tr style={{ background: "#FAF6F0" }}>
                 {[["Projeto","left"],["Fração","center"],["Piso","center"],["Tipologia","center"],
-                  ["Área (m²)","right"],["Preço","right"],["Preço/m²","right"],
+                  ["Área (m²)","right"],["Preço","right"],["Venda estimada","right"],["Preço/m²","right"],
                   ["Status","center"],["Cliente","left"],["Ações","center"]].map(([h,al]) => (
                   <th key={h} style={{ padding: "9px 8px", textAlign: al, color: "#9DA2A6", fontSize: 9, letterSpacing: "0.05em", textTransform: "uppercase", fontFamily: "var(--fonte-numero)", borderBottom: "1px solid #E7DED2", whiteSpace: "nowrap" }}>{h}</th>
                 ))}
@@ -535,7 +671,7 @@ function TabelaVendas({ fracoes, vendas, canEdit, onAddFatura, onUpdateFracao, o
             </thead>
             <tbody>
               {rows.length === 0
-                ? <tr><td colSpan={10} style={{ padding: 40, textAlign: "center", color: "#C4C7CA" }}>
+                ? <tr><td colSpan={11} style={{ padding: 40, textAlign: "center", color: "#C4C7CA" }}>
                     {filterProj ? "Nenhuma fração encontrada neste projeto." : "Escolhe um projeto no seletor acima."}
                   </td></tr>
                 : rows.map(f => {
@@ -581,6 +717,24 @@ function TabelaVendas({ fracoes, vendas, canEdit, onAddFatura, onUpdateFracao, o
                         <CelulaNumero valor={preco} editavel={canEdit} formatar={v => fmt(v)}
                           onGuardar={async v => { const r = await onUpsertFracao?.({ ...f, preco_tabela: v }); if (r?.error) alert("Não foi possível guardar o preço."); }}
                           estilo={{ fontWeight: 700 }} />
+                      </td>
+
+                      {/* O que se espera encaixar nesta fração. Numa fração já
+                          vendida mostra-se o valor da venda, apagado: o que
+                          vale é o negócio feito, não a estimativa. */}
+                      <td style={{ padding: "4px 8px", textAlign: "right" }}>
+                        {venda && Number(venda.valor_venda) > 0 ? (
+                          <span title="Já vendida — vale o valor da venda"
+                                style={{ fontFamily: "var(--fonte-numero)", color: "#9DA2A6" }}>
+                            {fmt(Number(venda.valor_venda))}
+                          </span>
+                        ) : (
+                          <CelulaNumero valor={Number(f.venda_estimada) || 0} editavel={canEdit}
+                            formatar={v => (v > 0 ? fmt(v) : "—")}
+                            onGuardar={async v => { const r = await onUpsertFracao?.({ ...f, venda_estimada: v });
+                              if (r?.error) alert("Não foi possível guardar a venda estimada."); }}
+                            estilo={{ color: (Number(f.venda_estimada) || 0) > 0 ? "#1F3A52" : "#C4C7CA" }} />
+                        )}
                       </td>
 
                       {/* Calculado a partir da área e do preço */}
@@ -631,6 +785,10 @@ function TabelaVendas({ fracoes, vendas, canEdit, onAddFatura, onUpdateFracao, o
                   </td>
                   <td style={{ padding: "10px 8px", textAlign: "right", fontFamily: "var(--fonte-numero)", fontWeight: 700, color: "#5C6166" }}>{fmtNum(totais.area)}</td>
                   <td style={{ padding: "10px 8px", textAlign: "right", fontFamily: "var(--fonte-numero)", fontWeight: 700, color: "#091C2A" }}>{fmt(totais.preco)}</td>
+                  <td style={{ padding: "10px 8px", textAlign: "right", fontFamily: "var(--fonte-numero)", fontWeight: 700, color: "#1F3A52" }}
+                      title="O que se espera encaixar: as vendidas pelo valor da venda, as outras pela estimativa (ou pelo preço de tabela, na falta dela)">
+                    {fmt(totais.vendaEstimada)}
+                  </td>
                   <td style={{ padding: "10px 8px", textAlign: "right", fontFamily: "var(--fonte-numero)", fontWeight: 700, color: "#7E8388" }} title="Média ponderada">
                     {totais.area > 0 ? fmt(totais.precoM2) : "—"}
                   </td>
@@ -643,13 +801,15 @@ function TabelaVendas({ fracoes, vendas, canEdit, onAddFatura, onUpdateFracao, o
       </div>
 
       {editVenda && <EditVendaModal venda={editVenda} fracao={editVenda._frac}
-        onSave={u => {
+        onSave={bruto => {
+          const u = limparVenda(bruto);
           if (editVenda._semVenda) {
             const f = editVenda._frac;
             onUpsertVenda?.({
+              ...u,
               id: "v_" + f.id + "_" + Date.now().toString(36),
               fracao_id: f.id, projeto: f.projeto, fracao: f.fracao,
-              preco_tabela: f.preco_tabela, ...u,
+              preco_tabela: u.preco_tabela ?? f.preco_tabela,
             });
           } else {
             onUpdateVenda?.(editVenda.id, u);

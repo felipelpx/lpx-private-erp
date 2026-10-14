@@ -8,6 +8,7 @@ import { podeEditarOrcado } from "./realOrcado.js";
 import { statusFatura, faturaPaga } from "./status.js";
 import { valorFunding, temFunding } from "./funding.js";
 import { agruparPorRubrica, passosDaCascata, chaveRubrica } from "./rubricas.js";
+import { linhasDeFluxo as linhasDeVendas, soReceita, contaDaVenda } from "./vendas.js";
 import { larguraGrafico, colocarRotulos } from "./rotulos.js";
 import { fmtEUR, fmtEUR0, fmtNum, fmtInt, fmtCompacto, fmtData, fmtPctSinal } from "./formato.js";
 
@@ -959,7 +960,7 @@ export default function IRView({ currentUser, empresasVisiveis }) {
       });
 
     // Carteira de Contas a Receber
-    (recebiveis || []).filter(r => idsAtivos.includes(r.empresa)).forEach(r => {
+    soReceita(recebiveis).filter(r => idsAtivos.includes(r.empresa)).forEach(r => {
       const k = (r.data_prevista || "").slice(0, 7);
       if (!k) return;
       if (!porMes[k]) porMes[k] = { real: 0, projetado: 0 };
@@ -968,17 +969,31 @@ export default function IRView({ currentUser, empresasVisiveis }) {
     });
     // Mais o que vem das vendas registadas
     vendas.filter(v => projetosVisiveis.includes(v.projeto)).forEach(v => {
-      const k = (v.previsao_escritura || v.data || "").slice(0, 7);
-      if (!k) return;
-      if (!porMes[k]) porMes[k] = { real: 0, projetado: 0 };
-      porMes[k].real += Number(v.recebemos) || 0;
-      porMes[k].projetado += Number(v.falta_receber) || 0;
+      const f = (fracoes || []).find(x => x.id === v.fracao_id) || null;
+      const c = contaDaVenda(v, f);
+      // O que já se recebeu entra no mês em que se recebeu — cada parcela na
+      // sua data —, não no mês da escritura. Antes caía tudo no futuro.
+      c.parcelas.filter(p => p.pago && p.data).forEach(p => {
+        const k = p.data.slice(0, 7);
+        if (!porMes[k]) porMes[k] = { real: 0, projetado: 0 };
+        porMes[k].real += p.valor;
+      });
+      c.parcelas.filter(p => !p.pago && p.data).forEach(p => {
+        const k = p.data.slice(0, 7);
+        if (!porMes[k]) porMes[k] = { real: 0, projetado: 0 };
+        porMes[k].projetado += p.valor;
+      });
+      if (c.naEscritura > 0.005 && c.dataEscritura) {
+        const k = c.dataEscritura.slice(0, 7);
+        if (!porMes[k]) porMes[k] = { real: 0, projetado: 0 };
+        porMes[k].projetado += c.naEscritura;
+      }
     });
     return Object.keys(porMes).sort().map(k => {
       const [a, mm] = k.split("-");
       return { rotulo: `${mm}/${a.slice(2)}`, ...porMes[k] };
     });
-  }, [vendas, projetosVisiveis, recebiveis, pagamentosExtras, idsAtivos]);
+  }, [vendas, fracoes, projetosVisiveis, recebiveis, pagamentosExtras, idsAtivos]);
 
   const totalRecebido = recebiveisPorMes.reduce((s, m) => s + m.real, 0);
   const totalPorReceber = recebiveisPorMes.reduce((s, m) => s + m.projetado, 0);
@@ -1047,18 +1062,20 @@ export default function IRView({ currentUser, empresasVisiveis }) {
       });
 
     // Entradas: carteira de Contas a Receber (só o que ainda está previsto)
-    (recebiveis || [])
+    soReceita(recebiveis)
       .filter(r => idsAtivos.includes(r.empresa))
       .filter(r => (r.status || "Previsto") === "Previsto")
       .forEach(r => junta(r.data_prevista, Number(r.valor) || 0, "entrada", true));
 
-    // Mais os recebíveis das vendas que ainda não estejam na carteira
-    (vendas || [])
-      .filter(v => empresasAtivas.some(e => e.nome === v.projeto || e.projeto === v.projeto))
-      .forEach(v => {
-        if ((Number(v.falta_receber) || 0) > 0 && v.previsao_escritura)
-          junta(v.previsao_escritura, Number(v.falta_receber), "entrada", true);
-      });
+    // As vendas: sinal, reforços, escritura e a comissão do mediador — tudo
+    // pelo mesmo motor do Fluxo Futuro (src/vendas.js). Só a escritura e a
+    // comissão contam como "escritura" para o segundo gráfico; um sinal
+    // recebido a meio da obra é operação.
+    linhasDeVendas({ vendas, fracoes }).forEach(l => {
+      const v = (vendas || []).find(x => x.id === l.vendaId);
+      if (!empresasAtivas.some(e => e.nome === v?.projeto || e.projeto === v?.projeto)) return;
+      junta(l.data, l.valor, l.tipo, l.origem !== "Sinal / reforço");
+    });
 
     return Object.keys(porMes).sort().map(k => {
       const [a, mm] = k.split("-");
@@ -1234,6 +1251,7 @@ export default function IRView({ currentUser, empresasVisiveis }) {
             movimentos={dadosOrcado.movimentos} faturas={dadosOrcado.faturas}
             pagamentos={dadosOrcado.pagamentos} recorrentes={dadosOrcado.recorrentes}
             vendas={dadosOrcado.vendas} recebiveis={dadosOrcado.recebiveis}
+            fracoes={dadosOrcado.fracoes}
             orcamento={dadosOrcado.orcamento} podeEditar={podeMexerNoOrcado}
             onGravarOrcado={dadosOrcado.upsertOrcamento}
             loading={dadosOrcado.loading} hoje={dadosOrcado.hoje} />

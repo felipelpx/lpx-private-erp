@@ -1,6 +1,7 @@
 import { useState, useMemo } from "react";
 import { EMPRESAS, agruparPorGrupo } from "./empresas.js";
 import { useRecebiveis, usePagamentosExtras } from "./hooks.js";
+import { soReceita, ehFundingDeBanco } from "./vendas.js";
 import { fmtEUR, fmtEUR0, fmtData, fmtInt, fmtNum, parseNumero } from "./formato.js";
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -51,6 +52,7 @@ export default function ContasReceber({ currentUser, empresasVisiveis }) {
       empresa: p.empresa,
       projeto: "",
       descricao: p.descricao || p.categoria || "Entrada prevista",
+      categoria: p.categoria || "",
       cliente: "",
       fracao: "",
       valor: Math.abs(Number(p.valor) || 0),
@@ -61,12 +63,23 @@ export default function ContasReceber({ currentUser, empresasVisiveis }) {
       _raw: p,
     })), [pagamentos]);
 
-  const lista = useMemo(() => [...(recebiveis || []).map(r => ({ ...r, _origem: "carteira" })), ...doFluxo]
+  // Só faturas de RECEITA: comissões, fee de gestão, vendas. O desembolso do
+  // banco entrava aqui como se fosse dinheiro ganho, e não é — é dívida. Uma
+  // linha é funding pela rubrica, ou, nas antigas sem rubrica, pelo que a
+  // descrição diz (ver src/vendas.js).
+  const lista = useMemo(() => [...soReceita(recebiveis).map(r => ({ ...r, _origem: "carteira" })),
+                               ...soReceita(doFluxo)]
     .filter(r => ids.includes(r.empresa))
     .filter(r => r.empresa === empSel)
     .filter(r => fStatus === "Todos" || (r.status || "Previsto") === fStatus)
     .sort((a, b) => (a.data_prevista || "9999").localeCompare(b.data_prevista || "9999")),
     [recebiveis, doFluxo, ids, empSel, fStatus]);
+
+  // Quantas linhas ficaram de fora por serem funding, para o ecrã não
+  // esconder nada em silêncio.
+  const nFunding = useMemo(() => [...(recebiveis || []), ...doFluxo]
+    .filter(r => r.empresa === empSel && ehFundingDeBanco(r)).length,
+    [recebiveis, doFluxo, empSel]);
 
   const tot = {
     previsto: lista.filter(r => (r.status || "Previsto") === "Previsto").reduce((s, r) => s + (Number(r.valor) || 0), 0),
@@ -147,8 +160,22 @@ export default function ContasReceber({ currentUser, empresasVisiveis }) {
         <div style={{ background: "#fff", border: "1px solid #E7DED2", borderRadius: 12, padding: "15px 18px", borderTop: "3px solid #BAA685" }}>
           <div style={{ fontSize: 9.5, color: "#9DA2A6", textTransform: "uppercase", letterSpacing: "0.08em", fontFamily: "var(--fonte-numero)", marginBottom: 6 }}>Linhas</div>
           <div style={{ fontSize: 19, fontWeight: 700, color: "#091C2A", fontFamily: "var(--fonte-numero)" }}>{fmtInt(lista.length)}</div>
+          {nFunding > 0 && (
+            <div style={{ fontSize: 9.5, color: "#9DA2A6", marginTop: 4, lineHeight: 1.4 }}>
+              {fmtInt(nFunding)} de funding do banco fora desta lista
+            </div>
+          )}
         </div>
       </div>
+
+      {nFunding > 0 && (
+        <div style={{ background: "#FAF6F0", border: "1px solid #E7DED2", borderRadius: 10,
+                      padding: "9px 14px", fontSize: 11.5, color: "#7E8388", lineHeight: 1.6 }}>
+          Esta carteira é de <strong>faturas de receita</strong> — comissões, fee de gestão,
+          vendas. O desembolso do banco não é receita, é dívida: fica de fora, e aparece
+          como entrada no Fluxo Futuro, ao lado da despesa que financia.
+        </div>
+      )}
 
       {/* Filtros */}
       <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>

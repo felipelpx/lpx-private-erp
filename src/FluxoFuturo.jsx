@@ -1,9 +1,11 @@
 import React, { useState, useMemo, useEffect } from "react";
 import { useVendas, useSaldosAtuais, useRecebiveis, useObraPlanos,
-         useDespesasRecorrentes } from "./hooks.js";
+         useDespesasRecorrentes, useFracoes } from "./hooks.js";
 import ModalPlanoObra, { BotaoPlanoObra } from "./ObraPlano.jsx";
 import ModalRecorrentes, { BotaoRecorrentes } from "./Recorrentes.jsx";
 import { ocorrenciasDe } from "./recorrentes.js";
+import { linhasDeFluxo as linhasDeVendasBase, soReceita,
+         contaDaVenda, comissaoDaVenda } from "./vendas.js";
 import { CATEGORIAS } from "./categorias.js";
 import { categoriasDa, comOValorAtual } from "./categoriasEmpresa.js";
 import { faturaPaga, faturaAtrasada, statusFatura } from "./status.js";
@@ -104,6 +106,7 @@ export default function FluxoFuturo({ faturas: faturasTodas, faturasLoading, pag
   const pagamentosExtras = (pagamentosTodos || []).filter(pertence);
 
   const { vendas, loading: vendasLoading, updateVenda } = useVendas();
+  const { fracoes } = useFracoes();
   // Contas a Receber: faturas emitidas a clientes e entradas previstas. Até
   // aqui o Fluxo Futuro não as via, e o dinheiro a entrar por esta via não
   // aparecia na projeção de tesouraria.
@@ -445,14 +448,37 @@ export default function FluxoFuturo({ faturas: faturasTodas, faturasLoading, pag
     else setAproximar(false);
   };
 
-  // VENDAS — marcar como pago/recebido = zerar o campo correspondente
-  const handleMarkVendaItemPaid = async (venda, vendaTipo) => {
-    if (!updateVenda) return;
-    const updates = {};
-    if (vendaTipo === "falta_receber") updates.falta_receber = 0;
-    else if (vendaTipo === "comissao_sinal") updates.comissao_pendente_sinal = 0;
-    else if (vendaTipo === "comissao_escritura") updates.comissao_pendente_escritura = 0;
-    else return;
+  // VENDAS — marcar como recebido/pago.
+  //
+  // Antes isto ZERAVA o campo, e o valor original perdia-se: no mês seguinte
+  // já ninguém sabia quanto tinha sido o sinal. Agora marca-se a parcela como
+  // paga, ou regista-se o recebimento, e o valor fica na história.
+  const handleMarkVendaItemPaid = async (venda, origem, item) => {
+    if (!updateVenda || !venda) return;
+    const atual = (vendas || []).find(v => v.id === venda.id) || venda;
+    let updates = null;
+
+    if (origem === "Sinal / reforço") {
+      const lista = Array.isArray(atual.parcelas) ? atual.parcelas : [];
+      const i = typeof item?.parcela === "number" ? item.parcela : -1;
+      if (i < 0 || !lista[i]) return;
+      updates = { parcelas: lista.map((p, k) => (k === i ? { ...p, pago: true } : p)) };
+    } else if (origem === "Escritura") {
+      // Recebida a escritura, a venda está recebida por inteiro.
+      const f = (fracoes || []).find(x => x.id === atual.fracao_id) || null;
+      updates = { recebemos: contaDaVenda(atual, f).preco };
+    } else if (origem === "Comissão na escritura") {
+      const f = (fracoes || []).find(x => x.id === atual.fracao_id) || null;
+      const c = comissaoDaVenda(atual, f);
+      if (!(c.porPagar > 0.005)) return;
+      updates = { comissao_parcelas: [
+        ...(Array.isArray(atual.comissao_parcelas) ? atual.comissao_parcelas : []),
+        { desc: "Liquidada na escritura", valor: c.porPagar,
+          data: new Date().toISOString().slice(0, 10), pago: true },
+      ]};
+    }
+    if (!updates) return;
+
     const res = await updateVenda(venda.id, updates);
     if (res?.error) {
       alert("Erro ao marcar como pago:\n\n" + (res.error.message || res.error));
@@ -557,57 +583,33 @@ export default function FluxoFuturo({ faturas: faturasTodas, faturasLoading, pag
     }
   });
 
-  // Add vendas receivables (entradas)
-  vendas.forEach(v => {
-    const empId = PROJETO_EMPRESA_MAP[v.projeto];
+  // Add vendas: sinal, reforços, a escritura e a comissão do mediador.
+  // A aritmética toda vive em src/vendas.js — aqui só se despejam as linhas
+  // que ela devolve, para o Fluxo Futuro, o Investor Relations e o Real ×
+  // Orçado não contarem histórias diferentes.
+  linhasDeVendasBase({ vendas, fracoes }).forEach(l => {
+    const v = (vendas || []).find(x => x.id === l.vendaId);
+    const empId = PROJETO_EMPRESA_MAP[v?.projeto];
     if (empresa !== "all" && empId !== empresa) return;
-    // A receber na escritura
-    if (v.falta_receber > 0 && v.previsao_escritura) {
-      const key = getMesKey(v.previsao_escritura);
-      if (v.previsao_escritura < hojeISO) {
-        vencidas.entradas += v.falta_receber;
-        vencidas.items.push({ tipo: "entrada", desc: `${v.fracao} - ${v.cliente}`, valor: v.falta_receber, cat: "Vendas", origem: "Recebível Escritura", natureza: "real", vencimento: v.previsao_escritura, venda: v, vendaTipo: "falta_receber" });
-      } else {
-        const m = meses.find(m => m.key === key);
-        if (m) {
-          m.entradas += v.falta_receber;
-          m.items.push({ tipo: "entrada", desc: `${v.fracao} - ${v.cliente}`, valor: v.falta_receber, cat: "Vendas", origem: "Recebível Escritura", natureza: "real", venda: v, vendaTipo: "falta_receber" });
-        }
-      }
+    const base = { desc: l.descricao, valor: l.valor, cat: l.categoria,
+                   origem: l.origem, natureza: "real", vendaId: l.vendaId,
+                   venda: v, parcela: l.parcela };
+    if (l.data < hojeISO) {
+      if (l.tipo === "entrada") vencidas.entradas += l.valor;
+      else vencidas.saidas += l.valor;
+      vencidas.items.push({ ...base, tipo: l.tipo, vencimento: l.data });
+      return;
     }
-    // Comissão pendente sinal
-    if (v.comissao_pendente_sinal > 0 && v.data_pagamento_sinal) {
-      const key = getMesKey(v.data_pagamento_sinal);
-      if (v.data_pagamento_sinal < hojeISO) {
-        vencidas.saidas += v.comissao_pendente_sinal;
-        vencidas.items.push({ tipo: "saida", desc: `Comissão sinal - ${v.fracao}`, valor: v.comissao_pendente_sinal, cat: "Comissão", origem: "Comissão Pendente", natureza: "real", vencimento: v.data_pagamento_sinal, venda: v, vendaTipo: "comissao_sinal" });
-      } else {
-        const m = meses.find(m => m.key === key);
-        if (m) {
-          m.saidas += v.comissao_pendente_sinal;
-          m.items.push({ tipo: "saida", desc: `Comissão sinal - ${v.fracao}`, valor: v.comissao_pendente_sinal, cat: "Comissão", origem: "Comissão Pendente", natureza: "real", venda: v, vendaTipo: "comissao_sinal" });
-        }
-      }
-    }
-    // Comissão pendente escritura
-    if (v.comissao_pendente_escritura > 0 && v.data_pagamento_escritura) {
-      const key = getMesKey(v.data_pagamento_escritura);
-      if (v.data_pagamento_escritura < hojeISO) {
-        vencidas.saidas += v.comissao_pendente_escritura;
-        vencidas.items.push({ tipo: "saida", desc: `Comissão escritura - ${v.fracao}`, valor: v.comissao_pendente_escritura, cat: "Comissão", origem: "Comissão Pendente", natureza: "real", vencimento: v.data_pagamento_escritura, venda: v, vendaTipo: "comissao_escritura" });
-      } else {
-        const m = meses.find(m => m.key === key);
-        if (m) {
-          m.saidas += v.comissao_pendente_escritura;
-          m.items.push({ tipo: "saida", desc: `Comissão escritura - ${v.fracao}`, valor: v.comissao_pendente_escritura, cat: "Comissão", origem: "Comissão Pendente", natureza: "real", venda: v, vendaTipo: "comissao_escritura" });
-        }
-      }
-    }
+    const m = meses.find(x => x.key === getMesKey(l.data));
+    if (!m) return;
+    if (l.tipo === "entrada") m.entradas += l.valor;
+    else m.saidas += l.valor;
+    m.items.push({ ...base, tipo: l.tipo });
   });
 
   // Add recebíveis (faturas emitidas a clientes e entradas previstas)
   // Só o que ainda está por receber: o que já entrou está no extrato.
-  (recebiveis || []).forEach(r => {
+  soReceita(recebiveis).forEach(r => {
     if (empresa !== "all" && r.empresa !== empresa) return;
     if (["Recebido", "Cancelado", "Anulada"].includes(r.status)) return;
     const data = r.data_prevista || r.data_fatura;
@@ -1307,8 +1309,9 @@ export default function FluxoFuturo({ faturas: faturasTodas, faturasLoading, pag
                               style={{ background: "#FBEDEB", border: "none", color: "#A93226", padding: "3px 7px", borderRadius: 5, fontSize: 10, cursor: "pointer" }}>✕</button>
                           </>
                         )}
-                        {isAdmin && (item.origem === "Recebível Escritura" || item.origem === "Comissão Pendente") && item.venda && (
-                          <button onClick={(e) => { e.stopPropagation(); handleMarkVendaItemPaid(item.venda, item.vendaTipo); }}
+                        {isAdmin && ["Sinal / reforço", "Escritura", "Comissão na escritura"]
+                          .includes(item.origem) && item.venda && (
+                          <button onClick={(e) => { e.stopPropagation(); handleMarkVendaItemPaid(item.venda, item.origem, item); }}
                             title={item.tipo === "entrada" ? "Marcar como Recebido (sai do fluxo)" : "Marcar como Pago (sai do fluxo)"}
                             style={{ background: "#E2EFE8", border: "none", color: "#1F7A54", padding: "3px 8px", borderRadius: 5, fontSize: 10, cursor: "pointer", marginLeft: 4, fontWeight: 700 }}>✓</button>
                         )}

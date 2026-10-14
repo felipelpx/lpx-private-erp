@@ -130,7 +130,7 @@ function Orcado({ valor, onGravar, podeEditar, rubrica, quemPode }) {
 // ─── A tabela ────────────────────────────────────────────────────────────────
 export default function RealOrcadoTabela({
   empresaId, nomeEmpresa, movimentos = [], faturas = [], pagamentos = [],
-  recorrentes = [], vendas = [], recebiveis = [],
+  recorrentes = [], vendas = [], recebiveis = [], fracoes = [],
   orcamento = [], podeEditar = false, onGravarOrcado,
   loading = false, hoje,
 }) {
@@ -145,9 +145,9 @@ export default function RealOrcadoTabela({
 
   const r = useMemo(() => calcularRealOrcado({
     empresaId, nomeEmpresa, movimentos, faturas, pagamentos, recorrentes,
-    vendas, recebiveis, orcamento, hoje,
+    vendas, recebiveis, fracoes, orcamento, hoje,
   }), [empresaId, nomeEmpresa, movimentos, faturas, pagamentos, recorrentes,
-       vendas, recebiveis, orcamento, hoje]);
+       vendas, recebiveis, fracoes, orcamento, hoje]);
 
   const gravar = (rubrica) => async (valor) => {
     const res = await onGravarOrcado?.({

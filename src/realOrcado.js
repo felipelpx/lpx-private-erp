@@ -30,6 +30,7 @@
 import { rubricasDa, rubricaDe, chaveRubrica, rubricaNoPlano,
          ehCapital, ehAjuste, ordemDaRubrica } from "./rubricas.js";
 import { ocorrenciasDe } from "./recorrentes.js";
+import { contaDaVenda, comissaoDaVenda, soReceita } from "./vendas.js";
 
 const arred2 = (v) => Math.round(((Number(v) || 0) + Number.EPSILON) * 100) / 100;
 const num = (v) => { const n = Number(v); return Number.isFinite(n) ? n : 0; };
@@ -61,7 +62,7 @@ export const id_orcamento = (empresaId, rubrica) =>
 export function calcularRealOrcado({
   empresaId, nomeEmpresa = "",
   movimentos = [], faturas = [], pagamentos = [], recorrentes = [],
-  vendas = [], recebiveis = [],
+  vendas = [], recebiveis = [], fracoes = [],
   orcamento = [], hoje = new Date().toISOString().slice(0, 10), horizonte = null,
 } = {}) {
   const ate = horizonte || `${Number(String(hoje).slice(0, 4)) + 3}${String(hoje).slice(4, 10)}`;
@@ -139,17 +140,23 @@ export function calcularRealOrcado({
   const rubricaVendas = rubricasDa(empresaId).find(c => chaveRubrica(c) === "vendas") || "Vendas";
   const rubricaComissao = rubricasDa(empresaId).find(c => chaveRubrica(c) === "comissao") || null;
 
+  const fracaoDa = (v) => (fracoes || []).find(f => f.id === v?.fracao_id) || null;
+
   (vendas || []).forEach(v => {
     if (!nomeEmpresa || v?.projeto !== nomeEmpresa) return;
-    const falta = num(v?.falta_receber);
-    if (falta > 0.005) {
+    // A conta é a mesma do ecrã comercial e do fluxo futuro (src/vendas.js):
+    // preço − o que já entrou. O sinal e os reforços por receber contam aqui,
+    // tal como o resto que só entra na escritura.
+    const conta = contaDaVenda(v, fracaoDa(v));
+    if (conta.porReceber > 0.005) {
       const b = balde(rubricaVendas);
-      b.porReceber += falta;
+      b.porReceber += conta.porReceber;
       b.nPorReceber++;
     }
-    // A comissão do mediador ainda por pagar é um compromisso como outro.
+    // A comissão do mediador ainda por pagar é um compromisso como outro —
+    // com IVA, que é o que sai da conta.
     if (rubricaComissao) {
-      const com = num(v?.comissao_pendente_sinal) + num(v?.comissao_pendente_escritura);
+      const com = comissaoDaVenda(v, fracaoDa(v)).porPagarComIva;
       if (com > 0.005) {
         const b = balde(rubricaComissao);
         b.porReceber -= com;
@@ -158,7 +165,8 @@ export function calcularRealOrcado({
     }
   });
 
-  (recebiveis || []).forEach(rc => {
+  // Só faturas de receita: o funding do banco não é venda nenhuma.
+  soReceita(recebiveis || []).forEach(rc => {
     if (rc?.empresa !== empresaId) return;
     if (/^(recebido|cancelado|anulada)$/i.test(String(rc?.status || "").trim())) return;
     const valor = Math.abs(num(rc?.valor));
