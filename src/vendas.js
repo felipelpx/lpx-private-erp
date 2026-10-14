@@ -25,6 +25,8 @@
 // na escritura: é essa a prática, e é isso que o fluxo tem de mostrar.
 // ─────────────────────────────────────────────────────────────────────────────
 
+import { rubricaDe, chaveRubrica } from "./rubricas.js";
+
 const arred2 = (v) => Math.round(((Number(v) || 0) + Number.EPSILON) * 100) / 100;
 const num = (v) => { const n = Number(v); return Number.isFinite(n) ? n : 0; };
 const ehISO = (d) => /^\d{4}-\d{2}-\d{2}$/.test(String(d || "").slice(0, 10));
@@ -165,8 +167,28 @@ export function avisosDaVenda(venda, fracao) {
 //
 // O total conta TODAS as frações do projeto, vendidas ou não: as vendidas pelo
 // que foram vendidas, as outras pelo que se estima vender.
+// ─── O que já entrou mesmo na conta, por conta de vendas ─────────────────────
+// Os sinais e reforços que já foram pagos aparecem no extrato muito antes de
+// alguém os registar na ficha da venda — e é frequente nunca lá chegarem a ser
+// registados. Por isso a verdade do "já recebido" é o banco: somam-se as
+// ENTRADAS do extrato cuja rubrica é a das vendas da empresa.
+export function recebidoDeVendas({ movimentos = [], empresaId } = {}) {
+  return arred2((movimentos || []).reduce((s, m) => {
+    const v = num(m?.valor);
+    if (!(v > 0.005)) return s;                    // só entradas
+    const cat = String(m?.categoria || "");
+    const r = rubricaDe(empresaId, cat, m?.subcategoria);
+    const chave = r === null ? "" : chaveRubrica(r);
+    // A rubrica das vendas da empresa — ou, nas que lançam o sinal numa
+    // rubrica própria, o adiantamento do comprador.
+    const eVenda = chave === "vendas" || /^vendas?\b/.test(chave)
+      || /\b(sinal|sinais|refor[cç]o|adiantament)/i.test(cat);
+    return eVenda ? s + v : s;
+  }, 0));
+}
+
 export function vgvPorReceber({ fracoes = [], vendas = [], recebiveis = [],
-                                projeto, empresaId } = {}) {
+                                movimentos = [], projeto, empresaId } = {}) {
   const minhasFracoes = (fracoes || []).filter(f => !projeto || f?.projeto === projeto);
   const porFracao = new Map();
   (vendas || []).forEach(v => {
@@ -204,9 +226,14 @@ export function vgvPorReceber({ fracoes = [], vendas = [], recebiveis = [],
     .filter(r => !ehFundingDeBanco(r))
     .reduce((s, r) => s + Math.abs(num(r?.valor)), 0));
 
-  total = arred2(total); recebido = arred2(recebido);
+  // Duas fontes para o mesmo dinheiro: as fichas das vendas e o extrato. Fica
+  // a maior, nunca a soma — senão o sinal que está nos dois sítios contava a
+  // dobrar. Na prática manda o extrato, que é onde o dinheiro aparece primeiro.
+  const realizado = recebidoDeVendas({ movimentos, empresaId });
+  total = arred2(total);
+  recebido = arred2(Math.max(arred2(recebido), realizado));
   return {
-    total, recebido, naCarteira,
+    total, recebido, naCarteira, realizado,
     porReceber: arred2(Math.max(0, total - recebido - naCarteira)),
     nFracoes: detalhe.length,
     nVendidas: detalhe.filter(d => d.vendida).length,

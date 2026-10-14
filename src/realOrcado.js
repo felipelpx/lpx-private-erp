@@ -30,7 +30,7 @@
 import { rubricasDa, rubricaDe, chaveRubrica, rubricaNoPlano,
          ehCapital, ehAjuste, ordemDaRubrica } from "./rubricas.js";
 import { ocorrenciasDe } from "./recorrentes.js";
-import { contaDaVenda, comissaoDaVenda, soReceita } from "./vendas.js";
+import { comissaoDaVenda, soReceita, vgvPorReceber } from "./vendas.js";
 
 const arred2 = (v) => Math.round(((Number(v) || 0) + Number.EPSILON) * 100) / 100;
 const num = (v) => { const n = Number(v); return Number.isFinite(n) ? n : 0; };
@@ -142,17 +142,28 @@ export function calcularRealOrcado({
 
   const fracaoDa = (v) => (fracoes || []).find(f => f.id === v?.fracao_id) || null;
 
-  (vendas || []).forEach(v => {
-    if (!nomeEmpresa || v?.projeto !== nomeEmpresa) return;
-    // A conta é a mesma do ecrã comercial e do fluxo futuro (src/vendas.js):
-    // preço − o que já entrou. O sinal e os reforços por receber contam aqui,
-    // tal como o resto que só entra na escritura.
-    const conta = contaDaVenda(v, fracaoDa(v));
-    if (conta.porReceber > 0.005) {
+  // O que falta receber das vendas é a mesma conta do plano de obra
+  // (vgvPorReceber): tabela de vendas − o que já entrou. O "já entrou" lê o
+  // extrato, não só as fichas das vendas — senão um sinal que caiu na conta
+  // sem estar registado na ficha era contado duas vezes, uma no Real e outra
+  // no por receber.
+  //
+  // O Contas a Receber soma-se à parte, logo a seguir: lá dentro estão fees e
+  // comissões a faturar, não prestações de vendas, por isso são receita a mais
+  // e não uma parte desta.
+  if (nomeEmpresa) {
+    const vgv = vgvPorReceber({ fracoes, vendas, movimentos,
+                                projeto: nomeEmpresa, empresaId });
+    const falta = arred2(Math.max(0, vgv.total - vgv.recebido));
+    if (falta > 0.005) {
       const b = balde(rubricaVendas);
-      b.porReceber += conta.porReceber;
+      b.porReceber += falta;
       b.nPorReceber++;
     }
+  }
+
+  (vendas || []).forEach(v => {
+    if (!nomeEmpresa || v?.projeto !== nomeEmpresa) return;
     // A comissão do mediador ainda por pagar é um compromisso como outro —
     // com IVA, que é o que sai da conta.
     if (rubricaComissao) {

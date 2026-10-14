@@ -137,8 +137,9 @@ export default function ModalPlanoObra({
   // lançado no Contas a Receber. Pôr aqui o VGV inteiro seria contar duas
   // vezes os sinais que já entraram e os recebíveis que já estão no fluxo.
   const vgv = useMemo(() => vgvPorReceber({
-    fracoes, vendas, recebiveis, projeto: nomeEmpresa, empresaId: empresa,
-  }), [fracoes, vendas, recebiveis, nomeEmpresa, empresa]);
+    fracoes, vendas, recebiveis, movimentos,
+    projeto: nomeEmpresa, empresaId: empresa,
+  }), [fracoes, vendas, recebiveis, movimentos, nomeEmpresa, empresa]);
   const vgvDoProjeto = vgv.porReceber;
 
   const sugFisc = useMemo(
@@ -395,7 +396,9 @@ export default function ModalPlanoObra({
                   <Linha k="Tabela de vendas" v={fmtEUR(vgv.total)}
                     dica={`${vgv.nFracoes} frações, ${vgv.nVendidas} vendidas. As vendidas pelo valor da venda, as outras pela venda estimada.`} />
                   <Linha k="−  já recebido" v={`−${fmtEUR(vgv.recebido)}`}
-                    dica="Sinais e reforços já pagos, e o que estiver registado como recebido." />
+                    dica={vgv.realizado > 0.005
+                      ? `${fmtEUR(vgv.realizado)} já entraram na conta por conta de vendas (extrato). Conta-se o maior entre isso e os sinais registados nas fichas das vendas — nunca a soma, para não contar o mesmo dinheiro duas vezes.`
+                      : "Sinais e reforços já pagos, e o que estiver registado como recebido."} />
                   <Linha k="−  no Contas a Receber" v={`−${fmtEUR(vgv.naCarteira)}`}
                     dica="Já está no fluxo por essa via — contá-lo aqui seria contá-lo duas vezes." />
                   <div style={{ height: 1, background: "#D8CCBB", margin: "6px 0" }} />
