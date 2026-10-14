@@ -587,10 +587,20 @@ export default function FluxoFuturo({ faturas: faturasTodas, faturasLoading, pag
   // A aritmética toda vive em src/vendas.js — aqui só se despejam as linhas
   // que ela devolve, para o Fluxo Futuro, o Investor Relations e o Real ×
   // Orçado não contarem histórias diferentes.
+  // Quando o plano de obra já lançou a venda da escritura ("Venda —
+  // escritura", que vale o que falta receber da tabela de vendas), as entradas
+  // de venda desta empresa já estão no fluxo por essa via: lançá-las outra vez
+  // aqui dava o dobro. A comissão do mediador não vem no plano, essa fica.
+  const vendaJaNoPlano = new Set((pagamentosExtras || [])
+    .filter(p => p?.plano_tipo === "venda"
+              && !["Paga", "Pago", "Convertida"].includes(p?.status))
+    .map(p => p?.empresa).filter(Boolean));
+
   linhasDeVendasBase({ vendas, fracoes }).forEach(l => {
     const v = (vendas || []).find(x => x.id === l.vendaId);
     const empId = PROJETO_EMPRESA_MAP[v?.projeto];
     if (empresa !== "all" && empId !== empresa) return;
+    if (l.tipo === "entrada" && vendaJaNoPlano.has(empId)) return;
     const base = { desc: l.descricao, valor: l.valor, cat: l.categoria,
                    origem: l.origem, natureza: "real", vendaId: l.vendaId,
                    venda: v, parcela: l.parcela };

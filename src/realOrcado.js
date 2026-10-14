@@ -154,7 +154,12 @@ export function calcularRealOrcado({
   if (nomeEmpresa) {
     const vgv = vgvPorReceber({ fracoes, vendas, movimentos,
                                 projeto: nomeEmpresa, empresaId });
-    const falta = arred2(Math.max(0, vgv.total - vgv.recebido));
+    // E desconta-se o que já está lançado no Fluxo Futuro como entrada de
+    // venda — tipicamente a linha "Venda — escritura" que o plano de obra
+    // cria. É a mesma venda vista de outro lado: somar as duas dava o dobro
+    // do que o projeto tem para receber.
+    const jaNoFluxo = Math.max(0, num(baldes.get(rubricaVendas)?.previsoes));
+    const falta = arred2(Math.max(0, vgv.total - vgv.recebido - jaNoFluxo));
     if (falta > 0.005) {
       const b = balde(rubricaVendas);
       b.porReceber += falta;

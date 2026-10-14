@@ -196,7 +196,7 @@ function EditVendaModal({ venda, fracao, onSave, onClose }) {
           {[["Cliente","cliente","text"],["NIF","nif","text"],["Email","email","email"],["Telefone","telefone","text"],
             ["Valor de Venda (€)","valor_venda","number"],["Preço Tabela (€)","preco_tabela","number"],
             ["Prev. Escritura","previsao_escritura","date"],["Data Venda","data","date"],
-            ["Mediador","mediador","text"],
+            ["Data do CPCV","data_cpcv","date"],["Mediador","mediador","text"],
           ].map(([label,name,type])=>(
             <div key={name} style={{display:"flex",flexDirection:"column",gap:3}}>
               <label style={lbl}>{label}</label>
@@ -278,17 +278,38 @@ function EditVendaModal({ venda, fracao, onSave, onClose }) {
                 onChange={e=>s("comissao_valor",parseFloat(e.target.value)||0)} style={inp}/>
             </div>
           </div>
+
+          {/* Quando é que o mediador recebe */}
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12,marginTop:12}}>
+            <div style={{display:"flex",flexDirection:"column",gap:3}}>
+              <label style={lbl}>% paga no CPCV</label>
+              <input type="number" step="0.01" min="0" max="100" value={f.comissao_pct_cpcv??0}
+                onChange={e=>s("comissao_pct_cpcv",
+                  Math.min(100,Math.max(0,parseFloat(e.target.value)||0)))} style={inp}/>
+            </div>
+            <div style={{display:"flex",flexDirection:"column",gap:3}}>
+              <label style={lbl}>% na escritura</label>
+              <input type="number" value={com.pctEscritura} readOnly tabIndex={-1}
+                style={{...inp,background:"#F2EEE8",color:"#7E8388",cursor:"default"}}/>
+            </div>
+          </div>
+          <div style={{fontSize:10.5,color:"#9DA2A6",marginTop:5,lineHeight:1.5}}>
+            A fatia do CPCV sai na data da venda; o resto sai na escritura. Sem data
+            de CPCV, sai tudo na escritura.
+          </div>
           <div style={{background:"#FAF6F0",borderRadius:9,padding:"10px 13px",fontSize:11.5,marginTop:12}}>
             <LinhaConta k="Comissão" v={fmtEUR(com.base)} />
             <LinhaConta k={`+  IVA a ${com.taxa}%`} v={fmtEUR(com.iva)} />
             <div style={{height:1,background:"#D8CCBB",margin:"6px 0"}}/>
             <LinhaConta k="=  a pagar ao mediador" v={fmtEUR(com.comIva)} forte />
             {com.paga > 0.005 && <LinhaConta k="já pago" v={fmtEUR(com.pagaComIva)} />}
-            {com.porPagarComIva > 0.005 && (
-              <div style={{fontSize:10.5,color:"#96702A",marginTop:5,lineHeight:1.5}}>
-                {fmtEUR(com.porPagarComIva)} são pagos na escritura — é lá que se liquida
-                o que faltar ao mediador.
-              </div>
+            {com.comIva > 0.005 && (
+              <>
+                <div style={{height:1,background:"#D8CCBB",margin:"6px 0"}}/>
+                <LinhaConta k={`no CPCV (${com.pctCpcv}%)`} v={fmtEUR(com.noCpcv.porPagarComIva)} />
+                <LinhaConta k={`na escritura (${com.pctEscritura}%)`}
+                  v={fmtEUR(com.naEscritura.porPagarComIva)} />
+              </>
             )}
           </div>
         </div>

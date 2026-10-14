@@ -127,6 +127,27 @@ export function comissaoDaVenda(venda, fracao) {
   const porPagarBase = arred2(Math.max(0, base - paga));
   const porPagarIva = arred2(porPagarBase * taxa / 100);
 
+  // ── Quando é que se paga ────────────────────────────────────────────────
+  // O mediador raramente recebe tudo de uma vez: combina-se uma fatia na
+  // assinatura do CPCV e o resto na escritura. Quem define a fatia é quem
+  // negoceia — aqui só se parte a conta em duas, ao cêntimo, e a parte da
+  // escritura é o resto, para a soma fechar sempre no total.
+  const pctCpcv = Math.min(100, Math.max(0, num(venda?.comissao_pct_cpcv)));
+  const baseCpcv = arred2(base * pctCpcv / 100);
+  const baseEscritura = arred2(base - baseCpcv);
+
+  // O que já foi pago abate primeiro à fatia mais antiga — a do CPCV.
+  const pagaCpcv = Math.min(paga, baseCpcv);
+  const pagaEscritura = arred2(Math.max(0, paga - baseCpcv));
+  const tranche = (b, p) => {
+    const falta = arred2(Math.max(0, b - p));
+    return {
+      base: b, iva: arred2(b * taxa / 100), comIva: arred2(b * (1 + taxa / 100)),
+      paga: arred2(p), porPagar: falta,
+      porPagarComIva: arred2(falta * (1 + taxa / 100)),
+    };
+  };
+
   return {
     pct, taxa,
     base, iva, comIva,
@@ -134,6 +155,9 @@ export function comissaoDaVenda(venda, fracao) {
     porPagar: porPagarBase,
     porPagarComIva: arred2(porPagarBase + porPagarIva),
     manual: gravado > 0.005,
+    pctCpcv, pctEscritura: arred2(100 - pctCpcv),
+    noCpcv: tranche(baseCpcv, pagaCpcv),
+    naEscritura: tranche(baseEscritura, pagaEscritura),
   };
 }
 
@@ -295,12 +319,30 @@ export function linhasDeFluxo({ vendas = [], fracoes = [], projeto } = {}) {
       });
     }
 
-    if (com.porPagarComIva > 0.005 && c.dataEscritura) {
+    // A comissão sai em duas datas, conforme o que foi combinado: a fatia do
+    // CPCV na assinatura, o resto na escritura.
+    const dataCpcv = ehISO(v?.data_cpcv) ? dia(v.data_cpcv)
+                   : (ehISO(v?.data) ? dia(v.data) : null);
+    const comIvaTxt = (t) => com.taxa > 0 ? ` (${t.porPagar} € + ${com.taxa}% de IVA)` : "";
+
+    if (com.noCpcv.porPagarComIva > 0.005 && dataCpcv) {
       linhas.push({
-        tipo: "saida", data: c.dataEscritura, valor: com.porPagarComIva,
+        tipo: "saida", data: dataCpcv, valor: com.noCpcv.porPagarComIva,
+        categoria: "Comissão", origem: "Comissão no CPCV",
+        descricao: `Comissão ${quem} — ${com.pctCpcv}% no CPCV` + comIvaTxt(com.noCpcv),
+        vendaId: v.id,
+      });
+    }
+
+    // Sem data de CPCV não se perde dinheiro: essa fatia cai na escritura.
+    const naEscritura = arred2(com.naEscritura.porPagarComIva
+      + (dataCpcv ? 0 : com.noCpcv.porPagarComIva));
+    if (naEscritura > 0.005 && c.dataEscritura) {
+      linhas.push({
+        tipo: "saida", data: c.dataEscritura, valor: naEscritura,
         categoria: "Comissão", origem: "Comissão na escritura",
         descricao: `Comissão ${quem}` +
-          (com.taxa > 0 ? ` (${com.porPagar} € + ${com.taxa}% de IVA)` : ""),
+          (dataCpcv ? comIvaTxt(com.naEscritura) : comIvaTxt(com)),
         vendaId: v.id,
       });
     }
