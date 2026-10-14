@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useEffect } from "react";
 import { fmtEUR, fmtData } from "./formato.js";
 import {
   planearObra, planearAplicacao, gastoEmObra, sugerirAvenca, planoDesatualizado,
@@ -142,13 +142,30 @@ export default function ModalPlanoObra({
   }), [fracoes, vendas, recebiveis, movimentos, nomeEmpresa, empresa]);
   const vgvDoProjeto = vgv.porReceber;
 
+  // Campo vazio = segue a tabela de vendas. Um plano antigo que tenha lá
+  // gravado o VGV BRUTO (a tabela toda, antes de descontar o que já se
+  // recebeu) está desatualizado por construção — nesse caso volta ao
+  // automático sozinho, senão o fluxo continuava a receber na escritura
+  // dinheiro que já entrou na conta.
+  const vendaBrutaGravada = vgv.total > 0.005
+    && Math.abs(num(f.valor_venda) - vgv.total) < 1
+    && vgv.recebido > 0.005;
+  const vendaAutomatica = !(num(f.valor_venda) > 0.005) || vendaBrutaGravada;
+  useEffect(() => {
+    if (vendaBrutaGravada) setF(x => ({ ...x, valor_venda: 0 }));
+  }, [vendaBrutaGravada]);
+
   const sugFisc = useMemo(
     () => sugerirAvenca(faturas, { empresa, categorias: [catFisc] }), [faturas, empresa, catFisc]);
   const sugCso = useMemo(
     () => sugerirAvenca(faturas, { empresa, categorias: [catCso] }), [faturas, empresa, catCso]);
 
+  // A venda da escritura segue a tabela de vendas enquanto ninguém escrever um
+  // número à mão: assim, vender mais uma fração ou receber mais um sinal muda o
+  // fluxo sozinho, sem ser preciso vir aqui corrigir o campo.
   const resultado = useMemo(
-    () => planearObra(f, { gastoObra: gasto, hoje, grupo }), [f, gasto, hoje, grupo]);
+    () => planearObra(f, { gastoObra: gasto, hoje, grupo, vendaNaEscritura: vgvDoProjeto }),
+    [f, gasto, hoje, grupo, vgvDoProjeto]);
   const { linhas, resumo, avisos } = resultado;
 
   const aplicacao = useMemo(() => planearAplicacao({
@@ -158,9 +175,10 @@ export default function ModalPlanoObra({
 
   const comparacao = useMemo(() => {
     if (!simular || !f.data_fim || simular === f.data_fim) return null;
-    try { return compararPrazos(f, { gastoObra: gasto, hoje, grupo }, simular); }
+    try { return compararPrazos(f, { gastoObra: gasto, hoje, grupo,
+                                     vendaNaEscritura: vgvDoProjeto }, simular); }
     catch { return null; }
-  }, [simular, f, gasto, hoje, grupo]);
+  }, [simular, f, gasto, hoje, grupo, vgvDoProjeto]);
 
   const desatualizado = planoDesatualizado(planoGravado, gasto);
   const podeAplicar = linhas.length > 0 && !aGravar;
@@ -384,12 +402,51 @@ export default function ModalPlanoObra({
                   Cai em {rotuloMes(resumo.mesEscritura)}
                 </div>
               )}
-              <Numero rotulo="Vendas na escritura" valor={f.valor_venda}
-                onMudar={muda("valor_venda")}
-                dica="O que entra na escritura. Entra no fluxo como receita no mês acima."
-                sugestao={vgvDoProjeto > 0
-                  ? { valor: vgvDoProjeto, rotulo: "o que falta receber" } : null}
-                onSugestao={muda("valor_venda")} />
+              {vendaAutomatica ? (
+                <div>
+                  <div style={{ fontSize: 9, color: "#9DA2A6", fontFamily: "var(--fonte-numero)",
+                                textTransform: "uppercase", letterSpacing: "0.07em",
+                                marginBottom: 3 }}>
+                    Vendas na escritura
+                  </div>
+                  <div style={{ display: "flex", alignItems: "baseline", gap: 10 }}>
+                    <div style={{ fontSize: 17, fontWeight: 700, color: COR.navy,
+                                  fontFamily: "var(--fonte-numero)" }}>
+                      {fmtEUR(vgvDoProjeto)}
+                    </div>
+                    <button onClick={() => muda("valor_venda")(vgvDoProjeto)}
+                      style={{ background: "none", border: "none", padding: 0, fontSize: 11,
+                               color: "#7E8388", cursor: "pointer", textDecoration: "underline" }}>
+                      escrever à mão
+                    </button>
+                  </div>
+                  <div style={{ fontSize: 10.5, color: "#7E8388", marginTop: 3, lineHeight: 1.5 }}>
+                    Segue a tabela de vendas: muda sozinho quando se vende mais uma fração
+                    ou entra mais um sinal.
+                  </div>
+                </div>
+              ) : (
+                <>
+                  <Numero rotulo="Vendas na escritura" valor={f.valor_venda}
+                    onMudar={muda("valor_venda")}
+                    dica="Escrito à mão. Entra no fluxo como receita no mês acima."
+                    sugestao={vgvDoProjeto > 0 && Math.abs(num(f.valor_venda) - vgvDoProjeto) > 0.5
+                      ? { valor: vgvDoProjeto, rotulo: "o que falta receber" } : null}
+                    onSugestao={muda("valor_venda")} />
+                  <button onClick={() => muda("valor_venda")(0)}
+                    style={{ background: "none", border: "none", padding: 0, fontSize: 11,
+                             color: "#7E8388", cursor: "pointer", textDecoration: "underline",
+                             alignSelf: "flex-start", marginTop: -4 }}>
+                    voltar a seguir a tabela de vendas
+                  </button>
+                  {vgvDoProjeto > 0 && Math.abs(num(f.valor_venda) - vgvDoProjeto) > 0.5 && (
+                    <div style={{ fontSize: 10.5, color: "#96702A", lineHeight: 1.5, marginTop: -2 }}>
+                      Este número foi escrito à mão e já não bate com a tabela de vendas
+                      ({fmtEUR(vgvDoProjeto)}). O fluxo usa o que está escrito.
+                    </div>
+                  )}
+                </>
+              )}
               {vgv.total > 0 && (
                 <div style={{ background: "#FAF6F0", borderRadius: 9, padding: "9px 12px",
                               fontSize: 11, marginTop: -2 }}>

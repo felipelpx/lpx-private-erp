@@ -289,6 +289,9 @@ export function planoDesatualizado(plano, gastoAgora) {
 
 // ─── O plano ────────────────────────────────────────────────────────────────
 const num = (v, def = 0) => { const n = Number(v); return Number.isFinite(n) ? n : def; };
+// Os avisos são lidos por pessoas: euros escritos como se escrevem.
+const eur = (v) => new Intl.NumberFormat("pt-PT",
+  { style: "currency", currency: "EUR" }).format(arred2(v));
 
 export const PLANO_VAZIO = {
   empresa: "", ativo: true,
@@ -316,7 +319,8 @@ export const PLANO_VAZIO = {
  * @param opts.hoje       data de referência (injetável para os testes)
  * @param opts.grupo      "LPX" ou "HDG" — decide o plano de contas
  */
-export function planearObra(plano, { gastoObra = 0, hoje = hojeISO(), grupo = "LPX" } = {}) {
+export function planearObra(plano, { gastoObra = 0, hoje = hojeISO(), grupo = "LPX",
+                                     vendaNaEscritura = 0 } = {}) {
   const avisos = [];
   const p = { ...PLANO_VAZIO, ...(plano || {}) };
 
@@ -549,8 +553,16 @@ export function planearObra(plano, { gastoObra = 0, hoje = hojeISO(), grupo = "L
   // valor de venda ou despesas de fecho. Sem isso o plano fica exatamente
   // como estava — um plano antigo não pode começar a amortizar a dívida toda
   // sozinho só porque o motor aprendeu a fazê-lo.
+  // O que entra na escritura. Por omissão segue a tabela de vendas: o que
+  // falta receber, calculado em src/vendas.js e passado aqui de fora. Escrever
+  // um número no campo é uma decisão de quem está a planear, e nesse caso manda
+  // esse — mas um campo vazio deixa de significar "zero" e passa a significar
+  // "o que a tabela de vendas disser", que é o que não envelhece.
+  const vendaManual = Math.abs(num(p.valor_venda));
+  const venda = vendaManual > 0.005 ? vendaManual : Math.abs(num(vendaNaEscritura));
+
   const temEscritura = mesesAteEscritura > 0 ||
-                       Math.abs(num(p.valor_venda)) > 0.005 ||
+                       venda > 0.005 ||
                        despesasFecho.length > 0;
   const mesEscritura = (temEscritura && ultimoMesObra)
     ? somarMeses(ultimoMesObra, mesesAteEscritura) : "";
@@ -605,14 +617,15 @@ export function planearObra(plano, { gastoObra = 0, hoje = hojeISO(), grupo = "L
     });
 
     // A venda entra, e o banco é pago com ela.
-    const venda = Math.abs(num(p.valor_venda));
     if (venda > 0.005) {
       linhas.push({
         ...linha("venda", mesEscritura, venda, grupo, {
           descricao: "Venda — escritura",
-          obs: mesesAteEscritura > 0
-            ? `${mesesAteEscritura} ${mesesAteEscritura === 1 ? "mês" : "meses"} após o fim da obra`
-            : "No mês em que a obra acaba",
+          obs: (mesesAteEscritura > 0
+                 ? `${mesesAteEscritura} ${mesesAteEscritura === 1 ? "mês" : "meses"} após o fim da obra`
+                 : "No mês em que a obra acaba")
+               + (vendaManual > 0.005 ? " · valor escrito à mão"
+                                      : " · o que falta receber da tabela de vendas"),
           dia: "fim",
         }),
         tipo: "entrada",
@@ -626,8 +639,8 @@ export function planearObra(plano, { gastoObra = 0, hoje = hojeISO(), grupo = "L
         dia: "fim",
       }));
       if (venda > 0.005 && venda < divida)
-        avisos.push(`A venda (${arred2(venda)} €) não chega para pagar a dívida ` +
-                    `(${arred2(divida)} €) — faltam ${arred2(divida - venda)} €.`);
+        avisos.push(`A venda (${eur(venda)}) não chega para pagar a dívida ` +
+                    `(${eur(divida)}) — faltam ${eur(divida - venda)}.`);
       divida = 0;
     }
   }
