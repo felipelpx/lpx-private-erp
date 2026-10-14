@@ -28,7 +28,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { rubricasDa, rubricaDe, chaveRubrica, rubricaNoPlano,
-         ehCapital, ordemDaRubrica } from "./rubricas.js";
+         ehCapital, ehAjuste, ordemDaRubrica } from "./rubricas.js";
 import { ocorrenciasDe } from "./recorrentes.js";
 
 const arred2 = (v) => Math.round(((Number(v) || 0) + Number.EPSILON) * 100) / 100;
@@ -74,7 +74,9 @@ export function calcularRealOrcado({
     });
     return baldes.get(r);
   };
-  rubricasDa(empresaId).forEach(balde);
+  // Os ajustes ficam de fora: não são dinheiro que o projeto ganhou ou gastou,
+  // e uma linha de ajustes num quadro de orçamento só levanta perguntas.
+  rubricasDa(empresaId).filter(r => !ehAjuste(r)).forEach(balde);
 
   // ── Orçado ────────────────────────────────────────────────────────────────
   // Guardado em módulo (sempre positivo); a rubrica é a chave.
@@ -217,6 +219,24 @@ export function calcularRealOrcado({
   };
 }
 
+// ─── Quem pode escrever o orçado ────────────────────────────────────────────
+// O orçamento é o compromisso com os investidores. Ao contrário da
+// classificação de um lançamento, que a equipa toda revê, este número é de uma
+// pessoa só: muda-se numa revisão de orçamento, não no dia a dia.
+//
+// Para passar a caneta a outra pessoa, acrescenta-se aqui o e-mail da conta
+// dela no ERP. O ecrã diz sempre quem pode editar, para ninguém ficar sem
+// perceber porque é que a célula está trancada.
+export const DONOS_DO_ORCAMENTO = [
+  "felipe@riocapital.pt",
+  "felipe@lpxprivate.com",
+];
+
+export function podeEditarOrcado(utilizador) {
+  const email = String(utilizador?.email || "").toLowerCase().trim();
+  return !!email && DONOS_DO_ORCAMENTO.includes(email);
+}
+
 // ─── Semear o orçado a partir do modelo antigo ──────────────────────────────
 // Os números que estavam escritos à mão em src/modeloRealOrcado.js foram
 // transcritos dos business plans. Onde o rótulo do modelo bate numa rubrica da
@@ -237,4 +257,5 @@ export function semearDoModelo(modelo, empresaId) {
   return out;
 }
 
-export default { calcularRealOrcado, semearDoModelo, id_orcamento };
+export default { calcularRealOrcado, semearDoModelo, id_orcamento,
+                 podeEditarOrcado, DONOS_DO_ORCAMENTO };

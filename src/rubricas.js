@@ -69,18 +69,22 @@ export function rubricaNoPlano(empresaId, rubrica) {
 // nome como o plano o escreve (e não como o extrato o escreveu), para que
 // "Soft_Costs" e "Soft Costs" sejam uma linha só no gráfico.
 //
-// A ordem das duas verificações é deliberada: uma rubrica que ESTÁ no plano da
-// empresa nunca é escondida, mesmo chamando-se "Ajuste" ou "Transferências" —
-// se o plano operacional a tem, o gráfico tem de a ter, ou deixa de ser o
-// fluxo que o Felipe conhece. A limpeza dos ajustes só apanha o que anda fora
-// do plano, que é onde ela nasceu.
+// Um ajuste sai SEMPRE, mesmo sendo uma rubrica do plano: não é dinheiro que
+// o projeto ganhou ou gastou, é uma correção de lançamento. Entra e sai pelo
+// mesmo valor e só suja a leitura. O mesmo para as transferências entre
+// contas do mesmo grupo. O que ficou de fora diz-se no rodapé, nunca em
+// silêncio — e no extrato continua lá, intacto.
 export function rubricaDe(empresaId, categoria, subcategoria) {
+  if (ocultarNoGrafico(categoria, subcategoria)) return null;
   const bruta = String(categoria || "").trim();
-  if (!bruta) return ocultarNoGrafico(categoria, subcategoria) ? null : SEM_RUBRICA;
+  if (!bruta) return SEM_RUBRICA;
   const doPlano = rubricasDa(empresaId).find(c => chaveRubrica(c) === chaveRubrica(bruta));
-  if (doPlano) return doPlano;
-  return ocultarNoGrafico(categoria, subcategoria) ? null : bruta;
+  return doPlano || bruta;
 }
+
+// A mesma pergunta, para uma rubrica sem movimento associado: serve para as
+// listas não semearem uma linha de ajustes que nunca vai ter nada.
+export const ehAjuste = (rubrica) => ocultarNoGrafico(rubrica, "");
 
 // ─── Famílias de rubricas ────────────────────────────────────────────────────
 // Um plano de contas tem nove linhas de "Aporte <investidor>" e cinco de
@@ -90,6 +94,20 @@ export function rubricaDe(empresaId, categoria, subcategoria) {
 // Isto é uma camada de APRESENTAÇÃO, e só dos gráficos. A classificação do
 // extrato, do Caixa Único e do Real × Orçado continua rubrica a rubrica — não
 // se perde detalhe nenhum, só se junta na hora de desenhar.
+// Rubricas que no gráfico levam outro nome. O plano de contas diz "Funding";
+// num quadro para investidor isso é o desembolso do banco, e é assim que se
+// chama. O nome na base de dados não muda.
+export const RENOMEAR = {
+  funding: "Funding Banco",
+  "funding banco": "Funding Banco",
+  "funding bancario": "Funding Banco",
+  financiamento: "Funding Banco",
+};
+
+export function nomeDeApresentacao(rubrica) {
+  return RENOMEAR[chaveRubrica(rubrica)] || rubrica;
+}
+
 export const FAMILIAS = [
   { nome: "Aportes e Mútuos", teste: (k) =>
       /^(aporte|mutuo|suprimento)/.test(k) || / - aporte\/resgate$/.test(k) },
@@ -100,7 +118,7 @@ export const FAMILIAS = [
 export function familiaDe(rubrica) {
   const k = chaveRubrica(rubrica);
   const f = FAMILIAS.find(x => x.teste(k));
-  return f ? f.nome : rubrica;
+  return f ? f.nome : nomeDeApresentacao(rubrica);
 }
 
 export const ehFamilia = (nome) => FAMILIAS.some(f => f.nome === nome);
@@ -168,7 +186,11 @@ export function agruparPorRubrica(movimentos, { empresaId, agrupar = false } = {
       entrada: arred2(a.entrada),
       saida: arred2(a.saida),
       liquido: arred2(a.entrada + a.saida),
-      noPlano: familia ? true : rubricaNoPlano(empresaId, a.rubrica),
+      // Quem decide se está no plano são as rubricas de ORIGEM, não o nome
+      // que a barra leva: "Funding Banco" e "Aportes e Mútuos" são nomes de
+      // apresentação e não existem no Excel — sem isto saíam marcados a
+      // vermelho como se fossem classificações erradas.
+      noPlano: [...a.inclui].every(r => rubricaNoPlano(empresaId, r)),
       familia,
       inclui: [...a.inclui].sort((x, y) =>
         ordemDaRubrica(empresaId, x) - ordemDaRubrica(empresaId, y)),
@@ -188,25 +210,26 @@ export function agruparPorRubrica(movimentos, { empresaId, agrupar = false } = {
 }
 
 // ─── Os passos da cascata ────────────────────────────────────────────────────
-// Entradas primeiro, depois saídas, cada bloco pela ordem do plano. Uma
-// rubrica com os dois sinais aparece duas vezes — é o bruto que interessa ver,
-// não o líquido: 1 M € de funding libertado e 300 k € de amortização não são
-// a mesma coisa que 700 k € de "funding".
+// Uma barra por rubrica, pelo LÍQUIDO. Uma rubrica que tenha entradas e
+// saídas — o funding, que o banco liberta e o projeto amortiza — vale o que
+// sobra: é esse o efeito no caixa, e é isso que uma cascata conta.
 //
-// Só nesse caso é que o rótulo leva o sufixo; uma rubrica que só tenha um
-// sinal fica com o nome limpo.
+// O bruto não se perde: vai na dica de cada barra, para quem quiser abrir.
+//
+// Primeiro as que somam, depois as que subtraem, cada bloco pela ordem do
+// plano — a cascata sobe e depois desce, como se lê.
 export function passosDaCascata(agregado) {
-  const temAmbos = (l) => Math.abs(l.entrada) > 0.005 && Math.abs(l.saida) > 0.005;
-  const passo = (l, lado) => ({
-    nome: temAmbos(l) ? `${l.rubrica} (${lado === "entrada" ? "entradas" : "saídas"})` : l.rubrica,
-    rubrica: l.rubrica, valor: l[lado], noPlano: l.noPlano, n: l.n,
-    familia: !!l.familia, inclui: l.inclui || [],
-  });
-  const entradas = agregado.linhas.filter(l => Math.abs(l.entrada) > 0.005)
-    .map(l => passo(l, "entrada"));
-  const saidas = agregado.linhas.filter(l => Math.abs(l.saida) > 0.005)
-    .map(l => passo(l, "saida"));
-  return [...entradas, ...saidas];
+  const passos = agregado.linhas
+    .filter(l => Math.abs(l.liquido) > 0.005)
+    .map(l => ({
+      nome: l.rubrica, rubrica: l.rubrica, valor: l.liquido,
+      noPlano: l.noPlano, n: l.n,
+      familia: !!l.familia, inclui: l.inclui || [],
+      // Só vale a pena falar em bruto quando os dois lados existem.
+      bruto: (Math.abs(l.entrada) > 0.005 && Math.abs(l.saida) > 0.005)
+        ? { entrada: l.entrada, saida: l.saida } : null,
+    }));
+  return [...passos.filter(p => p.valor > 0), ...passos.filter(p => p.valor < 0)];
 }
 
 export default { rubricasDa, rubricaDe, agruparPorRubrica, passosDaCascata };

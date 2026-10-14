@@ -4,6 +4,7 @@ import { useMovimentosPeriodo, useFracoes, useVendas, useSaldosNaData, usePagame
 import { CRONOGRAMAS, ESTADO_MARCO, TIR_PROJETO } from "./cronogramas.js";
 import RealOrcadoTabela from "./RealOrcadoTabela.jsx";
 import { useDadosRealOrcado } from "./RealOrcadoView.jsx";
+import { podeEditarOrcado } from "./realOrcado.js";
 import { statusFatura, faturaPaga } from "./status.js";
 import { valorFunding, temFunding } from "./funding.js";
 import { agruparPorRubrica, passosDaCascata } from "./rubricas.js";
@@ -69,14 +70,19 @@ const Vazio = ({ texto }) => (
 // Juntar rubricas numa família não é escondê-las: a dica diz o que está lá
 // dentro, para ninguém ter de adivinhar o que são os "Aportes e Mútuos".
 const dicaDe = (e) => {
-  if (e.noPlano === false) return `${e.nome} — fora do plano de contas da empresa`;
+  const partes = [];
+  if (e.noPlano === false) partes.push("fora do plano de contas da empresa");
   if (e.familia && e.inclui?.length > 1)
-    return `${e.nome} — ${e.inclui.length} rubricas: ${e.inclui.join(", ")}`;
-  return e.nome;
+    partes.push(`${e.inclui.length} rubricas: ${e.inclui.join(", ")}`);
+  // Quando a rubrica tem os dois sentidos, a barra mostra o líquido e a dica
+  // abre a conta — é aqui que se vê o funding libertado e o amortizado.
+  if (e.bruto) partes.push(
+    `entradas ${fmtEUR0(e.bruto.entrada)} · saídas ${fmtEUR0(Math.abs(e.bruto.saida))}`);
+  return partes.length ? `${e.nome} — ${partes.join(" · ")}` : e.nome;
 };
 
-function Cascata({ inicial, entradas, saidas, final }) {
-  const nBarras = entradas.length + saidas.length + 2;
+function Cascata({ inicial, passos: passosRubrica, final }) {
+  const nBarras = passosRubrica.length + 2;
   // O plano de contas de uma SPV chega às trinta rubricas. Com muitas barras,
   // aperta-se o passo e dá-se mais altura aos rótulos, que ficam mais
   // inclinados; o gráfico rola na horizontal em vez de truncar a lista.
@@ -100,12 +106,15 @@ function Cascata({ inicial, entradas, saidas, final }) {
   const folgaEsq = Math.round(maxLetras * (muitas ? 9.5 : 10) * 0.63 * 0.71) + 8;
 
   // Barras: inicial (total), cada entrada (sobe), cada saída (desce), final (total)
+  // Uma barra por rubrica, pelo líquido: sobe se a rubrica trouxe dinheiro,
+  // desce se o levou. O sinal do próprio valor decide, sem blocos à parte.
   const passos = [
     { rotulo: "Saldo inicial", valor: inicial, tipo: "total" },
-    ...entradas.map(e => ({ rotulo: e.nome, valor: e.valor, tipo: "entrada",
-                            foraDoPlano: e.noPlano === false, n: e.n, dica: dicaDe(e) })),
-    ...saidas.map(e => ({ rotulo: e.nome, valor: -Math.abs(e.valor), tipo: "saida",
-                          foraDoPlano: e.noPlano === false, n: e.n, dica: dicaDe(e) })),
+    ...passosRubrica.map(e => ({
+      rotulo: e.nome, valor: e.valor,
+      tipo: e.valor >= 0 ? "entrada" : "saida",
+      foraDoPlano: e.noPlano === false, n: e.n, dica: dicaDe(e),
+    })),
     { rotulo: "Saldo final", valor: final, tipo: "total" },
   ];
 
@@ -209,8 +218,16 @@ function BarrasCentroCusto({ dados }) {
                           textAlign: "right", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
                  title={d.noPlano === false
                    ? `${d.nome} — fora do plano de contas da empresa`
-                   : d.familia && d.inclui?.length > 1
-                     ? `${d.nome} — ${d.inclui.length} rubricas: ${d.inclui.join(", ")}`
+                   : [d.familia && d.inclui?.length > 1
+                        ? `${d.inclui.length} rubricas: ${d.inclui.join(", ")}` : null,
+                      d.bruto
+                        ? `entradas ${fmtEUR0(d.bruto.entrada)} · saídas ${fmtEUR0(Math.abs(d.bruto.saida))}`
+                        : null].filter(Boolean).length
+                     ? `${d.nome} — ${[d.familia && d.inclui?.length > 1
+                          ? `${d.inclui.length} rubricas: ${d.inclui.join(", ")}` : null,
+                        d.bruto
+                          ? `entradas ${fmtEUR0(d.bruto.entrada)} · saídas ${fmtEUR0(Math.abs(d.bruto.saida))}`
+                          : null].filter(Boolean).join(" · ")}`
                      : d.nome}>{d.nome}{d.noPlano === false ? " ⚠" : ""}</div>
             <div style={{ flex: 1, background: COR.fundo, borderRadius: 5, height: 22, position: "relative", overflow: "hidden" }}>
               <div style={{ width: `${pct}%`, height: "100%", background: corCategoria(d.nome, i), borderRadius: 5, transition: "width .3s" }} />
@@ -852,7 +869,7 @@ export default function IRView({ currentUser, empresasVisiveis }) {
   const anteriorPorRubrica = useMemo(() => {
     const p = {};
     agruparPorRubrica(movsAnterior, { empresaId: empSel, agrupar: true }).linhas
-      .forEach(l => { p[l.rubrica] = l.saida; });
+      .forEach(l => { p[l.rubrica] = l.liquido; });
     return p;
   }, [movsAnterior, empSel]);
 
@@ -861,15 +878,17 @@ export default function IRView({ currentUser, empresasVisiveis }) {
   // "Outros" — numa apresentação a investidores, a rubrica que falta é
   // precisamente a que vai ser perguntada.
   const passos = useMemo(() => passosDaCascata(agregado), [agregado]);
-  const entradasCascata = useMemo(() => passos.filter(p => p.valor > 0), [passos]);
-  const saidasCascata = useMemo(() => passos.filter(p => p.valor < 0), [passos]);
 
   // Centros de custo: as mesmas rubricas, só as saídas, pela ordem do plano.
+  // Pelo líquido, como a cascata: uma rubrica que recebeu mais do que gastou
+  // não é um centro de custo, é o contrário.
   const centrosCusto = useMemo(() => agregado.linhas
-    .filter(l => Math.abs(l.saida) > 0.005)
-    .map(l => ({ nome: l.rubrica, atual: l.saida,
+    .filter(l => l.liquido < -0.005)
+    .map(l => ({ nome: l.rubrica, atual: l.liquido,
                  anterior: anteriorPorRubrica[l.rubrica] || 0, noPlano: l.noPlano,
-                 familia: l.familia, inclui: l.inclui })),
+                 familia: l.familia, inclui: l.inclui,
+                 bruto: (Math.abs(l.entrada) > 0.005 && Math.abs(l.saida) > 0.005)
+                   ? { entrada: l.entrada, saida: l.saida } : null })),
     [agregado, anteriorPorRubrica]);
 
   // Evolução mensal do saldo consolidado
@@ -1011,7 +1030,7 @@ export default function IRView({ currentUser, empresasVisiveis }) {
   // compara-se com o acumulado desde o início do projeto; o filtro de datas
   // serve os gráficos.
   const dadosOrcado = useDadosRealOrcado(empSel, empresas);
-  const podeEditarOrcado = currentUser?.role === "admin" || currentUser?.role === "gestor";
+  const podeMexerNoOrcado = podeEditarOrcado(currentUser);
 
   // ─── Timeline ─────────────────────────────────────────────────────────────
   const empresaTimeline = empSel;
@@ -1103,7 +1122,7 @@ export default function IRView({ currentUser, empresasVisiveis }) {
               subtitulo={`${fmtData(de)} a ${fmtData(ate)} · ${fmtInt(movimentos.length)} movimentos`}>
           {movimentos.length === 0
             ? <Vazio texto="Sem movimentos no período selecionado." />
-            : <Cascata inicial={saldoInicial} entradas={entradasCascata} saidas={saidasCascata}
+            : <Cascata inicial={saldoInicial} passos={passos}
                        final={saldoInicial + resultado} />}
           {agregado.nExcluidos > 0 && (
             <div style={{ fontSize: 10.5, color: "#9DA2A6", marginTop: 10, textAlign: "right" }}>
@@ -1126,7 +1145,7 @@ export default function IRView({ currentUser, empresasVisiveis }) {
 
       {seccao === "custos" && (
         <Card titulo="Centros de custo"
-              subtitulo={`Saídas pelas rubricas da empresa · variação face ao período anterior (${fmtData(periodoAnterior.de)} a ${fmtData(periodoAnterior.ate)})`}>
+              subtitulo={`Custo líquido por rubrica · variação face ao período anterior (${fmtData(periodoAnterior.de)} a ${fmtData(periodoAnterior.ate)})`}>
           <BarrasCentroCusto dados={centrosCusto} />
         </Card>
       )}
@@ -1138,7 +1157,7 @@ export default function IRView({ currentUser, empresasVisiveis }) {
             empresaId={empSel} nomeEmpresa={empresaAtiva?.nome}
             movimentos={dadosOrcado.movimentos} faturas={dadosOrcado.faturas}
             pagamentos={dadosOrcado.pagamentos} recorrentes={dadosOrcado.recorrentes}
-            orcamento={dadosOrcado.orcamento} podeEditar={podeEditarOrcado}
+            orcamento={dadosOrcado.orcamento} podeEditar={podeMexerNoOrcado}
             onGravarOrcado={dadosOrcado.upsertOrcamento}
             loading={dadosOrcado.loading} hoje={dadosOrcado.hoje} />
         </Card>

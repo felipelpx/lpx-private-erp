@@ -30,6 +30,7 @@ const DEF = [
   { id: "adseq",     nome: "Admirable Sequence", projeto: "Cinq Etoiles",        grupo: "HDG", bancos: ["BCP", "RED"] },
   { id: "infinite",  nome: "Infinite Change",    projeto: "Paço D'arcos",        grupo: "HDG", bancos: ["BCP", "RED"] },
   { id: "tracos",    nome: "Traços e Angulos, Lda", projeto: "soc. Farmaceutica", grupo: "HDG", bancos: ["BCP"] },
+  { id: "offtopic",  nome: "Off Topic, Lda",     projeto: "",                    grupo: "LPX", bancos: ["BCP"] },
   { id: "lpx",       nome: "LPX Private",        projeto: "Holding",             grupo: "LPX", bancos: ["BCP", "Revolut", "CGD"] },
 ];
 
@@ -60,7 +61,7 @@ export const agruparPorGrupo = (empresas) =>
 // Saldos a zero — a app passa a ler o saldo real do último movimento importado.
 export const EMPRESAS = DEF.map((e) => ({
   id: e.id,
-  nome: `${e.nome} (${e.projeto})`,  // apresentado na UI
+  nome: nomeCompleto(e),             // apresentado na UI (sem parênteses vazios)
   razaoSocial: e.nome,               // razão social isolada
   grupo: e.grupo,
   nipc: "",
@@ -78,12 +79,12 @@ export const EMPRESAS = DEF.map((e) => ({
 export const EMPRESAS_IMPORT = DEF.map((e) => ({
   id: e.id,
   grupo: e.grupo,
-  nome: `${e.nome} (${e.projeto})`,
+  nome: nomeCompleto(e),
   contas: e.bancos,
 }));
 
 // Forma simples (id + nome) usada pelo ecrã "Importar Fatura".
-export const EMPRESAS_SIMPLE = DEF.map((e) => ({ id: e.id, grupo: e.grupo, nome: `${e.nome} (${e.projeto})` }));
+export const EMPRESAS_SIMPLE = DEF.map((e) => ({ id: e.id, grupo: e.grupo, nome: nomeCompleto(e) }));
 
 // Lista de projetos (usada nos filtros de Fotos e Comercial)
 export const PROJETOS = DEF.map((e) => ({ id: e.id, projeto: e.projeto, empresa: e.nome, grupo: e.grupo }));

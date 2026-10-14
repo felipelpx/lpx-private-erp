@@ -3,6 +3,7 @@ import { EMPRESAS, agruparPorGrupo } from "./empresas.js";
 import { useMovimentosPeriodo, usePagamentosExtras, useFaturas,
          useOrcamento, useDespesasRecorrentes } from "./hooks.js";
 import RealOrcadoTabela from "./RealOrcadoTabela.jsx";
+import { podeEditarOrcado } from "./realOrcado.js";
 import { COR, RAIO } from "./brand.js";
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -40,7 +41,7 @@ export default function RealOrcadoView({ empresasVisiveis, currentUser }) {
   const empresas = Array.isArray(empresasVisiveis) ? empresasVisiveis : EMPRESAS;
   const [empSel, setEmpSel] = useState(empresas[0]?.id || "");
   const d = useDadosRealOrcado(empSel, empresas);
-  const podeEditar = currentUser?.role === "admin" || currentUser?.role === "gestor";
+  const podeEditar = podeEditarOrcado(currentUser);
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>

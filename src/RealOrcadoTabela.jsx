@@ -1,7 +1,8 @@
 import React, { useState, useMemo, useEffect, useRef } from "react";
 import { fmtEUR0 } from "./formato.js";
 import { COR, RAIO } from "./brand.js";
-import { calcularRealOrcado, semearDoModelo, id_orcamento } from "./realOrcado.js";
+import { calcularRealOrcado, semearDoModelo, id_orcamento,
+         DONOS_DO_ORCAMENTO } from "./realOrcado.js";
 import { MODELO_REAL_ORCADO } from "./modeloRealOrcado.js";
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -33,40 +34,96 @@ const td = { padding: "6px 12px", fontSize: 12, color: COR.texto, textAlign: "ri
              fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap" };
 
 // ─── A célula do orçado, que grava sozinha ───────────────────────────────────
-function Orcado({ valor, onGravar, podeEditar }) {
-  const [v, setV] = useState(valor ? String(valor) : "");
+// Escrever e ler números: duas coisas diferentes.
+//
+// Enquanto se escreve, a caixa deixa escrever à vontade — "1 277 293,96",
+// "1277293.96" ou "1.277.293,96" dão todos o mesmo. Fora da caixa, mostra-se
+// formatado à portuguesa, com milhares e dois decimais quando os há. A coluna
+// crua, com "1277293.96" ao lado de "3.653.080 €", não se lia.
+const paraNumero = (t) => {
+  const s = String(t ?? "").trim().replace(/[€\s\u00a0]/g, "");
+  if (!s) return 0;
+  // Último separador manda: em "1.277.293,96" é a vírgula, em "1,277,293.96"
+  // é o ponto. O que vier antes dele são milhares e deita-se fora.
+  const ultimaVirgula = s.lastIndexOf(","), ultimoPonto = s.lastIndexOf(".");
+  let limpo = s;
+  if (ultimaVirgula >= 0 || ultimoPonto >= 0) {
+    const corte = Math.max(ultimaVirgula, ultimoPonto);
+    const decimais = s.slice(corte + 1);
+    // Três algarismos depois do separador e sem outro separador antes: é um
+    // separador de milhares, não um decimal ("3.653" são três mil).
+    const ehMilhar = /^\d{3}$/.test(decimais) &&
+                     s.slice(0, corte).replace(/[.,]/g, "").length > 0 &&
+                     !(ultimaVirgula >= 0 && ultimoPonto >= 0 && corte === ultimaVirgula);
+    limpo = ehMilhar
+      ? s.replace(/[.,]/g, "")
+      : s.slice(0, corte).replace(/[.,]/g, "") + "." + decimais;
+  }
+  const n = Number(limpo);
+  return Number.isFinite(n) ? n : 0;
+};
+
+const paraTexto = (n) => {
+  const v = Math.abs(num(n));
+  if (!(v > 0.005)) return "";
+  return v.toLocaleString("pt-PT", { minimumFractionDigits: 0, maximumFractionDigits: 2 });
+};
+
+function Orcado({ valor, onGravar, podeEditar, rubrica, quemPode }) {
+  const [v, setV] = useState(paraTexto(valor));
+  const [aEscrever, setAEscrever] = useState(false);
   const [estado, setEstado] = useState("");
-  const ultimo = useRef(valor || 0);
+  const ultimo = useRef(num(valor));
 
   useEffect(() => {
     if (num(valor) !== num(ultimo.current)) {
-      setV(valor ? String(valor) : ""); ultimo.current = valor || 0;
+      ultimo.current = num(valor);
+      if (!aEscrever) setV(paraTexto(valor));
     }
-  }, [valor]);
+  }, [valor, aEscrever]);
 
   const gravar = async () => {
-    const novo = Math.abs(num(v));
+    setAEscrever(false);
+    const novo = Math.abs(paraNumero(v));
+    setV(paraTexto(novo));
     if (Math.abs(novo - num(ultimo.current)) < 0.005) return;
     setEstado("gravando");
     const r = await onGravar(novo);
-    if (r?.error) { setEstado("erro"); setV(String(ultimo.current || "")); }
+    if (r?.error) { setEstado("erro"); setV(paraTexto(ultimo.current)); }
     else { ultimo.current = novo; setEstado("ok"); setTimeout(() => setEstado(""), 1200); }
   };
 
   if (!podeEditar) {
-    return <span style={{ fontVariantNumeric: "tabular-nums" }}>
-      {num(valor) > 0.005 ? fmtEUR0(valor) : "—"}</span>;
+    return (
+      <span title={num(valor) > 0.005
+        ? `Orçado de ${rubrica} — só ${quemPode} pode alterar`
+        : `Sem orçamento escrito — só ${quemPode} o pode escrever`}
+        style={{ fontVariantNumeric: "tabular-nums",
+                 color: num(valor) > 0.005 ? COR.texto : COR.textoApagado }}>
+        {num(valor) > 0.005 ? fmtEUR0(valor) : "—"}
+      </span>
+    );
   }
-  const borda = estado === "erro" ? COR.negativo : estado === "ok" ? COR.positivo : COR.linha;
+
+  const borda = estado === "erro" ? COR.negativo : estado === "ok" ? COR.positivo
+              : aEscrever ? COR.ouro : COR.linha;
   return (
-    <input value={v} onChange={e => setV(e.target.value)} onBlur={gravar}
-      onKeyDown={e => { if (e.key === "Enter") e.target.blur(); }}
-      inputMode="decimal" placeholder="—"
-      style={{ width: 104, boxSizing: "border-box", textAlign: "right",
-               background: estado === "gravando" ? COR.fundoSuave : COR.papel,
-               border: `1px solid ${borda}`, borderRadius: 5, padding: "4px 7px",
-               fontSize: 11.5, outline: "none", color: COR.texto,
-               fontVariantNumeric: "tabular-nums" }} />
+    <span style={{ display: "inline-flex", alignItems: "center", gap: 4,
+                   justifyContent: "flex-end" }}>
+      <input value={v}
+        onFocus={(e) => { setAEscrever(true); e.target.select(); }}
+        onChange={e => setV(e.target.value)} onBlur={gravar}
+        onKeyDown={e => { if (e.key === "Enter") e.target.blur();
+                          if (e.key === "Escape") { setV(paraTexto(ultimo.current)); e.target.blur(); } }}
+        inputMode="decimal" placeholder="—"
+        title={`Orçado de ${rubrica}`}
+        style={{ width: 112, boxSizing: "border-box", textAlign: "right",
+                 background: estado === "gravando" ? COR.fundoSuave : COR.papel,
+                 border: `1px solid ${borda}`, borderRadius: 5, padding: "4px 7px",
+                 fontSize: 11.5, outline: "none", color: COR.texto,
+                 fontVariantNumeric: "tabular-nums" }} />
+      <span style={{ fontSize: 10.5, color: num(valor) > 0.005 ? COR.textoTenue : "transparent" }}>€</span>
+    </span>
   );
 }
 
@@ -82,6 +139,8 @@ export default function RealOrcadoTabela({
   const [verCapital, setVerCapital] = useState(false);
   const [aSemear, setASemear] = useState(false);
   const [erro, setErro] = useState("");
+
+  const quemPode = DONOS_DO_ORCAMENTO.join(" ou ");
 
   const r = useMemo(() => calcularRealOrcado({
     empresaId, movimentos, faturas, pagamentos, recorrentes, orcamento, hoje,
@@ -145,6 +204,7 @@ export default function RealOrcadoTabela({
             {l.rubrica}{l.noPlano ? "" : " ⚠"}
           </td>
           <td style={td}><Orcado valor={l.orcado} podeEditar={podeEditar}
+                                 rubrica={l.rubrica} quemPode={quemPode}
                                  onGravar={gravar(l.rubrica)} /></td>
           <td style={{ ...td, color: COR.textoSuave }}>
             {l.detalhe.nMovimentos ? fmtEUR0(l.realAbs) : "—"}
@@ -216,7 +276,16 @@ export default function RealOrcadoTabela({
         )}
       </div>
 
-      {r.nOrcadas === 0 && (
+      {!podeEditar && (
+        <div style={{ background: COR.fundoSuave, border: `1px solid ${COR.linha}`,
+                      borderRadius: 9, padding: "9px 13px", fontSize: 11.5,
+                      color: COR.textoSuave, marginBottom: 12, lineHeight: 1.6 }}>
+          O <strong>Orçado</strong> é só de leitura: o orçamento é o compromisso com os
+          investidores e muda-se numa revisão, não no dia a dia. Quem o pode alterar:{" "}
+          {quemPode}.
+        </div>
+      )}
+      {podeEditar && r.nOrcadas === 0 && (
         <div style={{ background: COR.alertaFundo, border: `1px solid ${COR.alertaLinha}`,
                       borderRadius: 9, padding: "10px 13px", fontSize: 11.5,
                       color: COR.alertaForte, marginBottom: 12, lineHeight: 1.6 }}>
