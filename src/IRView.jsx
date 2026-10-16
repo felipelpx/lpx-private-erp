@@ -587,155 +587,6 @@ function Predinho({ fracoes }) {
 // Desenho sóbrio, de relatório: duas cores só, e os valores numa tabela
 // alinhada por baixo do eixo em vez de espalhados pelo gráfico. Assim lê-se
 // cada número por inteiro (sem "k") e a área do gráfico fica limpa.
-const COR_FLUXO = {
-  entradas: "#2C4A63",   // azul ardósia da marca
-  saidas:   "#97a0ae",   // cinzento-azulado: o sinal já é dado pelo lado do eixo
-  saldo:    "#091C2A",
-  negativo: "#96702A",
-};
-
-export function BarrasFluxoFuturo({ meses, saldoArranque }) {
-  if (!meses.length) return <Vazio texto="Sem entradas nem saídas previstas. Lança previsões no Fluxo Futuro ou faturas com previsão de pagamento." />;
-
-  const LINHAS = [
-    { rotulo: "Entradas",       valor: (m) => m.entradas },
-    { rotulo: "Saídas",         valor: (m) => -Math.abs(m.saidas) },
-    { rotulo: "Fluxo do mês",   valor: (m) => m.entradas - Math.abs(m.saidas), forte: true },
-    { rotulo: "Saldo em caixa", valor: (m, i) => null, forte: true },   // preenchido abaixo
-  ];
-
-  const max = Math.max(...meses.flatMap(m => [m.entradas, Math.abs(m.saidas)]), 1);
-
-  // Saldo acumulado projetado
-  let acc = saldoArranque;
-  const saldos = meses.map(m => { acc += m.entradas + m.saidas; return acc; });
-
-  // A largura da coluna sai do maior número que lá tem de caber — não de um
-  // palpite. Números pequenos não desperdiçam largura; grandes não se tocam.
-  const TAM = 11.5;
-  const maiorTexto = Math.max(
-    ...meses.flatMap((m, i) => [m.entradas, -Math.abs(m.saidas),
-                                m.entradas - Math.abs(m.saidas), saldos[i]])
-            .map(v => fmtNum(v, 0).length),
-    ...meses.map(m => String(m.rotulo).length), 8);
-  const COL = Math.max(92, Math.round(maiorTexto * TAM * 0.62) + 34);
-  const ROTULOS = 112, FOLGA_DIR = 20;
-  const L = Math.max(940, ROTULOS + meses.length * COL + FOLGA_DIR);
-  const ALT_PLOT = 230, TOPO = 24;
-  const LINHA = 24, CABECALHO = 30;
-  const A = TOPO + ALT_PLOT + CABECALHO + LINHAS.length * LINHA + 8;
-
-  const passo = COL;
-  const x0 = ROTULOS;
-  const lb = 26;
-  const zero = TOPO + ALT_PLOT / 2;
-  const h = (v) => (Math.abs(v) / max) * (ALT_PLOT / 2 - 14);
-
-  const maxSaldo = Math.max(...saldos.map(Math.abs), 1);
-  const ySaldo = (v) => zero - (v / maxSaldo) * (ALT_PLOT / 2 - 14) * 0.92;
-
-  const cxDe = (i) => x0 + passo * i + passo / 2;
-  const baseTabela = TOPO + ALT_PLOT + CABECALHO;
-
-  return (
-    <div style={{ overflowX: "auto" }}>
-      <svg viewBox={`0 0 ${L} ${A}`} width={L} height={A} style={{ minWidth: "100%", height: "auto", display: "block" }}>
-        {/* Grelha discreta */}
-        {[1, -1].map(sinal => (
-          <line key={sinal} x1={x0 - 8} y1={zero - sinal * h(max)} x2={L - 12} y2={zero - sinal * h(max)}
-                stroke={COR.grelha} strokeWidth="1" />
-        ))}
-        <line x1={x0 - 8} y1={zero} x2={L - 12} y2={zero} stroke="#c8ccd4" strokeWidth="1" />
-        <text x={x0 - 14} y={zero - h(max) + 4} textAnchor="end" fontSize="10.5" fontFamily="monospace" fill="#B2B6B9">{fmtNum(max, 0)}</text>
-        <text x={x0 - 14} y={zero + 4} textAnchor="end" fontSize="10.5" fontFamily="monospace" fill="#B2B6B9">0</text>
-        <text x={x0 - 14} y={zero + h(max) + 4} textAnchor="end" fontSize="10.5" fontFamily="monospace" fill="#B2B6B9">−{fmtNum(max, 0)}</text>
-
-        {/* Barras */}
-        {meses.map((m, i) => {
-          const cx = cxDe(i);
-          return (
-            <g key={i}>
-              {m.entradas > 0 && (
-                <rect x={cx - lb - 2} y={zero - h(m.entradas)} width={lb} height={Math.max(2, h(m.entradas))}
-                      fill={COR_FLUXO.entradas} rx="1">
-                  <title>{`${m.rotulo} — entradas: ${fmtEUR(m.entradas)}`}</title>
-                </rect>
-              )}
-              {Math.abs(m.saidas) > 0 && (
-                <rect x={cx + 2} y={zero} width={lb} height={Math.max(2, h(m.saidas))}
-                      fill={COR_FLUXO.saidas} rx="1">
-                  <title>{`${m.rotulo} — saídas: ${fmtEUR(m.saidas)}`}</title>
-                </rect>
-              )}
-            </g>
-          );
-        })}
-
-        {/* Saldo acumulado */}
-        <path d={saldos.map((v, i) => `${i === 0 ? "M" : "L"} ${cxDe(i)} ${ySaldo(v)}`).join(" ")}
-              fill="none" stroke={COR_FLUXO.saldo} strokeWidth="1.6" strokeLinejoin="round" />
-        {saldos.map((v, i) => (
-          <circle key={i} cx={cxDe(i)} cy={ySaldo(v)} r="2.8"
-                  fill="#fff" stroke={v < 0 ? COR_FLUXO.negativo : COR_FLUXO.saldo} strokeWidth="1.6">
-            <title>{`${meses[i].rotulo} — saldo em caixa: ${fmtEUR(v)}`}</title>
-          </circle>
-        ))}
-
-        {/* ── Tabela de valores ────────────────────────────────────────────── */}
-        <line x1={4} y1={baseTabela - 22} x2={L - 12} y2={baseTabela - 22} stroke="#e6e8ee" strokeWidth="1" />
-        {meses.map((m, i) => (
-          <text key={i} x={cxDe(i) + passo / 2 - 10} y={baseTabela - 8} textAnchor="end"
-                fontSize="11.5" fontWeight="700" fontFamily="monospace" fill={COR.tinta}>
-            {m.rotulo}
-          </text>
-        ))}
-        <text x={6} y={baseTabela - 8} fontSize="10" fontFamily="monospace" fill="#B2B6B9"
-              letterSpacing="0.06em">VALORES EM €</text>
-
-        {LINHAS.map((linha, li) => {
-          const y = baseTabela + li * LINHA + 16;
-          return (
-            <g key={linha.rotulo}>
-              {li % 2 === 1 && (
-                <rect x={4} y={y - 16} width={L - 16} height={LINHA} fill="#F9F4EC" />
-              )}
-              <text x={6} y={y} fontSize="11" fill={linha.forte ? COR.tinta : "#6E7378"}
-                    fontWeight={linha.forte ? 700 : 400}>
-                {linha.rotulo}
-              </text>
-              {meses.map((m, i) => {
-                const v = linha.rotulo === "Saldo em caixa" ? saldos[i] : linha.valor(m, i);
-                const alerta = linha.forte && v < -0.005;
-                return (
-                  <text key={i} x={cxDe(i) + passo / 2 - 10} y={y} textAnchor="end"
-                        fontSize="11.5" fontFamily="monospace"
-                        fontWeight={linha.forte ? 700 : 400}
-                        fill={alerta ? COR_FLUXO.negativo : linha.forte ? COR.tinta : "#5c6370"}>
-                    {v === 0 ? "—" : fmtNum(v, 0)}
-                  </text>
-                );
-              })}
-            </g>
-          );
-        })}
-        <line x1={4} y1={baseTabela + 2 * LINHA} x2={L - 12} y2={baseTabela + 2 * LINHA}
-              stroke="#e6e8ee" strokeWidth="1" />
-      </svg>
-
-      <div style={{ display: "flex", gap: 20, justifyContent: "center", marginTop: 10, flexWrap: "wrap" }}>
-        {[["Entradas previstas", COR_FLUXO.entradas], ["Saídas previstas", COR_FLUXO.saidas]].map(([t, c]) => (
-          <span key={t} style={{ fontSize: 10.5, color: COR.texto }}>
-            <span style={{ display: "inline-block", width: 10, height: 10, background: c, borderRadius: 2, marginRight: 6 }} />{t}
-          </span>
-        ))}
-        <span style={{ fontSize: 10.5, color: COR.texto }}>
-          <span style={{ display: "inline-block", width: 16, height: 0, borderTop: `2px solid ${COR_FLUXO.saldo}`, marginRight: 6, verticalAlign: "middle" }} />
-          Saldo em caixa acumulado
-        </span>
-      </div>
-    </div>
-  );
-}
 
 // ─── TIMELINE DO BUSINESS PLAN ───────────────────────────────────────────────
 function Timeline({ cronograma, projeto }) {
@@ -1025,21 +876,14 @@ export default function IRView({ currentUser, empresasVisiveis }) {
       const k = String(data || "").slice(0, 7);
       if (!k || k.length !== 7) return;
       if (!Number(valor)) return;   // despesa sem funding não abre mês nenhum
-      if (!porMes[k]) porMes[k] = { entradas: 0, saidas: 0, itens: 0,
-                                    entradasOp: 0, saidasOp: 0, itensOp: 0, items: [] };
+      if (!porMes[k]) porMes[k] = { entradas: 0, saidas: 0, itens: 0, items: [] };
       const m = porMes[k];
       if (tipo === "entrada") m.entradas += Math.abs(valor);
       else m.saidas -= Math.abs(valor);
       m.itens++;
+      // `escritura` fica no lançamento: a venda e a amortização são um
+      // acontecimento único e enorme, e há-de haver quem queira lê-los à parte.
       if (linha) m.items.push({ ...linha, tipo, valor: Math.abs(valor), escritura });
-      // A segunda leitura, sem a escritura: a venda e o pagamento ao banco
-      // são um acontecimento único e enorme, e esmagam a escala de tudo o
-      // resto. Vistos à parte, lê-se a operação mês a mês.
-      if (!escritura) {
-        if (tipo === "entrada") m.entradasOp += Math.abs(valor);
-        else m.saidasOp -= Math.abs(valor);
-        m.itensOp++;
-      }
     };
 
     // O que conta como escritura: a venda e a amortização da dívida, venham
@@ -1108,9 +952,10 @@ export default function IRView({ currentUser, empresasVisiveis }) {
   // não se mexe em nada (ver src/MatrizFluxo.jsx). Só os meses por vir: o que
   // já passou está no fluxo de caixa realizado, logo acima.
   const [mesesMatriz, setMesesMatriz] = useState(6);
+  const mesesPorVir = useMemo(() => futuro.filter(m => !m.passado), [futuro]);
   const matrizFuturo = useMemo(() => construirMatriz({
-    meses: futuro.filter(m => !m.passado), maxMeses: mesesMatriz,
-  }), [futuro, mesesMatriz]);
+    meses: mesesPorVir, maxMeses: mesesMatriz,
+  }), [mesesPorVir, mesesMatriz]);
 
   const saldoHoje = useMemo(
     () => empresasAtivas.reduce((s, e) => s + e.contas.reduce((t, c) => t + (Number(c.saldo) || 0), 0), 0),
@@ -1118,13 +963,6 @@ export default function IRView({ currentUser, empresasVisiveis }) {
   );
   const totalPrevEntradas = futuro.reduce((s, m) => s + m.entradas, 0);
   const totalPrevSaidas = futuro.reduce((s, m) => s + m.saidas, 0);
-
-  // A mesma lista, vista sem a escritura: só os meses que ainda têm alguma
-  // coisa depois de tirar a venda e a amortização.
-  const futuroOperacao = useMemo(() => futuro
-    .map(m => ({ ...m, entradas: m.entradasOp, saidas: m.saidasOp, itens: m.itensOp }))
-    .filter(m => m.itens > 0), [futuro]);
-  const temEscrituraNoFluxo = futuro.some(m => m.itens !== m.itensOp);
 
   // ─── Real × Orçado ────────────────────────────────────────────────────────
   // Exatamente a mesma tabela do separador próprio, com os mesmos dados: dois
@@ -1269,35 +1107,13 @@ export default function IRView({ currentUser, empresasVisiveis }) {
       )}
 
       {seccao === "futuro" && (
-        <>
-          <Card titulo="Fluxo futuro — tudo, incluindo a escritura"
-                subtitulo={`Previsões e faturas por liquidar · entradas ${fmtEUR0(totalPrevEntradas)} · saídas ${fmtEUR0(Math.abs(totalPrevSaidas))} · saldo de partida ${fmtEUR0(saldoHoje)}`}>
-            <BarrasFluxoFuturo meses={futuro} saldoArranque={saldoHoje} />
-          </Card>
-
-          {/* A venda e o pagamento ao banco são um acontecimento único e
-              enorme: na mesma escala, achatam tudo o resto a uma linha. O
-              segundo gráfico tira-os, para se ver a operação mês a mês. */}
-          {temEscrituraNoFluxo && (
-            <Card titulo="Fluxo futuro — a operação, sem vendas nem amortização"
-                  subtitulo={`O mesmo período sem a escritura · entradas ${fmtEUR0(futuroOperacao.reduce((s, m) => s + m.entradas, 0))} · saídas ${fmtEUR0(Math.abs(futuroOperacao.reduce((s, m) => s + m.saidas, 0)))}`}>
-              <BarrasFluxoFuturo meses={futuroOperacao} saldoArranque={saldoHoje} />
-            </Card>
-          )}
-          {!temEscrituraNoFluxo && (
-            <div style={{ fontSize: 11, color: "#9DA2A6", textAlign: "center", padding: "4px 0" }}>
-              Não há vendas nem amortização no fluxo deste projeto — o segundo gráfico,
-              sem elas, seria igual a este.
-            </div>
-          )}
-
-          {/* A mesma grelha que a equipa vê no Fluxo Futuro, sem edição. */}
-          <Card titulo="Despesas × meses"
-                subtitulo={`${matrizFuturo.nLinhas} ${matrizFuturo.nLinhas === 1 ? "despesa" : "despesas"} · ${matrizFuturo.colunas.length} ${matrizFuturo.colunas.length === 1 ? "mês" : "meses"} · a mesma vista do Fluxo Futuro, só de leitura`}>
-            <MatrizFluxo matriz={matrizFuturo} isAdmin={false} acoes={{}}
-              nMeses={mesesMatriz} onNMeses={setMesesMatriz} />
-          </Card>
-        </>
+        <Card titulo="Fluxo futuro"
+              subtitulo={`${matrizFuturo.nLinhas} ${matrizFuturo.nLinhas === 1 ? "despesa" : "despesas"} · entradas ${fmtEUR0(totalPrevEntradas)} · saídas ${fmtEUR0(Math.abs(totalPrevSaidas))} · saldo de partida ${fmtEUR0(saldoHoje)}`}>
+          {/* Exatamente a grelha que a equipa vê no Fluxo Futuro do ERP, com os
+              mesmos lançamentos — aqui sem um único botão de edição. */}
+          <MatrizFluxo matriz={matrizFuturo} isAdmin={false} acoes={{}}
+            nMeses={mesesMatriz} onNMeses={setMesesMatriz} />
+        </Card>
       )}
 
       {seccao === "custos" && (
