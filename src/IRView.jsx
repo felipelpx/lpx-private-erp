@@ -3,12 +3,14 @@ import { EMPRESAS, agruparPorGrupo, GRUPOS_INFO } from "./empresas.js";
 import { useMovimentosPeriodo, useFracoes, useVendas, useSaldosNaData, usePagamentosExtras, useFaturas, useOrcamento, useRecebiveis, useObraPlanos } from "./hooks.js";
 import { CRONOGRAMAS, ESTADO_MARCO, TIR_PROJETO } from "./cronogramas.js";
 import { cronogramaVivo } from "./cronograma.js";
+import { construirMatriz } from "./matriz.js";
+import MatrizFluxo from "./MatrizFluxo.jsx";
 import { obraRealizada, classificacaoDe } from "./obra.js";
 import RealOrcadoTabela from "./RealOrcadoTabela.jsx";
 import { useDadosRealOrcado } from "./RealOrcadoView.jsx";
 import { podeEditarOrcado } from "./realOrcado.js";
 import { statusFatura, faturaPaga } from "./status.js";
-import { valorFunding, temFunding } from "./funding.js";
+import { valorFunding, temFunding, CATEGORIA_FUNDING } from "./funding.js";
 import { agruparPorRubrica, passosDaCascata, chaveRubrica } from "./rubricas.js";
 import { linhasDeFluxo as linhasDeVendas, soReceita, contaDaVenda } from "./vendas.js";
 import { larguraGrafico, colocarRotulos } from "./rotulos.js";
@@ -1017,16 +1019,19 @@ export default function IRView({ currentUser, empresasVisiveis }) {
   const futuro = useMemo(() => {
     const hojeISO = new Date().toISOString().slice(0, 10);
     const porMes = {};
-    const junta = (data, valor, tipo, escritura = false) => {
+    // Além dos totais, guarda-se cada lançamento: é deles que sai a matriz
+    // despesas × meses, a mesma que a equipa vê no Fluxo Futuro.
+    const junta = (data, valor, tipo, escritura = false, linha = null) => {
       const k = String(data || "").slice(0, 7);
       if (!k || k.length !== 7) return;
       if (!Number(valor)) return;   // despesa sem funding não abre mês nenhum
       if (!porMes[k]) porMes[k] = { entradas: 0, saidas: 0, itens: 0,
-                                    entradasOp: 0, saidasOp: 0, itensOp: 0 };
+                                    entradasOp: 0, saidasOp: 0, itensOp: 0, items: [] };
       const m = porMes[k];
       if (tipo === "entrada") m.entradas += Math.abs(valor);
       else m.saidas -= Math.abs(valor);
       m.itens++;
+      if (linha) m.items.push({ ...linha, tipo, valor: Math.abs(valor), escritura });
       // A segunda leitura, sem a escritura: a venda e o pagamento ao banco
       // são um acontecimento único e enorme, e esmagam a escala de tudo o
       // resto. Vistos à parte, lê-se a operação mês a mês.
@@ -1055,8 +1060,10 @@ export default function IRView({ currentUser, empresasVisiveis }) {
       .forEach(p => {
         const ehEntrada = p.tipo === "entrada";
         const esc = ehEscritura(p);
-        junta(p.data_inicio, Number(p.valor) || 0, ehEntrada ? "entrada" : "saida", esc);
-        if (!ehEntrada) junta(p.data_inicio, valorFunding(p, p.valor), "entrada", esc);
+        junta(p.data_inicio, Number(p.valor) || 0, ehEntrada ? "entrada" : "saida", esc,
+              { desc: p.descricao, cat: p.categoria, origem: "Previsão" });
+        if (!ehEntrada) junta(p.data_inicio, valorFunding(p, p.valor), "entrada", esc,
+              { desc: `Funding banco — ${p.descricao}`, cat: CATEGORIA_FUNDING, origem: "Banco" });
       });
 
     (faturas || [])
@@ -1065,15 +1072,19 @@ export default function IRView({ currentUser, empresasVisiveis }) {
       .forEach(f => {
         const data = f.previsao_pagamento || f.vencimento;
         const esc = ehEscritura(f);
-        junta(data, Number(f.valor) || 0, "saida", esc);
-        junta(data, valorFunding(f, f.valor), "entrada", esc);
+        junta(data, Number(f.valor) || 0, "saida", esc,
+              { desc: f.fornecedor || f.fatura, cat: f.categoria, origem: "Fatura" });
+        junta(data, valorFunding(f, f.valor), "entrada", esc,
+              { desc: `Funding banco — ${f.fornecedor || f.fatura}`, cat: CATEGORIA_FUNDING, origem: "Banco" });
       });
 
     // Entradas: carteira de Contas a Receber (só o que ainda está previsto)
     soReceita(recebiveis)
       .filter(r => idsAtivos.includes(r.empresa))
       .filter(r => (r.status || "Previsto") === "Previsto")
-      .forEach(r => junta(r.data_prevista, Number(r.valor) || 0, "entrada", true));
+      .forEach(r => junta(r.data_prevista, Number(r.valor) || 0, "entrada", true,
+        { desc: r.descricao || r.cliente || "Recebível", cat: r.categoria || "Vendas",
+          origem: "Contas a Receber" }));
 
     // As vendas: sinal, reforços, escritura e a comissão do mediador — tudo
     // pelo mesmo motor do Fluxo Futuro (src/vendas.js). Só a escritura e a
@@ -1082,14 +1093,24 @@ export default function IRView({ currentUser, empresasVisiveis }) {
     linhasDeVendas({ vendas, fracoes }).forEach(l => {
       const v = (vendas || []).find(x => x.id === l.vendaId);
       if (!empresasAtivas.some(e => e.nome === v?.projeto || e.projeto === v?.projeto)) return;
-      junta(l.data, l.valor, l.tipo, l.origem !== "Sinal / reforço");
+      junta(l.data, l.valor, l.tipo, l.origem !== "Sinal / reforço",
+            { desc: l.descricao, cat: l.categoria, origem: l.origem });
     });
 
     return Object.keys(porMes).sort().map(k => {
       const [a, mm] = k.split("-");
-      return { key: k, rotulo: `${mm}/${a.slice(2)}`, ...porMes[k], passado: k < hojeISO.slice(0, 7) };
+      return { key: k, rotulo: `${mm}/${a.slice(2)}`, label: `${mm}/${a.slice(2)}`,
+               ...porMes[k], passado: k < hojeISO.slice(0, 7) };
     });
   }, [pagamentosExtras, faturas, vendas, recebiveis, idsAtivos, empresasAtivas]);
+
+  // A mesma matriz do Fluxo Futuro, com os mesmos lançamentos — só que aqui
+  // não se mexe em nada (ver src/MatrizFluxo.jsx). Só os meses por vir: o que
+  // já passou está no fluxo de caixa realizado, logo acima.
+  const [mesesMatriz, setMesesMatriz] = useState(6);
+  const matrizFuturo = useMemo(() => construirMatriz({
+    meses: futuro.filter(m => !m.passado), maxMeses: mesesMatriz,
+  }), [futuro, mesesMatriz]);
 
   const saldoHoje = useMemo(
     () => empresasAtivas.reduce((s, e) => s + e.contas.reduce((t, c) => t + (Number(c.saldo) || 0), 0), 0),
@@ -1269,6 +1290,13 @@ export default function IRView({ currentUser, empresasVisiveis }) {
               sem elas, seria igual a este.
             </div>
           )}
+
+          {/* A mesma grelha que a equipa vê no Fluxo Futuro, sem edição. */}
+          <Card titulo="Despesas × meses"
+                subtitulo={`${matrizFuturo.nLinhas} ${matrizFuturo.nLinhas === 1 ? "despesa" : "despesas"} · ${matrizFuturo.colunas.length} ${matrizFuturo.colunas.length === 1 ? "mês" : "meses"} · a mesma vista do Fluxo Futuro, só de leitura`}>
+            <MatrizFluxo matriz={matrizFuturo} isAdmin={false} acoes={{}}
+              nMeses={mesesMatriz} onNMeses={setMesesMatriz} />
+          </Card>
         </>
       )}
 
