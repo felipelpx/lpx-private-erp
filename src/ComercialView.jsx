@@ -336,6 +336,83 @@ const LinhaConta = ({ k, v, forte }) => (
   </div>
 );
 
+// ─── COMISSÃO EM BLOCO ─────────────────────────────────────────────────────────
+// Um projeto inteiro costuma ter a mesma comissão negociada. Em vez de abrir
+// fração a fração, define-se aqui uma vez e aplica-se a todas as que estão
+// filtradas — incluindo as que ainda não têm ficha de venda.
+function ComissaoEmBlocoModal({ linhas, vendaDe, projeto, onAplicar, onClose }) {
+  const [pct, setPct] = useState(() => {
+    const comPct = linhas.map(f => comissaoDaVenda(vendaDe.get(f.id), f).pct).filter(v => v > 0);
+    return comPct.length ? comPct[0] : 3;
+  });
+  const [taxa, setTaxa] = useState(23);
+  const [pctCpcv, setPctCpcv] = useState(0);
+  const [aAplicar, setAAplicar] = useState(false);
+
+  const base = linhas.reduce((s, f) => s + precoDaFracao(f, vendaDe.get(f.id)), 0) * (pct / 100);
+  const comIva = base * (1 + taxa / 100);
+
+  return (
+    <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.5)",zIndex:300,display:"flex",alignItems:"center",justifyContent:"center"}}
+      onClick={e=>{if(e.target===e.currentTarget)onClose();}}>
+      <div style={{background:"#fff",borderRadius:16,padding:28,width:560,maxWidth:"95vw",boxShadow:"0 20px 60px rgba(0,0,0,0.25)"}}>
+        <div style={{display:"flex",justifyContent:"space-between",marginBottom:6}}>
+          <div style={{fontSize:16,fontWeight:700,color:"#091C2A",fontFamily:"var(--fonte-titulo)"}}>🤝 Comissão do projeto</div>
+          <button onClick={onClose} style={{background:"none",border:"none",fontSize:20,cursor:"pointer",color:"#9DA2A6"}}>✕</button>
+        </div>
+        <div style={{fontSize:11.5,color:"#7E8388",marginBottom:18}}>
+          Aplica-se às {linhas.length} {linhas.length === 1 ? "fração" : "frações"} que estão
+          à vista{projeto ? ` em ${projeto}` : ""}. Depois pode afinar-se fração a fração.
+        </div>
+
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:12}}>
+          <div style={{display:"flex",flexDirection:"column",gap:3}}>
+            <label style={lbl}>% sobre a venda</label>
+            <input type="number" step="0.01" value={pct}
+              onChange={e=>setPct(parseFloat(e.target.value)||0)} style={inp}/>
+          </div>
+          <div style={{display:"flex",flexDirection:"column",gap:3}}>
+            <label style={lbl}>IVA da comissão (%)</label>
+            <input type="number" step="0.01" value={taxa}
+              onChange={e=>setTaxa(parseFloat(e.target.value)||0)} style={inp}/>
+          </div>
+          <div style={{display:"flex",flexDirection:"column",gap:3}}>
+            <label style={lbl}>% paga no CPCV</label>
+            <input type="number" step="0.01" min="0" max="100" value={pctCpcv}
+              onChange={e=>setPctCpcv(Math.min(100,Math.max(0,parseFloat(e.target.value)||0)))} style={inp}/>
+          </div>
+        </div>
+
+        <div style={{background:"#FAF6F0",borderRadius:9,padding:"10px 13px",fontSize:11.5,marginTop:16}}>
+          <LinhaConta k="Comissão sobre o total das frações" v={fmt(base)} />
+          <LinhaConta k={`+  IVA a ${taxa}%`} v={fmt(comIva - base)} />
+          <div style={{height:1,background:"#D8CCBB",margin:"6px 0"}}/>
+          <LinhaConta k="=  a pagar aos mediadores" v={fmt(comIva)} forte />
+          <div style={{height:1,background:"#D8CCBB",margin:"6px 0"}}/>
+          <LinhaConta k={`no CPCV (${pctCpcv}%)`} v={fmt(comIva * pctCpcv / 100)} />
+          <LinhaConta k={`na escritura (${Math.round((100 - pctCpcv) * 100) / 100}%)`} v={fmt(comIva * (100 - pctCpcv) / 100)} />
+        </div>
+
+        <div style={{fontSize:10.5,color:"#96702A",marginTop:10,lineHeight:1.5}}>
+          Isto escreve a comissão em todas as frações à vista. As que ainda não têm
+          ficha de venda passam a ter uma, só com estes campos.
+        </div>
+
+        <div style={{display:"flex",justifyContent:"flex-end",gap:10,marginTop:20}}>
+          <button onClick={onClose} style={{background:"#E7DED2",color:"#5C6166",border:"none",padding:"10px 20px",borderRadius:8,fontSize:13,cursor:"pointer"}}>Cancelar</button>
+          <button disabled={aAplicar}
+            onClick={async()=>{ setAAplicar(true);
+              await onAplicar({ comissao_pct: pct, comissao_taxa_iva: taxa,
+                                comissao_pct_cpcv: pctCpcv, comissao_valor: 0 }); }}
+            style={{background:aAplicar?"#8E9398":"#091C2A",color:"#fff",border:"none",padding:"10px 24px",borderRadius:8,fontSize:13,cursor:aAplicar?"default":"pointer",fontWeight:700}}>
+            {aAplicar ? "A aplicar…" : `Aplicar a ${linhas.length}`}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─── TABELA DE VENDAS ──────────────────────────────────────────────────────────
 // ─── EXPORTAÇÃO PARA EXCEL ───────────────────────────────────────────────────
 let _xlsxLoader = null;
@@ -499,6 +576,7 @@ function TabelaVendas({ fracoes, vendas, canEdit, onAddFatura, onUpdateFracao, o
   const [editVenda, setEditVenda] = useState(null);
   const [editComissao, setEditComissao] = useState(null);
   const [rascunhos, setRascunhos] = useState({});   // edições por confirmar, por célula
+  const [comissaoEmBloco, setComissaoEmBloco] = useState(false);
 
   // Se ainda não há projeto escolhido, assume o primeiro com frações
   useEffect(() => {
@@ -611,6 +689,25 @@ function TabelaVendas({ fracoes, vendas, canEdit, onAddFatura, onUpdateFracao, o
     onUpdateVenda?.(venda.id, { fatura_criada: true });
   };
 
+  // ── A comissão, direta na tabela ─────────────────────────────────────────
+  // Nem toda a fração tem ficha de venda — nestes projetos marcam-se os CPCV
+  // no estado da fração e mais nada. Escrever a comissão aqui cria a ficha por
+  // baixo, para não ser preciso registar 11 vendas à mão só para pôr uma
+  // percentagem.
+  const guardarComissao = async (frac, campos) => {
+    const venda = vendaDe.get(frac.id);
+    if (venda) return onUpsertVenda?.({ ...venda, ...campos });
+    return onUpsertVenda?.({
+      id: "v_" + frac.id + "_" + Date.now().toString(36) + Math.random().toString(36).slice(2, 5),
+      fracao_id: frac.id, projeto: frac.projeto, fracao: frac.fracao,
+      preco_tabela: frac.preco_tabela, comissao_taxa_iva: 23,
+      ...campos,
+    });
+  };
+
+  const totalComissao = useMemo(() => rows.reduce(
+    (s, f) => s + comissaoDaVenda(vendaDe.get(f.id), f).comIva, 0), [rows, vendaDe]);
+
   // Estilo comum das células editáveis
   const inputCelula = (extra = {}) => ({
     width: "100%", background: "transparent", border: "1px solid transparent",
@@ -651,6 +748,13 @@ function TabelaVendas({ fracoes, vendas, canEdit, onAddFatura, onUpdateFracao, o
           {exportando ? "A gerar..." : "⬇ Excel"}
         </button>
         {canEdit && (
+          <button onClick={() => setComissaoEmBloco(true)} disabled={!rows.length}
+            title="Definir a comissão de todas as frações filtradas de uma vez"
+            style={{ background: "#FBF6EC", color: "#A8762F", border: "1px solid #E3CE9F", padding: "10px 16px", borderRadius: 10, fontSize: 13, fontWeight: 600, cursor: rows.length ? "pointer" : "default", whiteSpace: "nowrap", opacity: rows.length ? 1 : 0.5 }}>
+            🤝 Comissão
+          </button>
+        )}
+        {canEdit && (
           <button onClick={novaFracao}
             style={{ background: "#091C2A", color: "#fff", border: "none", padding: "10px 18px", borderRadius: 10, fontSize: 13, fontWeight: 600, cursor: "pointer", whiteSpace: "nowrap" }}>
             + Nova fração
@@ -676,23 +780,24 @@ function TabelaVendas({ fracoes, vendas, canEdit, onAddFatura, onUpdateFracao, o
               <col style={{ width: "9%"  }} />{/* Área      */}
               <col style={{ width: "11%" }} />{/* Preço     */}
               <col style={{ width: "11%" }} />{/* Venda est.*/}
-              <col style={{ width: "9%"  }} />{/* Preço/m²  */}
-              <col style={{ width: "9%"  }} />{/* Status    */}
-              <col style={{ width: "11%" }} />{/* Cliente   */}
+              <col style={{ width: "8%"  }} />{/* Preço/m²  */}
+              <col style={{ width: "10%" }} />{/* Comissão  */}
+              <col style={{ width: "8%"  }} />{/* Status    */}
+              <col style={{ width: "10%" }} />{/* Cliente   */}
               <col style={{ width: "7%"  }} />{/* Ações     */}
             </colgroup>
             <thead>
               <tr style={{ background: "#FAF6F0" }}>
                 {[["Projeto","left"],["Fração","center"],["Piso","center"],["Tipologia","center"],
                   ["Área (m²)","right"],["Preço","right"],["Venda estimada","right"],["Preço/m²","right"],
-                  ["Status","center"],["Cliente","left"],["Ações","center"]].map(([h,al]) => (
+                  ["Comissão","right"],["Status","center"],["Cliente","left"],["Ações","center"]].map(([h,al]) => (
                   <th key={h} style={{ padding: "9px 8px", textAlign: al, color: "#9DA2A6", fontSize: 9, letterSpacing: "0.05em", textTransform: "uppercase", fontFamily: "var(--fonte-numero)", borderBottom: "1px solid #E7DED2", whiteSpace: "nowrap" }}>{h}</th>
                 ))}
               </tr>
             </thead>
             <tbody>
               {rows.length === 0
-                ? <tr><td colSpan={11} style={{ padding: 40, textAlign: "center", color: "#C4C7CA" }}>
+                ? <tr><td colSpan={12} style={{ padding: 40, textAlign: "center", color: "#C4C7CA" }}>
                     {filterProj ? "Nenhuma fração encontrada neste projeto." : "Escolhe um projeto no seletor acima."}
                   </td></tr>
                 : rows.map(f => {
@@ -764,6 +869,31 @@ function TabelaVendas({ fracoes, vendas, canEdit, onAddFatura, onUpdateFracao, o
                         {area > 0 ? fmt(precoM2) : "—"}
                       </td>
 
+                      {/* A comissão do mediador: escreve-se a % e vê-se o que
+                          sai do caixa, já com IVA. */}
+                      <td style={{ padding: "4px 8px", textAlign: "right" }}>
+                        {(() => {
+                          const com = comissaoDaVenda(venda, f);
+                          return (
+                            <div title={com.comIva > 0.005
+                              ? `${fmt(com.base)} + ${com.taxa}% de IVA = ${fmt(com.comIva)}`
+                                + (com.pctCpcv > 0 ? ` · ${com.pctCpcv}% no CPCV` : " · toda na escritura")
+                              : "Escreve a percentagem da comissão"}>
+                              <CelulaNumero valor={com.pct} editavel={canEdit}
+                                formatar={v => (v > 0 ? fmtPct(v) : "—")}
+                                onGuardar={async v => { const r = await guardarComissao(f, { comissao_pct: v, comissao_valor: 0 });
+                                  if (r?.error) alert("Não foi possível guardar a comissão."); }}
+                                estilo={{ color: com.pct > 0 ? "#A8762F" : "#C4C7CA", fontWeight: 600 }} />
+                              {com.comIva > 0.005 && (
+                                <div style={{ fontSize: 9, color: "#9DA2A6", fontFamily: "var(--fonte-numero)", marginTop: -2 }}>
+                                  {fmt(com.comIva)}
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })()}
+                      </td>
+
                       <td style={{ padding: "6px 4px", textAlign: "center" }}>
                         <select value={f.status || "Disponível"} disabled={!canEdit}
                           onChange={e => alterarStatus(f, e.target.value)}
@@ -813,6 +943,10 @@ function TabelaVendas({ fracoes, vendas, canEdit, onAddFatura, onUpdateFracao, o
                   <td style={{ padding: "10px 8px", textAlign: "right", fontFamily: "var(--fonte-numero)", fontWeight: 700, color: "#7E8388" }} title="Média ponderada">
                     {totais.area > 0 ? fmt(totais.precoM2) : "—"}
                   </td>
+                  <td style={{ padding: "10px 8px", textAlign: "right", fontFamily: "var(--fonte-numero)", fontWeight: 700, color: "#A8762F" }}
+                      title="O que se paga aos mediadores, com IVA">
+                    {totalComissao > 0.005 ? fmt(totalComissao) : "—"}
+                  </td>
                   <td colSpan={3} />
                 </tr>
               </tfoot>
@@ -821,6 +955,14 @@ function TabelaVendas({ fracoes, vendas, canEdit, onAddFatura, onUpdateFracao, o
         </div>
       </div>
 
+      {comissaoEmBloco && (
+        <ComissaoEmBlocoModal linhas={rows} vendaDe={vendaDe} projeto={filterProj}
+          onAplicar={async (campos) => {
+            for (const f of rows) await guardarComissao(f, campos);
+            setComissaoEmBloco(false);
+          }}
+          onClose={() => setComissaoEmBloco(false)} />
+      )}
       {editVenda && <EditVendaModal venda={editVenda} fracao={editVenda._frac}
         onSave={bruto => {
           const u = limparVenda(bruto);

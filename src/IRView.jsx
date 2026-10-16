@@ -1,7 +1,9 @@
 import React, { useState, useMemo } from "react";
 import { EMPRESAS, agruparPorGrupo, GRUPOS_INFO } from "./empresas.js";
-import { useMovimentosPeriodo, useFracoes, useVendas, useSaldosNaData, usePagamentosExtras, useFaturas, useOrcamento, useRecebiveis } from "./hooks.js";
+import { useMovimentosPeriodo, useFracoes, useVendas, useSaldosNaData, usePagamentosExtras, useFaturas, useOrcamento, useRecebiveis, useObraPlanos } from "./hooks.js";
 import { CRONOGRAMAS, ESTADO_MARCO, TIR_PROJETO } from "./cronogramas.js";
+import { cronogramaVivo } from "./cronograma.js";
+import { obraRealizada, classificacaoDe } from "./obra.js";
 import RealOrcadoTabela from "./RealOrcadoTabela.jsx";
 import { useDadosRealOrcado } from "./RealOrcadoView.jsx";
 import { podeEditarOrcado } from "./realOrcado.js";
@@ -743,7 +745,9 @@ function Timeline({ cronograma, projeto }) {
   const mesN = (k) => { const [a, m] = k.split("-").map(Number); return a * 12 + (m - 1); };
   const todos = marcos.flatMap(x => [mesN(x.inicio), mesN(x.fim || x.inicio)]);
   const hojeN = (() => { const d = new Date(); return d.getFullYear() * 12 + d.getMonth(); })();
-  const min = Math.min(...todos, hojeN), max = Math.max(...todos, hojeN);
+  // Um mês de folga no fim: sem ela, um marco pontual que caia no último mês
+  // (a escritura, tipicamente) ficava encostado à direita e saía da barra.
+  const min = Math.min(...todos, hojeN), max = Math.max(...todos, hojeN) + 1;
   const span = Math.max(1, max - min);
   const pos = (n) => ((n - min) / span) * 100;
 
@@ -782,12 +786,16 @@ function Timeline({ cronograma, projeto }) {
                 <div title={`${m.fase}\n${rotuloMes(m.inicio)}${m.fim ? ` → ${rotuloMes(m.fim)}` : ""}\n${est.rotulo}${m.nota ? `\n${m.nota}` : ""}`}
                   style={{
                     position: "absolute", left: `${esquerda}%`, width: pontual ? undefined : `${largura}%`,
+                    transform: pontual ? "translateX(-50%)" : undefined,
+                    justifyContent: pontual ? "center" : undefined,
                     top: 4, height: 18, background: est.fundo, border: `1px solid ${est.cor}`,
-                    borderRadius: pontual ? "50%" : 5, minWidth: pontual ? 18 : undefined,
-                    display: "flex", alignItems: "center", paddingLeft: pontual ? 0 : 7,
+                    borderRadius: pontual ? 9 : 5,
+                    display: "flex", alignItems: "center",
+                    padding: pontual ? "0 8px" : "0 0 0 7px",
                     fontSize: 9, color: est.cor, fontFamily: "var(--fonte-numero)", whiteSpace: "nowrap", cursor: "default",
                   }}>
-                  {!pontual && largura > 12 ? `${rotuloMes(m.inicio)} → ${rotuloMes(m.fim)}` : ""}
+                  {pontual ? rotuloMes(m.inicio)
+                           : (largura > 12 ? `${rotuloMes(m.inicio)} → ${rotuloMes(m.fim)}` : "")}
                 </div>
               </div>
             </div>
@@ -1108,8 +1116,36 @@ export default function IRView({ currentUser, empresasVisiveis }) {
   const podeMexerNoOrcado = podeEditarOrcado(currentUser);
 
   // ─── Timeline ─────────────────────────────────────────────────────────────
+  // O cronograma é vivo: as datas da obra vêm do plano, a execução do que já
+  // saiu da conta, a comercialização das frações e as escrituras da mesma
+  // regra que o fluxo usa. O business plan escrito à mão só serve para o que
+  // é anterior ao sistema — a aquisição e o licenciamento. Ver
+  // src/cronograma.js.
   const empresaTimeline = empSel;
-  const cronograma = CRONOGRAMAS[empresaTimeline];
+  const { planos: obraPlanos } = useObraPlanos();
+  const planoDoProjeto = useMemo(
+    () => (obraPlanos || []).find(p => p.empresa === empresaTimeline) || null,
+    [obraPlanos, empresaTimeline]);
+
+  const incorridoEmObra = useMemo(() => {
+    if (!planoDoProjeto) return 0;
+    const grupo = empresasAtivas.find(e => e.id === empresaTimeline)?.grupo || "LPX";
+    const catObra = classificacaoDe("obra", grupo).categoria;
+    return obraRealizada(dadosOrcado.movimentos, dadosOrcado.faturas, {
+      empresa: empresaTimeline, categorias: [catObra],
+      taxaIva: planoDoProjeto.taxa_iva_obra,
+    }).jaIncorrido;
+  }, [planoDoProjeto, dadosOrcado.movimentos, dadosOrcado.faturas, empresaTimeline, empresasAtivas]);
+
+  const nomeDoProjeto = empresasAtivas.find(e => e.id === empresaTimeline)?.nome;
+  const cronogramaBase = CRONOGRAMAS[empresaTimeline];
+  const cronograma = useMemo(() => {
+    const r = cronogramaVivo({
+      base: cronogramaBase, plano: planoDoProjeto, incorrido: incorridoEmObra,
+      fracoes, vendas, projeto: nomeDoProjeto,
+    });
+    return r.marcos.length ? r : null;
+  }, [cronogramaBase, planoDoProjeto, incorridoEmObra, fracoes, vendas, nomeDoProjeto]);
 
   const SECCOES = [
     { id: "fluxo",      rotulo: "Fluxo de caixa" },
@@ -1286,7 +1322,11 @@ export default function IRView({ currentUser, empresasVisiveis }) {
 
       {seccao === "timeline" && (
         <Card titulo="Cronograma do projeto"
-              subtitulo={cronograma ? `${cronograma.projeto} · marcos do business plan` : "Escolhe um projeto com cronograma carregado"}>
+              subtitulo={cronograma
+                ? `${cronograma.projeto || nomeDoProjeto || ""} · ${cronograma.vivo
+                    ? `segue ${cronograma.origens.join(", ")}`
+                    : "marcos do business plan"}`
+                : "Sem plano de obra nem frações neste projeto — nada de onde tirar marcos"}>
           <Timeline cronograma={cronograma} projeto={empresasAtivas.find(e => e.id === empresaTimeline)?.nome} />
         </Card>
       )}
