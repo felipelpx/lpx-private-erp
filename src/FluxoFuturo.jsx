@@ -1137,7 +1137,9 @@ export default function FluxoFuturo({ faturas: faturasTodas, faturasLoading, pag
   const saldoLiquido = saldoAtual - (vencidas.saidas - vencidas.entradas);
 
   const [expandedMes, setExpandedMes] = useState(null);
-  const [view, setView] = useState("mensal"); // mensal | matriz | anual
+  // A matriz é a vista por omissão: é a que responde à pergunta de quem abre o
+  // fluxo — quanto custa cada despesa, mês a mês. As outras ficam a um clique.
+  const [view, setView] = useState("matriz"); // matriz | mensal | anual
   // Quantas colunas de mês a matriz mostra. O utilizador acrescenta e tira.
   const [mesesMatriz, setMesesMatriz] = useState(6);
   // Filtros de data (formato YYYY-MM, mensal)
@@ -1327,7 +1329,7 @@ export default function FluxoFuturo({ faturas: faturasTodas, faturasLoading, pag
           ))}
         </div>
         <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
-          {[["mensal", "Mensal"], ["matriz", "Matriz"], ["anual", "Anual"]].map(([v, lbl]) => (
+          {[["matriz", "Matriz"], ["mensal", "Mensal"], ["anual", "Anual"]].map(([v, lbl]) => (
             <button key={v} onClick={() => setView(v)}
               title={v === "matriz" ? "Uma linha por despesa, uma coluna por mês" : undefined}
               style={{ background: view === v ? "#091C2A" : "#E7DED2", color: view === v ? "#fff" : "#5C6166", border: "none", padding: "7px 16px", borderRadius: 8, fontSize: 12, cursor: "pointer" }}>
