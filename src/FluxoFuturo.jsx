@@ -172,6 +172,18 @@ function AcoesDoItem({ item, isAdmin, acoes, corDaCategoria = "#EDF1F5", corDoTe
 // clica no valor, que é onde a pessoa já está a olhar.
 function MatrizFluxo({ matriz, isAdmin, acoes, nMeses, onNMeses, onNovaDespesa, comVazios }) {
   const [celula, setCelula] = useState(null);   // { linha, mes, x, y }
+  // Que grupos estão abertos. Começa tudo fechado — abre-se a matriz para ver
+  // o desenho, não dezasseis linhas de detalhe. E cada grupo é independente:
+  // abrir um nunca fecha outro, por isso guarda-se um conjunto, não "o aberto".
+  const [abertos, setAbertos] = useState(() => new Set());
+  const chaveGrupo = (sec, g) => `${sec.tipo}|${g.categoria}`;
+  const aberto = (sec, g) => abertos.has(chaveGrupo(sec, g));
+  const alternar = (sec, g) => setAbertos(ant => {
+    const novo = new Set(ant);
+    const k = chaveGrupo(sec, g);
+    if (novo.has(k)) novo.delete(k); else novo.add(k);
+    return novo;
+  });
 
   // Fechar com Escape ou com um clique fora
   useEffect(() => {
@@ -253,8 +265,24 @@ function MatrizFluxo({ matriz, isAdmin, acoes, nMeses, onNMeses, onNovaDespesa, 
             mais {porMostrar} {porMostrar === 1 ? "mês" : "meses"} à frente
           </span>
         )}
+        <div style={{ width: 1, height: 18, background: "#E7DED2", margin: "0 4px" }} />
+        <button onClick={() => setAbertos(new Set(
+            seccoes.flatMap(sec => sec.grupos.map(g => chaveGrupo(sec, g)))))}
+          title="Abrir o detalhe de todos os grupos"
+          style={{ background: "transparent", border: "1px solid #E7DED2", color: "#7E8388",
+                   padding: "3px 10px", borderRadius: 7, fontSize: 11, cursor: "pointer" }}>
+          ⊞ Expandir tudo
+        </button>
+        <button onClick={() => setAbertos(new Set())} disabled={abertos.size === 0}
+          title="Voltar a agrupar"
+          style={{ background: "transparent", border: "1px solid #E7DED2",
+                   color: abertos.size ? "#7E8388" : "#C4C7CA",
+                   padding: "3px 10px", borderRadius: 7, fontSize: 11,
+                   cursor: abertos.size ? "pointer" : "default" }}>
+          ⊟ Recolher tudo
+        </button>
         <span style={{ marginLeft: "auto", fontSize: 10.5, color: "#9DA2A6" }}>
-          clica num valor para ver e tratar os lançamentos desse mês
+          clica num grupo para o abrir · clica num valor para tratar os lançamentos
         </span>
       </div>
 
@@ -290,10 +318,16 @@ function MatrizFluxo({ matriz, isAdmin, acoes, nMeses, onNMeses, onNovaDespesa, 
               </tr>
 
               {sec.grupos.map(g => [
-                <tr key={`g_${sec.tipo}_${g.categoria}`} style={{ background: "#fff" }}>
-                  <td style={{ ...celulaNum, ...colada(), textAlign: "left", paddingLeft: 24,
+                <tr key={`g_${sec.tipo}_${g.categoria}`} onClick={() => alternar(sec, g)}
+                  title={aberto(sec, g) ? "Fechar o detalhe" : `Abrir as ${g.linhas.length} despesas`}
+                  style={{ background: aberto(sec, g) ? "#FBF9F6" : "#fff", cursor: "pointer" }}>
+                  <td style={{ ...celulaNum, ...colada(aberto(sec, g) ? "#FBF9F6" : "#fff"),
+                               textAlign: "left", paddingLeft: 24,
                                color: "#5C6166", fontWeight: 700, fontFamily: "var(--fonte-titulo)",
                                fontSize: 11.5 }}>
+                    <span style={{ display: "inline-block", width: 14, color: "#B2B6B9", fontSize: 9 }}>
+                      {aberto(sec, g) ? "▼" : "▶"}
+                    </span>
                     {g.categoria} <span style={{ color: "#C4C7CA", fontWeight: 400 }}>({g.linhas.length})</span>
                   </td>
                   {colunas.map(c => (
@@ -305,7 +339,7 @@ function MatrizFluxo({ matriz, isAdmin, acoes, nMeses, onNMeses, onNovaDespesa, 
                     {fmtK(g.total)}
                   </td>
                 </tr>,
-                ...g.linhas.map(l => (
+                ...(aberto(sec, g) ? g.linhas : []).map(l => (
                   <tr key={l.chave} style={{ borderBottom: "1px solid #FBF7F1" }}>
                     <td style={{ ...celulaNum, ...colada(), textAlign: "left", paddingLeft: 40,
                                  color: "#23292D", maxWidth: 420, overflow: "hidden",
