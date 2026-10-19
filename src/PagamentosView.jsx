@@ -181,6 +181,7 @@ export default function PagamentosView({ faturas, pagamentosExtras, currentUser,
 
 // ─── Componente: criar novo mapa ─────────────────────────────────────────────
 function NovoMapa({ faturas, currentUser, onCancel, onCreated }) {
+  const [previewItem, setPreviewItem] = useState(null);   // { item, src }
   const hoje = new Date().toISOString().slice(0, 10);
   const [descricao, setDescricao] = useState(`Mapa de ${hoje.split("-").reverse().join("-")}`);
   const [selected, setSelected] = useState({});  // key -> true
@@ -212,6 +213,10 @@ function NovoMapa({ faturas, currentUser, onCancel, onCreated }) {
         valor: parseFloat(f.valor) || 0,
         vencimento: f.vencimento,
         _label: "Fatura",
+        // Quem monta o mapa tem de ver o que está a escolher: a observação
+        // escrita na fatura e o próprio documento, sem sair deste ecrã.
+        obs: f.obs || f.observacoes || "",
+        _fatura: f,
       });
     });
 
@@ -254,7 +259,8 @@ function NovoMapa({ faturas, currentUser, onCancel, onCreated }) {
           !(c.descricao || "").toLowerCase().includes(f) &&
           !(c.fornecedor || "").toLowerCase().includes(f) &&
           !(c.empresa || "").toLowerCase().includes(f) &&
-          !(c.categoria || "").toLowerCase().includes(f)
+          !(c.categoria || "").toLowerCase().includes(f) &&
+          !(c.obs || "").toLowerCase().includes(f)   // a observação também se procura
         ) return false;
       }
       // Empresa
@@ -376,6 +382,7 @@ function NovoMapa({ faturas, currentUser, onCancel, onCreated }) {
                 <th style={{ padding: "8px 12px", fontWeight: 600, color: "#5C6166", textTransform: "uppercase", fontSize: 9, fontFamily: "var(--fonte-numero)", textAlign: "left" }}>Empresa</th>
                 <th style={{ padding: "8px 12px", fontWeight: 600, color: "#5C6166", textTransform: "uppercase", fontSize: 9, fontFamily: "var(--fonte-numero)", textAlign: "left" }}>Categoria</th>
                 <th style={{ padding: "8px 12px", fontWeight: 600, color: "#5C6166", textTransform: "uppercase", fontSize: 9, fontFamily: "var(--fonte-numero)", textAlign: "right" }}>Valor</th>
+                <th style={{ padding: "8px 12px", fontWeight: 600, color: "#5C6166", textTransform: "uppercase", fontSize: 9, fontFamily: "var(--fonte-numero)", textAlign: "center" }}>Fatura</th>
               </tr>
             </thead>
             <tbody>
@@ -390,10 +397,31 @@ function NovoMapa({ faturas, currentUser, onCancel, onCreated }) {
                     </td>
                     <td style={{ padding: "8px 12px", color: "#7E8388", fontSize: 10, fontFamily: "var(--fonte-numero)" }}>{c._label}</td>
                     <td style={{ padding: "8px 12px", fontFamily: "var(--fonte-numero)", fontSize: 10 }}>{fmtDate(c.vencimento)}</td>
-                    <td style={{ padding: "8px 12px" }}>{c.fornecedor && <span style={{ color: "#7E8388", marginRight: 6 }}>{c.fornecedor} ·</span>}{c.descricao || "—"}</td>
+                    <td style={{ padding: "8px 12px" }}>
+                      <div>{c.fornecedor && <span style={{ color: "#7E8388", marginRight: 6 }}>{c.fornecedor} ·</span>}{c.descricao || "—"}</div>
+                      {c.obs && (
+                        <div style={{ fontSize: 10, color: "#7E8388", marginTop: 3, fontStyle: "italic", lineHeight: 1.4 }}>
+                          💬 {c.obs}
+                        </div>
+                      )}
+                    </td>
                     <td style={{ padding: "8px 12px", color: "#5C6166", fontSize: 10 }}>{c.empresa || "—"}</td>
                     <td style={{ padding: "8px 12px", color: "#5C6166" }}><span style={{ background: "#F6ECD6", color: "#7A5A22", padding: "1px 6px", borderRadius: 3, fontSize: 9, fontFamily: "var(--fonte-numero)" }}>{c.categoria || "—"}</span></td>
                     <td style={{ padding: "8px 12px", textAlign: "right", fontFamily: "var(--fonte-numero)", fontWeight: 600, color: "#A93226" }}>{fmtFull(c.valor)}</td>
+                    <td style={{ padding: "8px 12px", textAlign: "center" }}
+                        onClick={e => { e.stopPropagation(); setPreviewItem({ item: c, src: c._fatura }); }}>
+                      {(() => {
+                        const temAnexo = !!(c._fatura?.anexo_b64 && c._fatura?.anexo_nome);
+                        return (
+                          <button title={temAnexo ? `Ver anexo (${c._fatura.anexo_nome})` : "Ver detalhes da fatura"}
+                            style={{ background: temAnexo ? "#E0E9F0" : "#F7F2EA", color: temAnexo ? "#2C4A63" : "#7E8388",
+                                     border: "none", padding: "4px 10px", borderRadius: 6, fontSize: 10,
+                                     fontWeight: 600, cursor: "pointer", fontFamily: "var(--fonte-numero)" }}>
+                            {temAnexo ? "📎 Ver" : "ℹ️ Info"}
+                          </button>
+                        );
+                      })()}
+                    </td>
                   </tr>
                 );
               })}
@@ -418,8 +446,90 @@ function NovoMapa({ faturas, currentUser, onCancel, onCreated }) {
           </button>
         </div>
       </div>
+
+      <PreviewFatura previewItem={previewItem} onFechar={() => setPreviewItem(null)} />
     </div>
   );
+}
+
+// ─── Pré-visualização de uma fatura ──────────────────────────────────────────
+// O anexo e as observações da fatura, no mesmo sítio. Serve o detalhe de um
+// mapa e também a montagem de um mapa novo: quem está a escolher o que pagar
+// precisa de ver o que está a escolher, não só o número da fatura.
+function PreviewFatura({ previewItem, onFechar }) {
+  if (!previewItem) return null;
+        const src = previewItem.src;
+        const it = previewItem.item;
+        const nome = src?.anexo_nome || "";
+        const b64 = src?.anexo_b64 || "";
+        const obs = src?.obs || src?.observacoes || "";
+        const isPdf = /\.pdf$/i.test(nome) || /^data:application\/pdf/i.test(b64);
+        const isImg = /\.(png|jpe?g|gif|webp|bmp)$/i.test(nome) || /^data:image\//i.test(b64);
+        return (
+          <div onClick={() => onFechar()}
+            style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.65)", zIndex: 9999, display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
+            <div onClick={e => e.stopPropagation()}
+              style={{ background: "#fff", borderRadius: 12, width: "min(1000px, 100%)", maxHeight: "92vh", display: "flex", flexDirection: "column", overflow: "hidden", boxShadow: "0 20px 60px rgba(0,0,0,0.4)" }}>
+
+              {/* Header */}
+              <div style={{ padding: "16px 22px", borderBottom: "1px solid #EFE8DE", display: "flex", justifyContent: "space-between", alignItems: "center", background: "#FBF7F1" }}>
+                <div>
+                  <div style={{ fontSize: 15, fontWeight: 700, color: "#091C2A", fontFamily: "var(--fonte-titulo)" }}>
+                    {src?.fornecedor || "—"} · {src?.fatura || it.descricao}
+                  </div>
+                  <div style={{ fontSize: 11, color: "#7E8388", marginTop: 3, fontFamily: "var(--fonte-numero)" }}>
+                    {it.empresa?.toUpperCase() || "—"} · Vencimento: {fmtDate(src?.vencimento || it.vencimento)} · <b>{fmtFull(src?.valor || it.valor)}</b>
+                  </div>
+                </div>
+                <button onClick={() => onFechar()}
+                  style={{ background: "#F7F2EA", border: "none", padding: "6px 14px", borderRadius: 8, fontSize: 12, fontWeight: 600, cursor: "pointer" }}>
+                  ✕ Fechar
+                </button>
+              </div>
+
+              {/* Observações */}
+              {obs && (
+                <div style={{ padding: "12px 22px", borderBottom: "1px solid #E7DED2", background: "#FBF6EC" }}>
+                  <div style={{ fontSize: 10, color: "#7A5A22", fontWeight: 700, textTransform: "uppercase", fontFamily: "var(--fonte-numero)", letterSpacing: 0.5, marginBottom: 4 }}>💬 Observações</div>
+                  <div style={{ fontSize: 13, color: "#091C2A", lineHeight: 1.5, whiteSpace: "pre-wrap" }}>{obs}</div>
+                </div>
+              )}
+
+              {/* Preview */}
+              <div style={{ flex: 1, overflow: "auto", background: "#F7F2EA", display: "flex", alignItems: "center", justifyContent: "center", padding: 20, minHeight: 300 }}>
+                {b64 ? (
+                  isPdf ? (
+                    <iframe src={b64} title={nome} style={{ width: "100%", height: "70vh", border: "none", background: "#fff", borderRadius: 6 }} />
+                  ) : isImg ? (
+                    <img src={b64} alt={nome} style={{ maxWidth: "100%", maxHeight: "70vh", objectFit: "contain", background: "#fff", padding: 10, borderRadius: 6, boxShadow: "0 2px 8px rgba(0,0,0,0.1)" }} />
+                  ) : (
+                    <div style={{ textAlign: "center", color: "#7E8388" }}>
+                      <div style={{ fontSize: 40, marginBottom: 8 }}>📄</div>
+                      <div style={{ fontSize: 13, marginBottom: 12 }}>Formato não pré-visualizável</div>
+                      <a href={b64} download={nome} style={{ display: "inline-block", background: "#2C4A63", color: "#fff", padding: "8px 16px", borderRadius: 6, textDecoration: "none", fontSize: 12, fontWeight: 600 }}>⬇ Descarregar {nome}</a>
+                    </div>
+                  )
+                ) : (
+                  <div style={{ textAlign: "center", color: "#9DA2A6", padding: 40 }}>
+                    <div style={{ fontSize: 32, marginBottom: 8 }}>📎</div>
+                    <div style={{ fontSize: 13 }}>Esta fatura não tem anexo importado.</div>
+                    {obs && <div style={{ fontSize: 11, marginTop: 6 }}>Vê as observações acima.</div>}
+                  </div>
+                )}
+              </div>
+
+              {/* Footer com download */}
+              {b64 && (
+                <div style={{ padding: "12px 22px", borderTop: "1px solid #EFE8DE", background: "#FBF7F1", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                  <div style={{ fontSize: 11, color: "#7E8388", fontFamily: "var(--fonte-numero)" }}>{nome}</div>
+                  <a href={b64} download={nome} style={{ background: "#091C2A", color: "#fff", padding: "6px 14px", borderRadius: 6, textDecoration: "none", fontSize: 11, fontWeight: 600, fontFamily: "var(--fonte-numero)" }}>
+                    ⬇ Descarregar
+                  </a>
+                </div>
+              )}
+            </div>
+          </div>
+        );
 }
 
 // ─── Componente: detalhe de um mapa ──────────────────────────────────────────
@@ -1053,80 +1163,7 @@ function DetalheMapa({ mapaId, mapas, currentUser, profileById, faturas = [], pa
       </div>
 
       {/* Modal preview da fatura */}
-      {previewItem && (() => {
-        const src = previewItem.src;
-        const it = previewItem.item;
-        const nome = src?.anexo_nome || "";
-        const b64 = src?.anexo_b64 || "";
-        const obs = src?.obs || src?.observacoes || "";
-        const isPdf = /\.pdf$/i.test(nome) || /^data:application\/pdf/i.test(b64);
-        const isImg = /\.(png|jpe?g|gif|webp|bmp)$/i.test(nome) || /^data:image\//i.test(b64);
-        return (
-          <div onClick={() => setPreviewItem(null)}
-            style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.65)", zIndex: 9999, display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
-            <div onClick={e => e.stopPropagation()}
-              style={{ background: "#fff", borderRadius: 12, width: "min(1000px, 100%)", maxHeight: "92vh", display: "flex", flexDirection: "column", overflow: "hidden", boxShadow: "0 20px 60px rgba(0,0,0,0.4)" }}>
-
-              {/* Header */}
-              <div style={{ padding: "16px 22px", borderBottom: "1px solid #EFE8DE", display: "flex", justifyContent: "space-between", alignItems: "center", background: "#FBF7F1" }}>
-                <div>
-                  <div style={{ fontSize: 15, fontWeight: 700, color: "#091C2A", fontFamily: "var(--fonte-titulo)" }}>
-                    {src?.fornecedor || "—"} · {src?.fatura || it.descricao}
-                  </div>
-                  <div style={{ fontSize: 11, color: "#7E8388", marginTop: 3, fontFamily: "var(--fonte-numero)" }}>
-                    {it.empresa?.toUpperCase() || "—"} · Vencimento: {fmtDate(src?.vencimento || it.vencimento)} · <b>{fmtFull(src?.valor || it.valor)}</b>
-                  </div>
-                </div>
-                <button onClick={() => setPreviewItem(null)}
-                  style={{ background: "#F7F2EA", border: "none", padding: "6px 14px", borderRadius: 8, fontSize: 12, fontWeight: 600, cursor: "pointer" }}>
-                  ✕ Fechar
-                </button>
-              </div>
-
-              {/* Observações */}
-              {obs && (
-                <div style={{ padding: "12px 22px", borderBottom: "1px solid #E7DED2", background: "#FBF6EC" }}>
-                  <div style={{ fontSize: 10, color: "#7A5A22", fontWeight: 700, textTransform: "uppercase", fontFamily: "var(--fonte-numero)", letterSpacing: 0.5, marginBottom: 4 }}>💬 Observações</div>
-                  <div style={{ fontSize: 13, color: "#091C2A", lineHeight: 1.5, whiteSpace: "pre-wrap" }}>{obs}</div>
-                </div>
-              )}
-
-              {/* Preview */}
-              <div style={{ flex: 1, overflow: "auto", background: "#F7F2EA", display: "flex", alignItems: "center", justifyContent: "center", padding: 20, minHeight: 300 }}>
-                {b64 ? (
-                  isPdf ? (
-                    <iframe src={b64} title={nome} style={{ width: "100%", height: "70vh", border: "none", background: "#fff", borderRadius: 6 }} />
-                  ) : isImg ? (
-                    <img src={b64} alt={nome} style={{ maxWidth: "100%", maxHeight: "70vh", objectFit: "contain", background: "#fff", padding: 10, borderRadius: 6, boxShadow: "0 2px 8px rgba(0,0,0,0.1)" }} />
-                  ) : (
-                    <div style={{ textAlign: "center", color: "#7E8388" }}>
-                      <div style={{ fontSize: 40, marginBottom: 8 }}>📄</div>
-                      <div style={{ fontSize: 13, marginBottom: 12 }}>Formato não pré-visualizável</div>
-                      <a href={b64} download={nome} style={{ display: "inline-block", background: "#2C4A63", color: "#fff", padding: "8px 16px", borderRadius: 6, textDecoration: "none", fontSize: 12, fontWeight: 600 }}>⬇ Descarregar {nome}</a>
-                    </div>
-                  )
-                ) : (
-                  <div style={{ textAlign: "center", color: "#9DA2A6", padding: 40 }}>
-                    <div style={{ fontSize: 32, marginBottom: 8 }}>📎</div>
-                    <div style={{ fontSize: 13 }}>Esta fatura não tem anexo importado.</div>
-                    {obs && <div style={{ fontSize: 11, marginTop: 6 }}>Vê as observações acima.</div>}
-                  </div>
-                )}
-              </div>
-
-              {/* Footer com download */}
-              {b64 && (
-                <div style={{ padding: "12px 22px", borderTop: "1px solid #EFE8DE", background: "#FBF7F1", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                  <div style={{ fontSize: 11, color: "#7E8388", fontFamily: "var(--fonte-numero)" }}>{nome}</div>
-                  <a href={b64} download={nome} style={{ background: "#091C2A", color: "#fff", padding: "6px 14px", borderRadius: 6, textDecoration: "none", fontSize: 11, fontWeight: 600, fontFamily: "var(--fonte-numero)" }}>
-                    ⬇ Descarregar
-                  </a>
-                </div>
-              )}
-            </div>
-          </div>
-        );
-      })()}
+      <PreviewFatura previewItem={previewItem} onFechar={() => setPreviewItem(null)} />
     </div>
   );
 }
