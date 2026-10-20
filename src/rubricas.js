@@ -20,6 +20,13 @@
 import { CATEGORIAS } from "./categorias.js";
 import { categoriasDa } from "./categoriasEmpresa.js";
 import { ocultarNoGrafico } from "./nomenclatura.js";
+import { EMPRESAS } from "./empresas.js";
+import { LINHAS_FO_HDG, linhaDoFluxoHDG } from "./rubricasHDG.js";
+
+// Os projetos HDG têm FO hierárquicas e a linha do fluxo é a DESPESA, não o
+// bloco que a contém. Ver src/rubricasHDG.js.
+const HDG = new Set(EMPRESAS.filter(e => e.grupo === "HDG").map(e => e.id));
+export const ehProjetoHDG = (empresaId) => HDG.has(empresaId);
 
 export const SEM_RUBRICA = "Sem categoria";
 
@@ -40,6 +47,8 @@ const arred2 = (v) => Math.round(((Number(v) || 0) + Number.EPSILON) * 100) / 10
 // movimentos de uma caem na outra, por isso a lista sai sem o duplicado —
 // senão a tabela do Real × Orçado mostrava duas linhas iguais, uma a zero.
 export function rubricasDa(empresaId) {
+  // Num projeto HDG o eixo é a linha da FO, não a categoria do extrato.
+  if (ehProjetoHDG(empresaId)) return LINHAS_FO_HDG;
   const proprias = categoriasDa(empresaId);
   const lista = proprias && proprias.length ? proprias : CATEGORIAS;
   const vistas = new Set();
@@ -76,6 +85,12 @@ export function rubricaNoPlano(empresaId, rubrica) {
 // silêncio — e no extrato continua lá, intacto.
 export function rubricaDe(empresaId, categoria, subcategoria) {
   if (ocultarNoGrafico(categoria, subcategoria)) return null;
+  // HDG: a subcategoria é que é a linha da FO; e o que foi lançado com o
+  // vocabulário LPX ("Obra", "Fee Gestão") traduz-se para a linha certa.
+  if (ehProjetoHDG(empresaId)) {
+    const linha = linhaDoFluxoHDG(categoria, subcategoria);
+    if (linha) return linha;
+  }
   const bruta = String(categoria || "").trim();
   if (!bruta) return SEM_RUBRICA;
   const doPlano = rubricasDa(empresaId).find(c => chaveRubrica(c) === chaveRubrica(bruta));
@@ -237,3 +252,13 @@ export function passosDaCascata(agregado) {
 }
 
 export default { rubricasDa, rubricaDe, agruparPorRubrica, passosDaCascata };
+
+
+// ─── O que os formulários de previsão oferecem ───────────────────────────────
+// Uma previsão, uma recorrente ou uma fatura entram no fluxo, por isso têm de
+// ser classificadas com a mesma régua dos ecrãs de fluxo: nas empresas LPX é
+// o plano de contas, nos projetos HDG são as linhas da FO.
+export function opcoesDeRubrica(empresaId) {
+  if (ehProjetoHDG(empresaId)) return LINHAS_FO_HDG;
+  return categoriasDa(empresaId) || CATEGORIAS;
+}

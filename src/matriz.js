@@ -40,8 +40,9 @@ export function nomeDaDespesa(descricao) {
   return s || String(descricao || "").trim() || "(sem descrição)";
 }
 
-export const chaveDaLinha = (item) =>
-  `${item?.tipo === "entrada" ? "e" : "s"}|${String(item?.cat || "").trim().toLowerCase()}|` +
+export const chaveDaLinha = (item, rubrica) =>
+  `${item?.tipo === "entrada" ? "e" : "s"}|` +
+  `${String(rubrica ?? item?.cat ?? "").trim().toLowerCase()}|` +
   nomeDaDespesa(item?.desc).toLowerCase();
 
 /**
@@ -51,9 +52,16 @@ export const chaveDaLinha = (item) =>
  * @param maxMeses  quantas colunas mostrar (o utilizador acrescenta e tira)
  * @param de, ate   "AAAA-MM", os mesmos filtros da vista mensal
  * @param comVazios incluir meses sem um único lançamento
+ * @param rubricaDoItem  como se chama a linha a que um lançamento pertence.
+ *        Por omissão é a categoria em cru; nos projetos HDG o ecrã passa aqui
+ *        a linha da FO (ver src/rubricasHDG.js), para a grelha mostrar as
+ *        mesmas despesas que o fluxo operacional.
  */
 export function construirMatriz({ meses = [], maxMeses = 6, de = "", ate = "",
-                                  comVazios = false } = {}) {
+                                  comVazios = false, rubricaDoItem = null } = {}) {
+  const rubricaDe_ = typeof rubricaDoItem === "function"
+    ? (it) => { try { return rubricaDoItem(it) || it?.cat || ""; } catch { return it?.cat || ""; } }
+    : (it) => it?.cat || "";
   let candidatos = (meses || []).filter(Boolean);
   if (de)  candidatos = candidatos.filter(m => m.key >= de);
   if (ate) candidatos = candidatos.filter(m => m.key <= ate);
@@ -69,11 +77,12 @@ export function construirMatriz({ meses = [], maxMeses = 6, de = "", ate = "",
   const linhas = new Map();
   colunas.forEach(m => {
     (m.items || []).forEach(item => {
-      const k = chaveDaLinha(item);
+      const rubrica = String(rubricaDe_(item) || "").trim();
+      const k = chaveDaLinha(item, rubrica);
       if (!linhas.has(k)) linhas.set(k, {
         chave: k,
         tipo: item.tipo === "entrada" ? "entrada" : "saida",
-        categoria: String(item.cat || "").trim() || "Sem categoria",
+        categoria: rubrica || "Sem categoria",
         nome: nomeDaDespesa(item.desc),
         valores: Object.fromEntries(chaves.map(c => [c, 0])),
         itens: Object.fromEntries(chaves.map(c => [c, []])),

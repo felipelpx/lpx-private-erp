@@ -2,6 +2,7 @@ import React, { useState, useMemo, useEffect } from "react";
 import { fmtEUR, fmtData } from "./formato.js";
 import { COR, RAIO } from "./brand.js";
 import { categoriasDa, subcategoriasDa, usaSubcategoria } from "./categoriasEmpresa.js";
+import { opcoesDeRubrica, ehProjetoHDG } from "./rubricas.js";
 import { CATEGORIAS } from "./categorias.js";
 import { PERIODICIDADES, rotuloPeriodicidade, ocorrenciasDe,
          resumoDaRegra, validarRegra } from "./recorrentes.js";
@@ -82,8 +83,12 @@ export default function ModalRecorrentes({
       .sort((a, b) => String(a.descricao).localeCompare(String(b.descricao), "pt")),
     [recorrentes, empresa]);
 
-  const plano = categoriasDa(empresa) || CATEGORIAS;
-  const comSub = usaSubcategoria(empresa);
+  // Uma recorrente entra no fluxo: classifica-se com a mesma régua dos
+  // ecrãs de fluxo — nos projetos HDG, as linhas da FO.
+  const plano = opcoesDeRubrica(empresa);
+  // Num projeto HDG a linha escolhida JÁ é a despesa da FO, por isso não há
+  // segunda caixa a preencher.
+  const comSub = usaSubcategoria(empresa) && !ehProjetoHDG(empresa);
   const subs = comSub ? subcategoriasDa(empresa, f.categoria) : [];
 
   useEffect(() => { setF(x => ({ ...x, empresa })); }, [empresa]);

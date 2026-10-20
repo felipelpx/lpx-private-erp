@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect } from "react";
+import React, { useState, useMemo, useEffect, useCallback } from "react";
 import { useVendas, useSaldosAtuais, useRecebiveis, useObraPlanos,
          useDespesasRecorrentes, useFracoes } from "./hooks.js";
 import ModalPlanoObra, { BotaoPlanoObra } from "./ObraPlano.jsx";
@@ -13,6 +13,7 @@ import { fmtEUR as fmtEuro } from "./formato.js";
 import { labelEmpresa, EMPRESAS as EMPRESAS_TODAS } from "./empresas.js";
 import { temFunding, pctFunding, linhaFunding, ERRO_SEM_COLUNAS, faltamColunas, CATEGORIA_FUNDING } from "./funding.js";
 import { construirMatriz } from "./matriz.js";
+import { opcoesDeRubrica, rubricaDe } from "./rubricas.js";
 import MatrizFluxo, { BotaoFunding, AcoesDoItem } from "./MatrizFluxo.jsx";
 
 const fmt = (v) => fmtEuro(v, 0);
@@ -760,10 +761,22 @@ export default function FluxoFuturo({ faturas: faturasTodas, faturasLoading, pag
 
   // A matriz usa os mesmos meses da vista mensal — os mesmos lançamentos, a
   // mesma aritmética; só a arrumação é outra. Ver src/matriz.js.
+  // A linha a que cada lançamento pertence. Nas empresas LPX é a categoria com
+  // que foi classificado; nos projetos HDG é a despesa da FO — ver
+  // src/rubricasHDG.js. Como em "Todos os Projetos" convivem os dois mundos,
+  // a empresa vem do próprio lançamento.
+  const rubricaDoItem = useCallback((it) => {
+    const emp = it?.pagamento?.empresa || it?.fatura?.empresa
+             || it?.recorrente?.empresa || (empresa !== "all" ? empresa : "");
+    const sub = it?.pagamento?.subcategoria || it?.fatura?.subcategoria || "";
+    return rubricaDe(emp, it?.cat, sub) || it?.cat || "";
+  }, [empresa]);
+
   const matriz = useMemo(() => construirMatriz({
     meses: mesesComSaldo, maxMeses: mesesMatriz,
     de: dataInicio, ate: dataFim, comVazios: mostrarVazios,
-  }), [mesesComSaldo, mesesMatriz, dataInicio, dataFim, mostrarVazios]);
+    rubricaDoItem,
+  }), [mesesComSaldo, mesesMatriz, dataInicio, dataFim, mostrarVazios, rubricaDoItem]);
 
   const anoGroups = useMemo(() => {
     const groups = {};
@@ -1059,7 +1072,7 @@ export default function FluxoFuturo({ faturas: faturasTodas, faturasLoading, pag
                 <label style={{ fontSize: 10, color: "#9DA2A6", fontFamily: "var(--fonte-numero)", textTransform: "uppercase" }}>Categoria</label>
                 <select value={form.categoria} onChange={e => setForm(f => ({ ...f, categoria: e.target.value }))}
                   style={{ background: "#F9F5EF", border: "1px solid #EFE8DE", borderRadius: 8, padding: "9px 12px", fontSize: 13, outline: "none" }}>
-                  {comOValorAtual(categoriasDa(form.empresa) || CATEGORIAS, form.categoria)
+                  {comOValorAtual(opcoesDeRubrica(form.empresa), form.categoria)
                     .map(v => <option key={v}>{v}</option>)}
                 </select>
               </div>
@@ -1552,7 +1565,7 @@ export default function FluxoFuturo({ faturas: faturasTodas, faturasLoading, pag
                 <label style={{ fontSize: 10, color: "#9DA2A6", fontFamily: "var(--fonte-numero)", textTransform: "uppercase" }}>Categoria</label>
                 <select value={editForm.categoria} onChange={e => setEditForm(f => ({ ...f, categoria: e.target.value }))}
                   style={{ background: "#F9F5EF", border: "1px solid #EFE8DE", borderRadius: 8, padding: "9px 12px", fontSize: 13, outline: "none" }}>
-                  {comOValorAtual(categoriasDa(form.empresa) || CATEGORIAS, form.categoria)
+                  {comOValorAtual(opcoesDeRubrica(form.empresa), form.categoria)
                     .map(v => <option key={v}>{v}</option>)}
                 </select>
               </div>

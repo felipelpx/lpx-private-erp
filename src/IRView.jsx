@@ -11,7 +11,7 @@ import { useDadosRealOrcado } from "./RealOrcadoView.jsx";
 import { podeEditarOrcado } from "./realOrcado.js";
 import { statusFatura, faturaPaga } from "./status.js";
 import { valorFunding, temFunding, CATEGORIA_FUNDING } from "./funding.js";
-import { agruparPorRubrica, passosDaCascata, chaveRubrica } from "./rubricas.js";
+import { agruparPorRubrica, passosDaCascata, chaveRubrica, rubricaDe } from "./rubricas.js";
 import { linhasDeFluxo as linhasDeVendas, soReceita, contaDaVenda } from "./vendas.js";
 import { larguraGrafico, colocarRotulos } from "./rotulos.js";
 import { fmtEUR, fmtEUR0, fmtNum, fmtInt, fmtCompacto, fmtData, fmtPctSinal } from "./formato.js";
@@ -955,7 +955,9 @@ export default function IRView({ currentUser, empresasVisiveis }) {
   const mesesPorVir = useMemo(() => futuro.filter(m => !m.passado), [futuro]);
   const matrizFuturo = useMemo(() => construirMatriz({
     meses: mesesPorVir, maxMeses: mesesMatriz,
-  }), [mesesPorVir, mesesMatriz]);
+    // A mesma régua do Fluxo Futuro: nos projetos HDG, as linhas da FO.
+    rubricaDoItem: (it) => rubricaDe(empSel, it?.cat, it?.subcategoria) || it?.cat || "",
+  }), [mesesPorVir, mesesMatriz, empSel]);
 
   const saldoHoje = useMemo(
     () => empresasAtivas.reduce((s, e) => s + e.contas.reduce((t, c) => t + (Number(c.saldo) || 0), 0), 0),
