@@ -20,8 +20,23 @@
 const num = (v) => { const n = Number(v); return Number.isFinite(n) ? n : 0; };
 const arred2 = (v) => Math.round((num(v) + Number.EPSILON) * 100) / 100;
 
-const MESES_PT = "janeiro|fevereiro|mar[çc]o|abril|maio|junho|julho|agosto|" +
-                 "setembro|outubro|novembro|dezembro";
+// Os meses como aparecem nas descrições: por extenso ("Setembro") e abreviados
+// ("set"), que é o que o plano de obra escreve — `rotuloMes` dá "out/26".
+const MESES_PT =
+  "jan(?:eiro)?|fev(?:ereiro)?|mar(?:[çc]o)?|abr(?:il)?|mai(?:o)?|jun(?:ho)?|" +
+  "jul(?:ho)?|ago(?:sto)?|set(?:embro)?|out(?:ubro)?|nov(?:embro)?|dez(?:embro)?";
+const ANO = "\\d{4}|\\d{2}";
+
+// O mês colado ao fim do nome, em qualquer das formas que o ERP produz:
+//   "- Setembro 2026" · "— out/26" · "Outubro/2026" · "· 2026-09" · "- 09/2026"
+// Um ano sozinho NÃO conta: "IMI 2025" e "IMI 2026" são despesas diferentes,
+// não duas parcelas da mesma.
+const FIM_COM_MES = new RegExp(
+  "(?:[-–—·:,]\\s*)?(?:\\(\\s*)?(?:" +
+    `\\d{4}\\s*[/.-]\\s*\\d{1,2}` +                                  // 2026-09
+    `|(?:${MESES_PT})(?:\\s*[/.-]\\s*|\\s+de\\s+|\\s+)?(?:${ANO})?` + // set/26
+    `|\\d{1,2}\\s*[/.-]\\s*(?:${ANO})` +                             // 09/2026
+  ")(?:\\s*\\))?\\s*$", "i");
 
 /**
  * O nome pelo qual duas parcelas se reconhecem como a mesma despesa.
@@ -32,10 +47,9 @@ export function nomeDaDespesa(descricao) {
   s = s.replace(/\[→?\s*fatura[^\]]*\]/gi, " ");   // [→ fatura FT 123]
   s = s.replace(/\(\s*\d+\s*\/\s*\d+\s*\)/g, " "); // (2/5)
   s = s.replace(/\b\d+\s*\/\s*\d+\b/g, " ");       // 2/5 solto
-  // O mês no fim do nome: "- Setembro 2026", "· out/26", "— 2026-09"
-  const fim = `(?:[-–—·:]\\s*)?(?:(?:${MESES_PT})|\\d{1,2})[\\s/.-]*(?:de\\s*)?(?:\\d{2,4})?\\s*$`;
-  s = s.replace(new RegExp(fim, "i"), " ");
-  s = s.replace(/[\s·\-–—:,]+$/g, " ");
+  s = s.replace(/\s{2,}/g, " ").trim();
+  s = s.replace(FIM_COM_MES, " ");
+  s = s.replace(/[\s·\-–—:,/]+$/g, " ");
   s = s.replace(/\s{2,}/g, " ").trim();
   return s || String(descricao || "").trim() || "(sem descrição)";
 }
@@ -96,8 +110,18 @@ export function construirMatriz({ meses = [], maxMeses = 6, de = "", ate = "",
     });
   });
 
-  // Por secção (entradas, saídas) e, dentro dela, por categoria. Maior
-  // primeiro: numa reunião olha-se para o que pesa, não para o alfabeto.
+  // O mês em que uma linha começa a ter valor — é por aí que as linhas se
+  // ordenam dentro do grupo. Numa grelha de meses, ler no sentido do tempo é
+  // o que se espera; ordenar por valor fazia fevereiro aparecer antes de
+  // outubro sem razão nenhuma.
+  const primeiroMes = (linha) => {
+    const i = chaves.findIndex(c => Math.abs(num(linha.valores[c])) > 0.005);
+    return i < 0 ? chaves.length : i;
+  };
+
+  // Por secção (entradas, saídas) e, dentro dela, por categoria. As
+  // categorias vão da que mais pesa para a que menos pesa: numa reunião
+  // olha-se para o que pesa, não para o alfabeto.
   const seccao = (tipo, titulo) => {
     const minhas = [...linhas.values()].filter(l => l.tipo === tipo);
     const porCategoria = new Map();
@@ -112,7 +136,10 @@ export function construirMatriz({ meses = [], maxMeses = 6, de = "", ate = "",
       g.total = arred2(g.total + l.total);
     });
     const grupos = [...porCategoria.values()]
-      .map(g => ({ ...g, linhas: g.linhas.sort((a, b) => b.total - a.total || a.nome.localeCompare(b.nome, "pt")) }))
+      .map(g => ({ ...g, linhas: g.linhas.sort((a, b) =>
+        primeiroMes(a) - primeiroMes(b) ||
+        b.total - a.total ||
+        a.nome.localeCompare(b.nome, "pt")) }))
       .sort((a, b) => b.total - a.total || a.categoria.localeCompare(b.categoria, "pt"));
 
     const valores = Object.fromEntries(chaves.map(c =>
