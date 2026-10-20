@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo, useRef } from "react";
+import CelulaObs from "./CelulaObs.jsx";
 import ImportarExtrato from "./ImportarExtrato.jsx";
 import ImportarFatura from "./ImportarFatura.jsx";
 import FluxoFuturo from "./FluxoFuturo.jsx";
@@ -344,7 +345,7 @@ function SaldosView({extrato, caixaUnico}) {
 }
 
 // ─── CONTAS A PAGAR ────────────────────────────────────────────────────────────
-function ContasPagar({canEdit, faturas: faturasTodas, setFaturas, addFatura, updateFatura, deleteFatura, EMPRESAS: EMPRESAS_PROP}) {
+export function ContasPagar({canEdit, faturas: faturasTodas, setFaturas, addFatura, updateFatura, deleteFatura, EMPRESAS: EMPRESAS_PROP}) {
   // Um investidor só vê as faturas das empresas que lhe foram atribuídas.
   const EMPRESAS = EMPRESAS_PROP || EMPRESAS_ALL;
   // Uma fatura cuja empresa não corresponda a nenhuma empresa conhecida (ou que
@@ -782,7 +783,8 @@ function ContasPagar({canEdit, faturas: faturasTodas, setFaturas, addFatura, upd
                       {f.previsao_pagamento?fmtDate(f.previsao_pagamento):"—"}
                     </td>
                     <td style={{padding:"11px 14px"}}><StatusPill status={statusFatura(f)}/></td>
-                    <td style={{padding:"11px 14px",color:"#B2B6B9",fontSize:11,maxWidth:100,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{f.obs}</td>
+                    {/* Cortada na tabela, inteira ao passar o rato — ver src/CelulaObs.jsx */}
+                    <td style={{padding:"11px 14px",maxWidth:100}}><CelulaObs texto={f.obs} /></td>
                     <td style={{padding:"11px 14px"}}>
                       <div style={{display:"flex",gap:4}}>
                         {f.anexo_b64&&<button onClick={()=>setViewAnexo(f)} title="Ver fatura" style={{background:"#EDF1F5",border:"none",color:"#2C4A63",padding:"4px 9px",borderRadius:6,fontSize:11,cursor:"pointer"}}>📎</button>}
