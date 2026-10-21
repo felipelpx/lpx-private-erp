@@ -11,6 +11,13 @@
 //
 // Gerado a partir de Categorias.xlsx e dos extratos dos FO (13/10/2026).
 // Para mudar, mexe-se no Excel e volta-se a gerar — não se edita à mão.
+//
+// ACRESCENTADO À MÃO (21/10/2026), por existir na FO e faltar aqui:
+//   genero    > "Blessed - Aporte/Resgate"   (linha 22 da folha Fluxo Futuro)
+//   favcloset > "Outras Receitas"            (linha  6 da folha Fluxo Futuro)
+// Quem voltar a gerar este ficheiro a partir do Categorias.xlsx tem de as pôr
+// lá primeiro, senão elas desaparecem daqui sem ninguém dar por isso — o
+// teste-categorias-empresa.mjs trava essa regressão.
 // ─────────────────────────────────────────────────────────────────────────────
 
 export const CATEGORIAS_POR_EMPRESA = {
@@ -101,6 +108,7 @@ export const CATEGORIAS_POR_EMPRESA = {
     "Funding",
     "Vendas",
     "Comissão",
+    "Outras Receitas",
     "Terreno",
     "Impostos e taxas",
     "Encargos financeiros",
@@ -118,6 +126,7 @@ export const CATEGORIAS_POR_EMPRESA = {
   ],
   genero: [
     "Lpx - Aporte/Resgate",
+    "Blessed - Aporte/Resgate",
     "Parcela Emergente - Aporte/Resgate",
     "Mútuo Lpx",
     "Mútuo Big Mouse",
