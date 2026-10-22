@@ -731,7 +731,10 @@ const Cartao = ({ rotulo, valor, nota, cor }) => (
 // inversão do sujeito passivo em fiscalização nem em CSO), por isso é esse o
 // montante que sai da conta no dia.
 function BandeiraFunding({ ligada, onMudar, valor, taxaIva, pct, o = "a", nome }) {
-  if (!(valor > 0)) return null;
+  // A bandeira aparece SEMPRE, mesmo com a avença a zero. Escondê-la nesse
+  // caso parecia arrumado e era o contrário: quem abre o plano pela primeira
+  // vez tem tudo a zero, e não via sequer que a opção existia.
+  const semAvenca = !(valor > 0);
   const comIva = valor * (1 + (taxaIva || 0) / 100);
   const libertado = comIva * (pct || 0) / 100;
   return (
@@ -745,11 +748,13 @@ function BandeiraFunding({ ligada, onMudar, valor, taxaIva, pct, o = "a", nome }
       {ligada && (
         <div style={{ fontSize: 10.5, color: "#7E8388", paddingLeft: 22, marginTop: 3,
                       fontFamily: "var(--fonte-numero)" }}>
-          {pct > 0
-            ? <>{fmtEUR(libertado)}/mês de entrada ({pct}% de {fmtEUR(comIva)} com IVA)</>
-            : <span style={{ color: COR.negativoForte }}>
-                O funding do banco está a 0% — escreve a percentagem em «Financiamento».
-              </span>}
+          {semAvenca
+            ? <>A avença está a zero — escreve o valor em cima e o banco liberta sobre ele.</>
+            : pct > 0
+              ? <>{fmtEUR(libertado)}/mês de entrada ({pct}% de {fmtEUR(comIva)} com IVA)</>
+              : <span style={{ color: COR.negativoForte }}>
+                  O funding do banco está a 0% — escreve a percentagem em «Financiamento».
+                </span>}
         </div>
       )}
     </div>
