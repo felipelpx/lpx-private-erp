@@ -88,8 +88,16 @@ export function construirMatriz({ meses = [], maxMeses = 6, de = "", ate = "",
   // Quantos meses ficaram de fora, para o ecrã poder oferecer mais
   const porMostrar = Math.max(0, candidatos.length - colunas.length);
 
+  // As COLUNAS são os meses à vista; o TOTAL é do fluxo inteiro.
+  //
+  // Antes não era: a linha só se construía a partir das colunas visíveis, e o
+  // total era a soma delas. Numa obra de 18 meses com uma janela de 20 que
+  // começava mais cedo, um mês caía fora e o total ficava 184 252,87 € abaixo
+  // do plano de obra — sem nada no ecrã a dizer que faltava alguma coisa.
+  // Uma coluna chamada "total" tem de ser o total.
+  const dentro = new Set(chaves);
   const linhas = new Map();
-  colunas.forEach(m => {
+  candidatos.forEach(m => {
     (m.items || []).forEach(item => {
       const rubrica = String(rubricaDe_(item) || "").trim();
       const k = chaveDaLinha(item, rubrica);
@@ -100,12 +108,17 @@ export function construirMatriz({ meses = [], maxMeses = 6, de = "", ate = "",
         nome: nomeDaDespesa(item.desc),
         valores: Object.fromEntries(chaves.map(c => [c, 0])),
         itens: Object.fromEntries(chaves.map(c => [c, []])),
-        total: 0,
+        total: 0, foraDaJanela: 0,
       });
       const linha = linhas.get(k);
       const v = Math.abs(num(item.valor));
-      linha.valores[m.key] = arred2(linha.valores[m.key] + v);
-      linha.itens[m.key].push(item);
+      if (dentro.has(m.key)) {
+        linha.valores[m.key] = arred2(linha.valores[m.key] + v);
+        linha.itens[m.key].push(item);
+      } else {
+        // O que fica para lá da janela conta no total, e diz-se quanto é.
+        linha.foraDaJanela = arred2(linha.foraDaJanela + v);
+      }
       linha.total = arred2(linha.total + v);
     });
   });
@@ -123,17 +136,26 @@ export function construirMatriz({ meses = [], maxMeses = 6, de = "", ate = "",
   // categorias vão da que mais pesa para a que menos pesa: numa reunião
   // olha-se para o que pesa, não para o alfabeto.
   const seccao = (tipo, titulo) => {
-    const minhas = [...linhas.values()].filter(l => l.tipo === tipo);
+    const todas = [...linhas.values()].filter(l => l.tipo === tipo);
+    // Uma despesa que não tem nada nos meses à vista não vira linha vazia na
+    // grelha — mas o que ela vale não desaparece: vai para o total de fora da
+    // janela, que o rodapé mostra.
+    const naJanela = (l) => chaves.some(c => Math.abs(num(l.valores[c])) > 0.005);
+    const minhas = todas.filter(naJanela);
+    const soLaFora = arred2(todas.filter(l => !naJanela(l))
+      .reduce((s, l) => s + l.total, 0));
     const porCategoria = new Map();
     minhas.forEach(l => {
       if (!porCategoria.has(l.categoria)) porCategoria.set(l.categoria, {
         categoria: l.categoria, linhas: [],
         valores: Object.fromEntries(chaves.map(c => [c, 0])), total: 0,
+        foraDaJanela: 0,
       });
       const g = porCategoria.get(l.categoria);
       g.linhas.push(l);
       chaves.forEach(c => { g.valores[c] = arred2(g.valores[c] + l.valores[c]); });
       g.total = arred2(g.total + l.total);
+      g.foraDaJanela = arred2((g.foraDaJanela || 0) + l.foraDaJanela);
     });
     const grupos = [...porCategoria.values()]
       .map(g => ({ ...g, linhas: g.linhas.sort((a, b) =>
@@ -146,8 +168,12 @@ export function construirMatriz({ meses = [], maxMeses = 6, de = "", ate = "",
       [c, arred2(grupos.reduce((s, g) => s + g.valores[c], 0))]));
     return {
       tipo, titulo, grupos, valores,
-      total: arred2(grupos.reduce((s, g) => s + g.total, 0)),
+      // O total da secção é do fluxo inteiro: inclui o que está nas colunas,
+      // o que ficou para lá delas, e as despesas que só existem lá fora.
+      total: arred2(grupos.reduce((s, g) => s + g.total, 0) + soLaFora),
+      foraDaJanela: arred2(grupos.reduce((s, g) => s + (g.foraDaJanela || 0), 0) + soLaFora),
       nLinhas: minhas.length,
+      nLinhasForaDaJanela: todas.length - minhas.length,
     };
   };
 
@@ -159,10 +185,17 @@ export function construirMatriz({ meses = [], maxMeses = 6, de = "", ate = "",
 
   return {
     colunas, chaves, porMostrar,
+    // Quanto é que fica para lá das colunas à vista — o ecrã diz-no, para
+    // ninguém ler o total como se fosse só o que está na grelha.
+    foraDaJanela: arred2(entradas.foraDaJanela + saidas.foraDaJanela),
+    mesesForaDaJanela: porMostrar,
     seccoes: [entradas, saidas].filter(s => s.nLinhas > 0),
     entradas, saidas, liquido,
     totalLiquido: arred2(entradas.total - saidas.total),
-    nLinhas: linhas.size,
+    // As linhas que a grelha mostra. As que só existem para lá das colunas à
+    // vista contam no total, mas não são linhas no ecrã.
+    nLinhas: entradas.nLinhas + saidas.nLinhas,
+    nLinhasTotal: linhas.size,
   };
 }
 

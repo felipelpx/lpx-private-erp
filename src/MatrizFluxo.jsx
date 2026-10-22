@@ -184,7 +184,7 @@ export default function MatrizFluxo({ matriz, isAdmin, acoes, nMeses, onNMeses, 
     return () => window.removeEventListener("keydown", esc);
   }, [celula]);
 
-  const { colunas, seccoes, liquido, porMostrar } = matriz;
+  const { colunas, seccoes, liquido, porMostrar, foraDaJanela = 0 } = matriz;
   const larguraMes = 118;
 
   // "2026-11" → "nov/26". O label que vem do fluxo sai "11/2026" em pt-PT, e
@@ -252,8 +252,14 @@ export default function MatrizFluxo({ matriz, isAdmin, acoes, nMeses, onNMeses, 
                      borderRadius: 7, fontSize: 11, cursor: "pointer", fontFamily: "var(--fonte-numero)" }}>{n}</button>
         ))}
         {porMostrar > 0 && (
-          <span style={{ fontSize: 10.5, color: "#9DA2A6" }}>
+          <span style={{ fontSize: 10.5, color: "#9DA2A6" }}
+            title="A coluna TOTAL soma o fluxo todo, não só os meses à vista.">
             mais {porMostrar} {porMostrar === 1 ? "mês" : "meses"} à frente
+            {foraDaJanela > 0.005 && (
+              <strong style={{ color: AMARELO_TEXTO, marginLeft: 5 }}>
+                ({fmtK(foraDaJanela)} fora da vista, já no total)
+              </strong>
+            )}
           </span>
         )}
         <div style={{ width: 1, height: 18, background: "#E7DED2", margin: "0 4px" }} />
@@ -283,7 +289,10 @@ export default function MatrizFluxo({ matriz, isAdmin, acoes, nMeses, onNMeses, 
             <tr style={{ background: "#FAF6F0" }}>
               <th style={{ ...thMes, ...colada("#FAF6F0"), textAlign: "left", minWidth: 300 }}>Despesa</th>
               {colunas.map(c => <th key={c.key} style={thMes}>{rotuloCol(c)}</th>)}
-              <th style={{ ...thMes, borderLeft: "1px solid #E7DED2" }}>Total</th>
+              <th style={{ ...thMes, borderLeft: "1px solid #E7DED2" }}
+                  title="Soma o fluxo inteiro desta despesa, incluindo os meses que não estão à vista.">
+                Total{porMostrar > 0 ? " ⃰" : ""}
+              </th>
             </tr>
           </thead>
 
