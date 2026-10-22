@@ -15,6 +15,13 @@
 // ACRESCENTADO À MÃO (21/10/2026), por existir na FO e faltar aqui:
 //   genero    > "Blessed - Aporte/Resgate"   (linha 22 da folha Fluxo Futuro)
 //   favcloset > "Outras Receitas"            (linha  6 da folha Fluxo Futuro)
+//
+// CORRIGIDO À MÃO (22/10/2026):
+//   favcloset trazia a mesma rubrica escrita de duas maneiras — "Impostos e
+//   taxas" no meio da lista e "Impostos e Taxas" no fim. O Felipe escolheu
+//   ficar com "Impostos e Taxas", que passou a ocupar a posição da antiga.
+//   Os lançamentos gravados com a grafia antiga continuam a cair nela: a
+//   comparação de rubricas ignora maiúsculas e acentos.
 // Quem voltar a gerar este ficheiro a partir do Categorias.xlsx tem de as pôr
 // lá primeiro, senão elas desaparecem daqui sem ninguém dar por isso — o
 // teste-categorias-empresa.mjs trava essa regressão.
@@ -110,7 +117,7 @@ export const CATEGORIAS_POR_EMPRESA = {
     "Comissão",
     "Outras Receitas",
     "Terreno",
-    "Impostos e taxas",
+    "Impostos e Taxas",
     "Encargos financeiros",
     "Legais",
     "Marketing",
@@ -122,7 +129,6 @@ export const CATEGORIAS_POR_EMPRESA = {
     "Juros",
     "Ajuste",
     "IVA de obra",
-    "Impostos e Taxas",
   ],
   genero: [
     "Lpx - Aporte/Resgate",

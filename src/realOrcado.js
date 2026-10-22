@@ -86,13 +86,28 @@ export function calcularRealOrcado({
 
   // ── Orçado ────────────────────────────────────────────────────────────────
   // Guardado em módulo (sempre positivo); a rubrica é a chave.
+  //
+  // Pode haver MAIS DO QUE UMA linha para a mesma rubrica. As migrações que
+  // semearam os orçamentos deram-lhes ids por número — 'orc_favcloset_09' —
+  // e a aplicação grava em 'orc_favcloset_obra'. O upsert não encontrava a
+  // linha semeada, criava outra ao lado, e depois era o acaso a decidir qual
+  // das duas aparecia: o utilizador escrevia um valor novo e via o antigo
+  // voltar. Aqui ganha sempre a mais recente — que é a que ele acabou de
+  // escrever — e, em caso de empate, a que tem o id canónico.
+  // O supabase/orcamento-ids.sql arruma os duplicados de vez.
+  const quando = (o) => { const t = Date.parse(o?.updated_at || ""); return Number.isFinite(t) ? t : 0; };
+  const porRubrica = new Map();
   (orcamento || []).forEach(o => {
     if (o?.empresa_id !== empresaId) return;
     const r = rubricasDa(empresaId).find(c => chaveRubrica(c) === chaveRubrica(o.categoria))
             || String(o.categoria || "").trim();
     if (!r) return;
-    balde(r).orcado = Math.abs(num(o.orcado));
+    const atual = porRubrica.get(r);
+    const ganha = !atual || quando(o) > quando(atual)
+      || (quando(o) === quando(atual) && o.id === id_orcamento(empresaId, r));
+    if (ganha) porRubrica.set(r, o);
   });
+  porRubrica.forEach((o, r) => { balde(r).orcado = Math.abs(num(o.orcado)); });
 
   // ── Real ──────────────────────────────────────────────────────────────────
   (movimentos || []).forEach(m => {
