@@ -83,21 +83,22 @@ function ForecastDetalhe({ linha, cor }) {
   const d = linha.detalhe || {};
   const vazio = Math.abs(linha.forecast) <= 0.005;
 
+  const docs = d.docs || {};
   const parcelas = [
-    { k: "Real (extrato)",      v: linha.realAbs,            n: d.nMovimentos },
-    { k: "Faturas por pagar",   v: Math.abs(d.faturasPorPagar || 0), n: d.nFaturas },
-    { k: "Previsões do fluxo",  v: Math.abs(d.previsoes || 0),       n: d.nPrevisoes },
-    { k: "Despesas recorrentes",v: Math.abs(d.recorrentes || 0),     n: d.nRecorrentes },
-    { k: "Por receber",         v: Math.abs(d.porReceber || 0),      n: d.nPorReceber },
+    { k: "Real (extrato)",      v: linha.realAbs,            n: d.nMovimentos,  ds: docs.real },
+    { k: "Faturas por pagar",   v: Math.abs(d.faturasPorPagar || 0), n: d.nFaturas,     ds: docs.faturas },
+    { k: "Previsões do fluxo",  v: Math.abs(d.previsoes || 0),       n: d.nPrevisoes,   ds: docs.previsoes },
+    { k: "Despesas recorrentes",v: Math.abs(d.recorrentes || 0),     n: d.nRecorrentes, ds: docs.recorrentes },
+    { k: "Por receber",         v: Math.abs(d.porReceber || 0),      n: d.nPorReceber,  ds: docs.porReceber },
   ].filter(x => Math.abs(x.v) > 0.005);
 
   const abrir = () => {
     const r = ref.current?.getBoundingClientRect();
     if (!r) return;
-    const largura = 290;
+    const largura = 350;
     const x = Math.max(10, Math.min(window.innerWidth - largura - 10, r.right - largura));
     const abaixo = r.bottom + 8;
-    const cabe = abaixo + 190 < window.innerHeight;
+    const cabe = abaixo + 260 < window.innerHeight;
     setCaixa({ x, largura, y: cabe ? abaixo : null, yCima: cabe ? null : window.innerHeight - r.top + 8 });
   };
 
@@ -116,7 +117,7 @@ function ForecastDetalhe({ linha, cor }) {
           background: "#091C2A", color: "#FCF3EB",
           padding: "11px 13px", borderRadius: 9, fontSize: 11.5, lineHeight: 1.6,
           boxShadow: "0 12px 34px rgba(9,28,42,0.3)", textAlign: "left",
-          pointerEvents: "none",
+          pointerEvents: "none", maxHeight: "68vh", overflow: "hidden",
         }}>
           <div style={{ fontWeight: 700, marginBottom: 6, fontSize: 11,
                         letterSpacing: 0.3, textTransform: "uppercase", color: "#BAA685" }}>
@@ -125,11 +126,28 @@ function ForecastDetalhe({ linha, cor }) {
           {parcelas.length === 0 ? (
             <div style={{ color: "#C9C2B8" }}>Sem nada que componha este valor.</div>
           ) : parcelas.map(x => (
-            <div key={x.k} style={{ display: "flex", justifyContent: "space-between", gap: 12 }}>
-              <span style={{ color: "#C9C2B8" }}>
-                {x.k}{x.n > 0 ? <span style={{ color: "#8C8579" }}> ({x.n})</span> : null}
-              </span>
-              <span style={{ fontVariantNumeric: "tabular-nums" }}>{fmtEUR0(x.v)}</span>
+            <div key={x.k} style={{ marginBottom: 5 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", gap: 12 }}>
+                <span style={{ color: "#C9C2B8" }}>
+                  {x.k}{x.n > 0 ? <span style={{ color: "#8C8579" }}> ({x.n})</span> : null}
+                </span>
+                <span style={{ fontVariantNumeric: "tabular-nums" }}>{fmtEUR0(x.v)}</span>
+              </div>
+              {/* E o que compõe esta parcela, documento a documento. */}
+              {(x.ds || []).map((doc, i) => (
+                <div key={i} style={{ display: "flex", justifyContent: "space-between",
+                                      gap: 10, paddingLeft: 11, fontSize: 10.5,
+                                      color: doc.resto ? "#7B7467" : "#8C8579", lineHeight: 1.5 }}>
+                  <span style={{ overflow: "hidden", textOverflow: "ellipsis",
+                                 whiteSpace: "nowrap", fontStyle: doc.resto ? "italic" : "normal" }}>
+                    {doc.data ? <span style={{ color: "#6E6A61" }}>{String(doc.data).slice(8, 10)}/{String(doc.data).slice(5, 7)} </span> : null}
+                    {doc.texto}
+                  </span>
+                  <span style={{ fontVariantNumeric: "tabular-nums", flexShrink: 0 }}>
+                    {fmtEUR0(Math.abs(doc.valor))}
+                  </span>
+                </div>
+              ))}
             </div>
           ))}
           <div style={{ height: 1, background: "#2E4152", margin: "7px 0" }} />

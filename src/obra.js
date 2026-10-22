@@ -811,6 +811,33 @@ function resumir(linhas, { budget, budgetBruto = 0, ivaDoBudget = 0,
   };
 }
 
+// ─── O IVA da obra lido como obra ───────────────────────────────────────────
+// O motor passou a classificar o IVA debaixo da obra, mas o que JÁ está
+// gravado no Fluxo Futuro continua com os nomes antigos — "IVA de obra" das
+// previsões lançadas à mão, "IVA construção" das linhas de um motor anterior.
+// Mudar isso na base obrigava a um recálculo do plano em cada empresa.
+//
+// Em vez disso, o fluxo lê-os como obra. É só leitura: nada é reescrito, e o
+// Real × Orçado continua a ver "IVA de obra" como rubrica própria, porque lá
+// ele tem orçamento separado e juntá-lo à obra perdia essa comparação.
+const IVA_DE_OBRA = new Set(["iva de obra", "iva construcao", "iva de construcao", "iva obra"]);
+
+export function ehIvaDeObra(rubrica) {
+  return IVA_DE_OBRA.has(semAcento(rubrica).replace(/[_\s]+/g, " "));
+}
+
+/**
+ * A rubrica como o FLUXO a mostra: o IVA da obra cai no balde da obra.
+ * @param grupo    "LPX" ou "HDG"
+ * @param rubrica  a rubrica resolvida pelo plano de contas
+ */
+export function rubricaNoFluxo(grupo, rubrica) {
+  if (!ehIvaDeObra(rubrica)) return rubrica;
+  const mapa = grupo === "HDG" ? CATEGORIAS_HDG : CATEGORIAS_LPX;
+  const obra = mapa.obra;
+  return (grupo === "HDG" ? (obra.subcategoria || obra.categoria) : obra.categoria);
+}
+
 // ─── Despesas agarradas ao plano ────────────────────────────────────────────
 // Uma previsão manual pode ficar PRESA a um marco do plano em vez de a uma
 // data fixa. O caso que deu origem a isto: o resgate ao Enchanted paga-se na

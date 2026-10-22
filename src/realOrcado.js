@@ -59,6 +59,19 @@ export const id_orcamento = (empresaId, rubrica) =>
  * @param horizonte    até quando contar as recorrentes (ISO). Por omissão,
  *                     três anos — o mesmo horizonte do Fluxo Futuro.
  */
+// Os documentos de uma parcela, prontos para o ecrã: os maiores primeiro, e o
+// resto numa linha só. Devolver cinquenta linhas não ajudava ninguém.
+const MAX_DOCS = 8;
+function resumirDocs(lista) {
+  const ls = (lista || []).filter(d => Math.abs(num(d?.valor)) > 0.005)
+    .sort((a, b) => Math.abs(num(b.valor)) - Math.abs(num(a.valor)));
+  if (ls.length <= MAX_DOCS) return ls.map(d => ({ ...d, valor: arred2(d.valor) }));
+  const topo = ls.slice(0, MAX_DOCS).map(d => ({ ...d, valor: arred2(d.valor) }));
+  const resto = ls.slice(MAX_DOCS);
+  const soma = arred2(resto.reduce((s, d) => s + num(d.valor), 0));
+  return [...topo, { texto: `e mais ${resto.length}`, valor: soma, data: "", resto: true }];
+}
+
 export function calcularRealOrcado({
   empresaId, nomeEmpresa = "",
   movimentos = [], faturas = [], pagamentos = [], recorrentes = [],
@@ -76,6 +89,9 @@ export function calcularRealOrcado({
       rubrica: r, orcado: 0, real: 0,
       faturasPorPagar: 0, previsoes: 0, recorrentes: 0, porReceber: 0,
       nMovimentos: 0, nFaturas: 0, nPrevisoes: 0, nRecorrentes: 0, nPorReceber: 0,
+      // Os documentos por trás de cada parcela. Sem isto, um forecast que não
+      // bate obriga a ir procurar a quatro ecrãs diferentes.
+      docs: { real: [], faturas: [], previsoes: [], recorrentes: [], porReceber: [] },
       noPlano: rubricaNoPlano(empresaId, r),
     });
     return baldes.get(r);
@@ -116,6 +132,8 @@ export function calcularRealOrcado({
     const b = balde(r);
     b.real += num(m?.valor);
     b.nMovimentos++;
+    b.docs.real.push({ texto: m?.movimento || m?.detalhes || "(sem descrição)",
+                       valor: num(m?.valor), data: m?.data || "" });
   });
 
   // ── Comprometido: faturas por pagar ──────────────────────────────────────
@@ -128,6 +146,9 @@ export function calcularRealOrcado({
     const b = balde(r);
     b.faturasPorPagar -= Math.abs(num(f?.valor));   // uma fatura por pagar é saída
     b.nFaturas++;
+    b.docs.faturas.push({ texto: [f?.fornecedor, f?.fatura].filter(Boolean).join(" · ")
+                                 || f?.descricao || "(fatura)",
+                          valor: -Math.abs(num(f?.valor)), data: f?.vencimento || "" });
   });
 
   // ── Comprometido: previsões do Fluxo Futuro (inclui o plano de obra) ─────
@@ -140,6 +161,9 @@ export function calcularRealOrcado({
     const v = Math.abs(num(p?.valor));
     b.previsoes += p?.tipo === "entrada" ? v : -v;
     b.nPrevisoes++;
+    b.docs.previsoes.push({ texto: p?.descricao || "(previsão)",
+                            valor: p?.tipo === "entrada" ? v : -v,
+                            data: p?.data_inicio || "" });
   });
 
   // ── Comprometido: as vendas por receber ──────────────────────────────────
@@ -179,6 +203,9 @@ export function calcularRealOrcado({
       const b = balde(rubricaVendas);
       b.porReceber += falta;
       b.nPorReceber++;
+      b.docs.porReceber.push({
+        texto: `Tabela de vendas por receber · ${vgv.nFracoes || ""} fração(ões)`.trim(),
+        valor: falta, data: "" });
     }
   }
 
@@ -192,6 +219,9 @@ export function calcularRealOrcado({
         const b = balde(rubricaComissao);
         b.porReceber -= com;
         b.nPorReceber++;
+        b.docs.porReceber.push({
+          texto: `Comissão por pagar · ${v?.fracao || v?.cliente || "venda"}`,
+          valor: -com, data: v?.previsao_escritura || "" });
       }
     }
   });
@@ -205,6 +235,10 @@ export function calcularRealOrcado({
     const b = balde(rubricaVendas);
     b.porReceber += valor;
     b.nPorReceber++;
+    b.docs.porReceber.push({
+      texto: [rc?.cliente, rc?.descricao || rc?.numero_fatura].filter(Boolean).join(" · ")
+             || "(contas a receber)",
+      valor, data: rc?.vencimento || rc?.data || "" });
   });
 
   // ── Comprometido: despesas recorrentes ───────────────────────────────────
@@ -220,6 +254,10 @@ export function calcularRealOrcado({
     const total = oc.reduce((s, o) => s + Math.abs(o.valor), 0);
     b.recorrentes += reg?.tipo === "entrada" ? total : -total;
     b.nRecorrentes += oc.length;
+    b.docs.recorrentes.push({
+      texto: `${reg?.descricao || "(recorrente)"} · ${oc.length}× ${reg?.periodicidade || ""}`.trim(),
+      valor: reg?.tipo === "entrada" ? total : -total,
+      data: oc[0]?.data || "" });
   });
 
   // ── Fechar as contas de cada rubrica ─────────────────────────────────────
@@ -257,6 +295,11 @@ export function calcularRealOrcado({
         nMovimentos: b.nMovimentos, nFaturas: b.nFaturas,
         nPrevisoes: b.nPrevisoes, nRecorrentes: b.nRecorrentes,
         nPorReceber: b.nPorReceber,
+        // Os documentos de cada parcela, os maiores primeiro. Mais do que uma
+        // dúzia não cabe num painel nem se lê — o resto vai somado numa linha,
+        // para o total continuar a fechar à vista.
+        docs: Object.fromEntries(Object.entries(b.docs)
+          .map(([k, lista]) => [k, resumirDocs(lista)])),
       },
       // Uma rubrica sem orçado e sem nada que se lhe diga não vale uma linha.
       vazia: orcado <= 0.005 && Math.abs(real) <= 0.005 && Math.abs(comprometido) <= 0.005,

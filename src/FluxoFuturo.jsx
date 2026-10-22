@@ -3,7 +3,7 @@ import { useVendas, useSaldosAtuais, useRecebiveis, useObraPlanos,
          useDespesasRecorrentes, useFracoes } from "./hooks.js";
 import ModalPlanoObra, { BotaoPlanoObra } from "./ObraPlano.jsx";
 import { ANCORAS, dataAncorada, rotuloAncora, diaDe,
-         rubricasGeridasPeloMotor } from "./obra.js";
+         rubricasGeridasPeloMotor, rubricaNoFluxo } from "./obra.js";
 import ModalRecorrentes, { BotaoRecorrentes } from "./Recorrentes.jsx";
 import { ocorrenciasDe } from "./recorrentes.js";
 import { linhasDeFluxo as linhasDeVendasBase, soReceita,
@@ -798,7 +798,11 @@ export default function FluxoFuturo({ faturas: faturasTodas, faturasLoading, pag
     const emp = it?.pagamento?.empresa || it?.fatura?.empresa
              || it?.recorrente?.empresa || (empresa !== "all" ? empresa : "");
     const sub = it?.pagamento?.subcategoria || it?.fatura?.subcategoria || "";
-    return rubricaDe(emp, it?.cat, sub) || it?.cat || "";
+    const r = rubricaDe(emp, it?.cat, sub) || it?.cat || "";
+    // O IVA da obra é obra: lê-se dentro do balde dela, com o nome do
+    // trimestre a distingui-lo. Ver rubricaNoFluxo em src/obra.js.
+    const g = EMPRESAS_TODAS.find(e => e.id === emp)?.grupo === "HDG" ? "HDG" : "LPX";
+    return rubricaNoFluxo(g, r);
   }, [empresa]);
 
   const matriz = useMemo(() => construirMatriz({

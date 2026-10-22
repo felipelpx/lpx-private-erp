@@ -5,7 +5,7 @@ import { CRONOGRAMAS, ESTADO_MARCO, TIR_PROJETO } from "./cronogramas.js";
 import { cronogramaVivo } from "./cronograma.js";
 import { construirMatriz } from "./matriz.js";
 import MatrizFluxo from "./MatrizFluxo.jsx";
-import { obraRealizada, classificacaoDe } from "./obra.js";
+import { obraRealizada, classificacaoDe, rubricaNoFluxo } from "./obra.js";
 import RealOrcadoTabela from "./RealOrcadoTabela.jsx";
 import { useDadosRealOrcado } from "./RealOrcadoView.jsx";
 import { podeEditarOrcado } from "./realOrcado.js";
@@ -450,6 +450,77 @@ const rotuloEstado = (st) => ESTADO_ROTULO[st] || { longo: st || "—", curto: s
 // Quanto espaço um rótulo ocupa ao lado da letra, em píxeis de SVG: a letra
 // (12 px a negrito), o separador, e o rótulo a 8,5 px em monoespaçado.
 const cabeORotulo = (largura, texto) => largura > 24 + texto.length * 5.3;
+
+// A tabela do espelho: o desenho dá a leitura rápida do edifício, mas quem
+// quer conferir contra a tabela de vendas precisa de ver os números em coluna,
+// com o mesmo formato do Excel.
+function TabelaFracoes({ fracoes }) {
+  if (!fracoes.length) return null;
+  const ordem = (f) => String(f.fracao || "");
+  const ls = fracoes.slice().sort((a, b) => ordem(a).localeCompare(ordem(b), "pt", { numeric: true }));
+  const total = ls.reduce((s, f) => s + (Number(f.preco_tabela) || 0), 0);
+  const areaTot = ls.reduce((s, f) => s + (Number(f.area) || 0), 0);
+
+  const th = { padding: "7px 10px", fontSize: 9.5, letterSpacing: 0.4,
+               textTransform: "uppercase", color: "#9DA2A6", fontFamily: "var(--fonte-numero)",
+               borderBottom: "1px solid #E7DED2", whiteSpace: "nowrap" };
+  const td = { padding: "7px 10px", fontSize: 12, color: COR.texto,
+               borderBottom: "1px solid #F2EBE1", whiteSpace: "nowrap" };
+  const num = { ...td, textAlign: "right", fontVariantNumeric: "tabular-nums" };
+
+  return (
+    <div style={{ marginTop: 18, overflowX: "auto" }}>
+      <table style={{ borderCollapse: "collapse", width: "100%", minWidth: 520 }}>
+        <thead>
+          <tr>
+            <th style={{ ...th, textAlign: "left" }}>Fração</th>
+            <th style={{ ...th, textAlign: "left" }}>Piso</th>
+            <th style={{ ...th, textAlign: "left" }}>Tipologia</th>
+            <th style={{ ...th, textAlign: "right" }}>Área (m²)</th>
+            <th style={{ ...th, textAlign: "right" }}>Preço</th>
+            <th style={{ ...th, textAlign: "right" }}>€/m²</th>
+            <th style={{ ...th, textAlign: "left" }}>Estado</th>
+          </tr>
+        </thead>
+        <tbody>
+          {ls.map(f => {
+            const a = Number(f.area) || 0, pr = Number(f.preco_tabela) || 0;
+            const c = ESTADO_COR[f.status] || ESTADO_COR["Disponível"];
+            return (
+              <tr key={f.id} title={f.notas || undefined}>
+                <td style={{ ...td, fontWeight: 700 }}>{f.fracao}</td>
+                <td style={{ ...td, color: "#7E8388" }}>{f.piso || "—"}</td>
+                <td style={td}>{f.tipologia || "—"}</td>
+                <td style={num}>{a > 0 ? fmtNum(a, 2) : "—"}</td>
+                <td style={{ ...num, fontWeight: 600 }}>{pr > 0 ? fmtEUR0(pr) : "—"}</td>
+                <td style={{ ...num, color: "#7E8388" }}>{a > 0 && pr > 0 ? fmtEUR0(pr / a) : "—"}</td>
+                <td style={td}>
+                  <span style={{ background: c.fundo, border: `1px solid ${c.borda}`, color: c.texto,
+                                 borderRadius: 4, padding: "1.5px 7px", fontSize: 10.5, fontWeight: 600 }}>
+                    {rotuloEstado(f.status).longo}
+                  </span>
+                </td>
+              </tr>
+            );
+          })}
+          <tr>
+            <td style={{ ...td, fontWeight: 700, borderBottom: "none" }}>Total</td>
+            <td style={{ ...td, borderBottom: "none" }} />
+            <td style={{ ...td, color: "#7E8388", borderBottom: "none" }}>{ls.length} un.</td>
+            <td style={{ ...num, fontWeight: 700, borderBottom: "none" }}>{fmtNum(areaTot, 2)}</td>
+            <td style={{ ...num, fontWeight: 700, borderBottom: "none" }}>{fmtEUR0(total)}</td>
+            <td style={{ ...num, fontWeight: 700, color: "#7E8388", borderBottom: "none" }}>
+              {areaTot > 0 ? fmtEUR0(total / areaTot) : "—"}</td>
+            <td style={{ ...td, borderBottom: "none" }} />
+          </tr>
+        </tbody>
+      </table>
+      <div style={{ fontSize: 10.5, color: "#9DA2A6", marginTop: 7 }}>
+        Preço de tabela. Onde houver nota (jardim, terraços), passa o rato pela linha.
+      </div>
+    </div>
+  );
+}
 
 function Predinho({ fracoes }) {
   if (!fracoes.length) return <Vazio texto="Sem frações neste projeto." />;
@@ -956,7 +1027,9 @@ export default function IRView({ currentUser, empresasVisiveis }) {
   const matrizFuturo = useMemo(() => construirMatriz({
     meses: mesesPorVir, maxMeses: mesesMatriz,
     // A mesma régua do Fluxo Futuro: nos projetos HDG, as linhas da FO.
-    rubricaDoItem: (it) => rubricaDe(empSel, it?.cat, it?.subcategoria) || it?.cat || "",
+    rubricaDoItem: (it) => rubricaNoFluxo(
+      EMPRESAS.find(e => e.id === empSel)?.grupo === "HDG" ? "HDG" : "LPX",
+      rubricaDe(empSel, it?.cat, it?.subcategoria) || it?.cat || ""),
   }), [mesesPorVir, mesesMatriz, empSel]);
 
   const saldoHoje = useMemo(
@@ -1163,6 +1236,7 @@ export default function IRView({ currentUser, empresasVisiveis }) {
                 </select>
               )}>
           <Predinho fracoes={fracoesVisiveis.filter(f => f.projeto === projetoAtivo)} />
+          <TabelaFracoes fracoes={fracoesVisiveis.filter(f => f.projeto === projetoAtivo)} />
         </Card>
       )}
 
