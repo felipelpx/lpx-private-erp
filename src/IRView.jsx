@@ -870,8 +870,31 @@ export default function IRView({ currentUser, empresasVisiveis }) {
   }, [movimentos, saldoInicial]);
 
   // Projetos visíveis (para o espelho de vendas)
-  const projetosVisiveis = empresasAtivas.map(e => e.nome);
-  const fracoesVisiveis = fracoes.filter(f => projetosVisiveis.includes(f.projeto));
+  //
+  // A coluna chama-se `projeto`, mas isto comparava-a com o NOME da empresa —
+  // e as duas coisas são diferentes: a Infinite Change chama-se assim e o
+  // projeto dela é o "Paço D'arcos". Frações gravadas com o nome do projeto
+  // nunca apareciam, e o ecrã dizia "Sem frações neste projeto" sobre um
+  // projeto que as tinha.
+  //
+  // Agora aceita-se qualquer um dos nomes por que a empresa é conhecida.
+  // É de leitura: nada se reescreve, e deixa de importar com qual deles as
+  // frações foram gravadas.
+  const nomesDoProjeto = (e) => [e?.nome, e?.projeto, e?.razaoSocial,
+                                 e?.projeto && e?.nome ? `${e.nome} (${e.projeto})` : null]
+    .filter(Boolean).map(x => String(x).trim().toLowerCase());
+  const projetosVisiveis = empresasAtivas.flatMap(nomesDoProjeto);
+  // E as várias grafias do mesmo projeto colapsam numa só. Sem isto, uma
+  // empresa cujas frações estejam gravadas com dois nomes aparecia como dois
+  // projetos no seletor, cada um com metade do prédio.
+  const rotuloCanonico = (projeto) => {
+    const k = String(projeto || "").trim().toLowerCase();
+    const e = empresasAtivas.find(x => nomesDoProjeto(x).includes(k));
+    return e ? (e.projeto ? `${e.nome} (${e.projeto})` : e.nome) : projeto;
+  };
+  const fracoesVisiveis = fracoes
+    .filter(f => projetosVisiveis.includes(String(f.projeto || "").trim().toLowerCase()))
+    .map(f => ({ ...f, projeto: rotuloCanonico(f.projeto) }));
   const projetosComFracoes = [...new Set(fracoesVisiveis.map(f => f.projeto))];
   const [projSel, setProjSel] = useState("");
   const projetoAtivo = projSel && projetosComFracoes.includes(projSel) ? projSel : projetosComFracoes[0];
@@ -1029,7 +1052,7 @@ export default function IRView({ currentUser, empresasVisiveis }) {
     // A mesma régua do Fluxo Futuro: nos projetos HDG, as linhas da FO.
     rubricaDoItem: (it) => rubricaNoFluxo(
       EMPRESAS.find(e => e.id === empSel)?.grupo === "HDG" ? "HDG" : "LPX",
-      rubricaDe(empSel, it?.cat, it?.subcategoria) || it?.cat || ""),
+      rubricaDe(empSel, it?.cat, it?.subcategoria) || it?.cat || "", it?.desc || ""),
   }), [mesesPorVir, mesesMatriz, empSel]);
 
   const saldoHoje = useMemo(

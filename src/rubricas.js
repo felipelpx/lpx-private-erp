@@ -158,6 +158,27 @@ export function inicioDaOperacao(empresaId) {
   return i < 0 ? 0 : i;
 }
 
+// ─── As categorias que fazem sentido numa FATURA ────────────────────────────
+// O Contas a Pagar é de faturas de fornecedores. Aportes, resgates, mútuos,
+// funding e amortizações não são faturas de ninguém — são movimentos de
+// capital —, e vendas e comissões recebidas também não.
+//
+// Até aqui o formulário oferecia a lista GLOBAL, igual para todas as
+// empresas. Nos projetos HDG isso era simplesmente outro plano de contas: o
+// utilizador escolhia "Obra" numa empresa cujo plano fala de "Obras >
+// Gastos com Obras", e a fatura entrava fora do plano.
+const FORA_DA_FATURA = new Set([
+  "vendas", "comissao", "receita", "receitas de comissao",
+  "development fee (receitas)", "outras receitas", "ajuste", "reservas",
+  "socios", "socios (suprimento)",
+]);
+
+export function categoriasDeFatura(empresaId) {
+  const plano = categoriasDa(empresaId);
+  if (!plano || !plano.length) return CATEGORIAS;
+  return plano.filter(c => !ehCapital(c) && !FORA_DA_FATURA.has(chaveRubrica(c)));
+}
+
 // ─── Agrupar movimentos por rubrica ──────────────────────────────────────────
 // Devolve as rubricas com movimento, pela ordem do plano, cada uma com o que
 // entrou, o que saiu e o líquido. As que o plano não conhece vão no fim,

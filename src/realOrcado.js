@@ -181,34 +181,6 @@ export function calcularRealOrcado({
 
   const fracaoDa = (v) => (fracoes || []).find(f => f.id === v?.fracao_id) || null;
 
-  // O que falta receber das vendas é a mesma conta do plano de obra
-  // (vgvPorReceber): tabela de vendas − o que já entrou. O "já entrou" lê o
-  // extrato, não só as fichas das vendas — senão um sinal que caiu na conta
-  // sem estar registado na ficha era contado duas vezes, uma no Real e outra
-  // no por receber.
-  //
-  // O Contas a Receber soma-se à parte, logo a seguir: lá dentro estão fees e
-  // comissões a faturar, não prestações de vendas, por isso são receita a mais
-  // e não uma parte desta.
-  if (nomeEmpresa) {
-    const vgv = vgvPorReceber({ fracoes, vendas, movimentos,
-                                projeto: nomeEmpresa, empresaId });
-    // E desconta-se o que já está lançado no Fluxo Futuro como entrada de
-    // venda — tipicamente a linha "Venda — escritura" que o plano de obra
-    // cria. É a mesma venda vista de outro lado: somar as duas dava o dobro
-    // do que o projeto tem para receber.
-    const jaNoFluxo = Math.max(0, num(baldes.get(rubricaVendas)?.previsoes));
-    const falta = arred2(Math.max(0, vgv.total - vgv.recebido - jaNoFluxo));
-    if (falta > 0.005) {
-      const b = balde(rubricaVendas);
-      b.porReceber += falta;
-      b.nPorReceber++;
-      b.docs.porReceber.push({
-        texto: `Tabela de vendas por receber · ${vgv.nFracoes || ""} fração(ões)`.trim(),
-        valor: falta, data: "" });
-    }
-  }
-
   (vendas || []).forEach(v => {
     if (!nomeEmpresa || v?.projeto !== nomeEmpresa) return;
     // A comissão do mediador ainda por pagar é um compromisso como outro —
@@ -240,6 +212,38 @@ export function calcularRealOrcado({
              || "(contas a receber)",
       valor, data: rc?.vencimento || rc?.data || "" });
   });
+
+  // ── As vendas por receber: o FLUXO manda ─────────────────────────────────
+  // O forecast das vendas vem do Fluxo Futuro — as previsões que o plano de
+  // obra lança e os recebíveis do Contas a Receber. A tabela de vendas é a
+  // mesma receita vista de outro lado, por isso NÃO se soma: somar as duas
+  // dava o dobro do que o projeto tem para receber.
+  //
+  // Era o que acontecia. O código antigo descontava as previsões do fluxo mas
+  // ignorava os recebíveis, e numa empresa cujos recebimentos estão todos no
+  // Contas a Receber a tabela inteira entrava por cima: 4,8 M a mais na
+  // Admirable Sequence.
+  //
+  // A tabela só entra quando o fluxo não diz NADA sobre vendas — senão um
+  // projeto sem previsões lançadas mostrava forecast igual ao já recebido,
+  // que também não é verdade. Quando entra, o painel do forecast di-lo.
+  if (nomeEmpresa) {
+    const b0 = baldes.get(rubricaVendas);
+    const jaNoFluxo = Math.abs(num(b0?.previsoes)) + Math.abs(num(b0?.porReceber));
+    if (jaNoFluxo <= 0.005) {
+      const vgv = vgvPorReceber({ fracoes, vendas, movimentos,
+                                  projeto: nomeEmpresa, empresaId });
+      const falta = arred2(Math.max(0, vgv.total - vgv.recebido));
+      if (falta > 0.005) {
+        const b = balde(rubricaVendas);
+        b.porReceber += falta;
+        b.nPorReceber++;
+        b.docs.porReceber.push({
+          texto: `Tabela de vendas (o fluxo não tem previsões de venda) · ${vgv.nFracoes || ""} fração(ões)`.trim(),
+          valor: falta, data: "" });
+      }
+    }
+  }
 
   // ── Comprometido: despesas recorrentes ───────────────────────────────────
   // Só o que falta acontecer: o que já passou está no extrato ou nas faturas.

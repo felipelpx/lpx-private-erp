@@ -826,13 +826,23 @@ export function ehIvaDeObra(rubrica) {
   return IVA_DE_OBRA.has(semAcento(rubrica).replace(/[_\s]+/g, " "));
 }
 
+// Um "IVA" seco não chega para decidir: nos projetos HDG o motor antigo
+// gravava o IVA da obra com a subcategoria "IVA", e nas FO há uma linha "IVA"
+// que é o IVA da empresa, fora do fluxo do projeto. O que separa os dois é a
+// descrição — o motor sempre escreveu "IVA da obra 4T26".
+const DESC_IVA_OBRA = /\biva\b.{0,4}\b(da|de)\b.{0,2}\bobra\b/i;
+
 /**
  * A rubrica como o FLUXO a mostra: o IVA da obra cai no balde da obra.
- * @param grupo    "LPX" ou "HDG"
- * @param rubrica  a rubrica resolvida pelo plano de contas
+ * @param grupo     "LPX" ou "HDG"
+ * @param rubrica   a rubrica resolvida pelo plano de contas
+ * @param descricao a descrição do lançamento, quando a houver — é ela que
+ *                  distingue o IVA da obra de um IVA qualquer numa HDG
  */
-export function rubricaNoFluxo(grupo, rubrica) {
-  if (!ehIvaDeObra(rubrica)) return rubrica;
+export function rubricaNoFluxo(grupo, rubrica, descricao = "") {
+  const seco = semAcento(rubrica).replace(/[_\s]+/g, " ") === "iva";
+  const eObra = ehIvaDeObra(rubrica) || (seco && DESC_IVA_OBRA.test(String(descricao || "")));
+  if (!eObra) return rubrica;
   const mapa = grupo === "HDG" ? CATEGORIAS_HDG : CATEGORIAS_LPX;
   const obra = mapa.obra;
   return (grupo === "HDG" ? (obra.subcategoria || obra.categoria) : obra.categoria);

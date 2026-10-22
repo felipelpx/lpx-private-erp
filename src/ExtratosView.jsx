@@ -148,9 +148,18 @@ function EditableSubcategoria({ initialValue, categoria, movId, onSave, disabled
   );
 }
 
+// O import do extrato deixou o número de ordem da linha no campo das
+// observações — "218", "217", "216"… Não é observação nenhuma: é lixo do
+// ficheiro de origem, e enche a coluna de ruído que esconde as notas a sério.
+//
+// Um número solto nunca é uma observação. Um texto que tenha um número lá
+// dentro ("Fatura 218 do empreiteiro") é, e esse fica.
+const soNumero = (t) => /^\s*\d{1,6}\s*$/.test(String(t ?? ""));
+const limparObs = (t) => (soNumero(t) ? "" : (t || ""));
+
 // Texto editável: controlled + debounce de 800ms + onBlur também salva
 function EditableDetalhes({ initialValue, movId, onSave, disabled }) {
-  const [val, setVal] = useState(initialValue || "");
+  const [val, setVal] = useState(limparObs(initialValue));
   const [status, setStatus] = useState(null);
   const lastInitial = useRef(initialValue || "");
   const lastSaved = useRef(initialValue || "");
@@ -162,7 +171,10 @@ function EditableDetalhes({ initialValue, movId, onSave, disabled }) {
     if (initialValue !== lastInitial.current) {
       lastInitial.current = initialValue || "";
       if (!isEditingRef.current) {
-        setVal(initialValue || "");
+        setVal(limparObs(initialValue));
+        // `lastSaved` fica com o valor REAL da base: assim, se o utilizador
+        // escrever algo, a gravação acontece; e se não escrever, não se grava
+        // nada só por o ecrã o mostrar vazio.
         lastSaved.current = initialValue || "";
       }
     }
