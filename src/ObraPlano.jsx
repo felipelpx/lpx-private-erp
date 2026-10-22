@@ -380,8 +380,17 @@ export default function ModalPlanoObra({
               <Numero rotulo="Fiscalização / mês (sem IVA)" valor={f.fiscalizacao_mensal}
                 onMudar={muda("fiscalizacao_mensal")}
                 sugestao={sugFisc} onSugestao={muda("fiscalizacao_mensal")} />
+              <BandeiraFunding ligada={f.financia_fiscalizacao === true}
+                onMudar={muda("financia_fiscalizacao")}
+                valor={num(f.fiscalizacao_mensal)} taxaIva={num(f.taxa_iva_servicos)}
+                pct={num(f.funding_pct)} o="a" nome="fiscalização" />
+
               <Numero rotulo="CSO / mês (sem IVA)" valor={f.cso_mensal} onMudar={muda("cso_mensal")}
                 sugestao={sugCso} onSugestao={muda("cso_mensal")} />
+              <BandeiraFunding ligada={f.financia_cso === true}
+                onMudar={muda("financia_cso")}
+                valor={num(f.cso_mensal)} taxaIva={num(f.taxa_iva_servicos)}
+                pct={num(f.funding_pct)} o="o" nome="CSO" />
               <Numero rotulo="Taxa de IVA destes serviços" sufixo="%" valor={f.taxa_iva_servicos}
                 onMudar={muda("taxa_iva_servicos")} />
               {(num(f.fiscalizacao_mensal) > 0 || num(f.cso_mensal) > 0) && (
@@ -714,6 +723,39 @@ const Cartao = ({ rotulo, valor, nota, cor }) => (
 );
 
 // ─── A confirmação ───────────────────────────────────────────────────────────
+// A bandeira que diz se o banco financia uma avença. Fica ao lado do valor,
+// porque é uma decisão sobre aquela avença e não sobre o plano todo — há
+// bancos que aceitam a fiscalização e não o CSO.
+//
+// O que se financia é o valor COM IVA: estas faturas pagam-se com ele (não há
+// inversão do sujeito passivo em fiscalização nem em CSO), por isso é esse o
+// montante que sai da conta no dia.
+function BandeiraFunding({ ligada, onMudar, valor, taxaIva, pct, o = "a", nome }) {
+  if (!(valor > 0)) return null;
+  const comIva = valor * (1 + (taxaIva || 0) / 100);
+  const libertado = comIva * (pct || 0) / 100;
+  return (
+    <div style={{ marginTop: -4, paddingLeft: 2 }}>
+      <label style={{ display: "flex", alignItems: "center", gap: 8,
+                      cursor: "pointer", fontSize: 11.5, color: "#5C6166" }}>
+        <input type="checkbox" checked={ligada} onChange={e => onMudar(e.target.checked)}
+          style={{ width: 14, height: 14, accentColor: COR.tinta }} />
+        O banco financia {o} {nome}
+      </label>
+      {ligada && (
+        <div style={{ fontSize: 10.5, color: "#7E8388", paddingLeft: 22, marginTop: 3,
+                      fontFamily: "var(--fonte-numero)" }}>
+          {pct > 0
+            ? <>{fmtEUR(libertado)}/mês de entrada ({pct}% de {fmtEUR(comIva)} com IVA)</>
+            : <span style={{ color: COR.negativoForte }}>
+                O funding do banco está a 0% — escreve a percentagem em «Financiamento».
+              </span>}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // Antes de apagar o trabalho de alguém, mostra-se o que vai desaparecer: a
 // descrição, a data e o valor, linha a linha.
 function Confirmacao({ aplicacao, aGravar, onVoltar, onAplicar, cats }) {

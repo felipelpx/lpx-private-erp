@@ -28,14 +28,17 @@ export const temObra = (empresaId) => EMPRESAS_COM_OBRA.includes(empresaId);
 // Os seis tipos de linha que o motor gera. A marca `plano_tipo` fica gravada
 // em cada previsão: é por ela que um recálculo sabe o que é dele e o que é do
 // utilizador.
-export const TIPOS = ["obra", "funding", "fiscalizacao", "cso", "juros", "comissao",
+export const TIPOS = ["obra", "funding", "fiscalizacao", "funding_fiscalizacao",
+                      "cso", "funding_cso", "juros", "comissao",
                       "iva_obra", "funding_iva", "fecho", "venda", "amortizacao"];
 
 export const ROTULO_TIPO = {
   obra:         "Obra",
   funding:      "Funding banco (obra)",
   fiscalizacao: "Fiscalização",
+  funding_fiscalizacao: "Funding banco (fiscalização)",
   cso:          "CSO",
+  funding_cso:  "Funding banco (CSO)",
   juros:        "Juros do financiamento",
   comissao:     "Comissão de avaliação",
   iva_obra:     "IVA da obra",
@@ -51,7 +54,9 @@ const CATEGORIAS_LPX = {
   obra:         { categoria: "Obra" },
   funding:      { categoria: "Funding" },
   fiscalizacao: { categoria: "Fiscalização" },
+  funding_fiscalizacao: { categoria: "Funding" },
   cso:          { categoria: "CSO" },
+  funding_cso:  { categoria: "Funding" },
   juros:        { categoria: "Juros" },
   comissao:     { categoria: "Encargos financeiros" },
   iva_obra:     { categoria: "IVA construção" },
@@ -65,7 +70,9 @@ const CATEGORIAS_HDG = {
   obra:         { categoria: "Obras",            subcategoria: "Gastos com Obras" },
   funding:      { categoria: "Financiamento",    subcategoria: "Inflow - Obra" },
   fiscalizacao: { categoria: "Obras",            subcategoria: "Fiscalização" },
+  funding_fiscalizacao: { categoria: "Financiamento", subcategoria: "Inflow - Obra" },
   cso:          { categoria: "Soft_Costs",       subcategoria: "CSO" },
+  funding_cso:  { categoria: "Financiamento",    subcategoria: "Inflow - Obra" },
   juros:        { categoria: "Financiamento",    subcategoria: "Outflow - Juros" },
   comissao:     { categoria: "Financiamento",    subcategoria: "Outflow - Taxas e comissões" },
   iva_obra:     { categoria: "Impostos e taxas", subcategoria: "IVA" },
@@ -303,6 +310,9 @@ export const PLANO_VAZIO = {
   // ficou de uma versão anterior). `funding_iva_pct` em branco = o mesmo
   // que a obra.
   recuperar_iva: true, funding_iva_pct: null,
+  // O banco também pode financiar as avenças. Uma bandeira por cada,
+  // porque há bancos que aceitam a fiscalização e não o CSO.
+  financia_fiscalizacao: false, financia_cso: false,
   // ── A escritura ──────────────────────────────────────────────────────────
   // O projeto não acaba quando a obra acaba: vende-se, paga-se o banco e
   // fecham-se contas. A escritura é o mês em que isso acontece, e o
@@ -427,6 +437,8 @@ export function planearObra(plano, { gastoObra = 0, hoje = hojeISO(), grupo = "L
   // O campo chama-se `recuperar_iva` por razões históricas; o que ele liga e
   // desliga é o financiamento do IVA pelo banco. O rótulo no ecrã é esse.
   const financiaIva = p.recuperar_iva !== false;
+  const financiaFisc = p.financia_fiscalizacao === true;
+  const financiaCso  = p.financia_cso === true;
   // E a percentagem é independente da da obra: há bancos que financiam a
   // empreitada a 80% e o IVA a 100%, porque o IVA volta por reembolso. Em
   // branco, segue a da obra — que era o que acontecia antes deste campo
@@ -483,6 +495,28 @@ export function planearObra(plano, { gastoObra = 0, hoje = hojeISO(), grupo = "L
       base: csoBase, iva: arred2(cso - csoBase),
     }));
 
+    // O banco também pode financiar as avenças. Ao contrário da empreitada,
+    // estas faturas pagam-se COM IVA — não há inversão do sujeito passivo em
+    // fiscalização nem em CSO —, por isso o que se financia é o valor cheio,
+    // que é o que sai da conta nesse dia. Uma bandeira por avença, porque há
+    // bancos que aceitam a fiscalização e não o CSO.
+    const fundFisc = (financiaFisc && fisc > 0) ? arred2(fisc * pctFunding / 100) : 0;
+    const fundCso  = (financiaCso  && cso  > 0) ? arred2(cso  * pctFunding / 100) : 0;
+    if (fundFisc > 0) linhas.push({
+      ...linha("funding_fiscalizacao", mes, fundFisc, grupo, {
+        descricao: `Funding banco — fiscalização ${rotuloMes(mes)}`,
+        obs: `${arred2(pctFunding)}% de ${fisc} € (avença com IVA)`,
+      }),
+      tipo: "entrada",
+    });
+    if (fundCso > 0) linhas.push({
+      ...linha("funding_cso", mes, fundCso, grupo, {
+        descricao: `Funding banco — CSO ${rotuloMes(mes)}`,
+        obs: `${arred2(pctFunding)}% de ${cso} € (avença com IVA)`,
+      }),
+      tipo: "entrada",
+    });
+
     // Libertação do mês: a percentagem contratada sobre a base da fatura.
     const libertado = arred2(baseMes * pctFunding / 100);
     if (libertado > 0) {
@@ -501,7 +535,7 @@ export function planearObra(plano, { gastoObra = 0, hoje = hojeISO(), grupo = "L
 
     // Juros sobre o SALDO MÉDIO do mês: a libertação não espera pelo mês
     // seguinte para contar, nem conta o mês inteiro.
-    const dividaFim = arred2(divida + libertado + fundingIvaNoMes(mes));
+    const dividaFim = arred2(divida + libertado + fundFisc + fundCso + fundingIvaNoMes(mes));
     if (taxaAnual > 0 && (divida > 0 || dividaFim > 0)) {
       const medio = arred2((divida + dividaFim) / 2);
       const juros = arred2(medio * taxaAnual / 100 / 12);
