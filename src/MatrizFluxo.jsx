@@ -151,7 +151,17 @@ export function AcoesDoItem({ item, isAdmin, acoes, corDaCategoria = "#EDF1F5", 
 // Uma linha por despesa, uma coluna por mês — a vista das folhas de forecast.
 // Os botões de cada lançamento não ocupam espaço na grelha: aparecem quando se
 // clica no valor, que é onde a pessoa já está a olhar.
-export default function MatrizFluxo({ matriz, isAdmin, acoes, nMeses, onNMeses, onNovaDespesa, comVazios }) {
+// As rubricas que o plano de obra preenche sozinho ficam marcadas a amarelo.
+// Não é decoração: lançar uma despesa à mão numa destas é o caminho curto para
+// a contar duas vezes — o próximo recálculo põe lá a dele ao lado da tua.
+const AMARELO = "#FDF6E3";
+const AMARELO_LINHA = "#E8D9A8";
+const AMARELO_TEXTO = "#7A5A22";
+
+export default function MatrizFluxo({ matriz, isAdmin, acoes, nMeses, onNMeses, onNovaDespesa,
+                                      comVazios, rubricasDoPlano = null }) {
+  const doPlano = (cat) => !!rubricasDoPlano &&
+    rubricasDoPlano.has(String(cat || "").trim().toLowerCase());
   const [celula, setCelula] = useState(null);   // { linha, mes, x, y }
   // Que grupos estão abertos. Começa tudo fechado — abre-se a matriz para ver
   // o desenho, não dezasseis linhas de detalhe. E cada grupo é independente:
@@ -301,15 +311,29 @@ export default function MatrizFluxo({ matriz, isAdmin, acoes, nMeses, onNMeses, 
               {sec.grupos.map(g => [
                 <tr key={`g_${sec.tipo}_${g.categoria}`} onClick={() => alternar(sec, g)}
                   title={aberto(sec, g) ? "Fechar o detalhe" : `Abrir as ${g.linhas.length} despesas`}
-                  style={{ background: aberto(sec, g) ? "#FBF9F6" : "#fff", cursor: "pointer" }}>
-                  <td style={{ ...celulaNum, ...colada(aberto(sec, g) ? "#FBF9F6" : "#fff"),
+                  style={{ background: doPlano(g.categoria) ? AMARELO
+                                       : aberto(sec, g) ? "#FBF9F6" : "#fff", cursor: "pointer" }}>
+                  <td style={{ ...celulaNum,
+                               ...colada(doPlano(g.categoria) ? AMARELO
+                                         : aberto(sec, g) ? "#FBF9F6" : "#fff"),
                                textAlign: "left", paddingLeft: 24,
-                               color: "#5C6166", fontWeight: 700, fontFamily: "var(--fonte-titulo)",
-                               fontSize: 11.5 }}>
+                               color: doPlano(g.categoria) ? AMARELO_TEXTO : "#5C6166",
+                               fontWeight: 700, fontFamily: "var(--fonte-titulo)",
+                               fontSize: 11.5,
+                               borderLeft: doPlano(g.categoria) ? `3px solid ${AMARELO_LINHA}` : "none" }}>
                     <span style={{ display: "inline-block", width: 14, color: "#B2B6B9", fontSize: 9 }}>
                       {aberto(sec, g) ? "▼" : "▶"}
                     </span>
                     {g.categoria} <span style={{ color: "#C4C7CA", fontWeight: 400 }}>({g.linhas.length})</span>
+                    {doPlano(g.categoria) && (
+                      <span title="O plano de obra preenche esta rubrica. Lançar aqui à mão duplica: o próximo recálculo põe a dele ao lado da tua."
+                        style={{ marginLeft: 7, fontSize: 9.5, fontWeight: 700, color: AMARELO_TEXTO,
+                                 background: "#F7ECD0", border: `1px solid ${AMARELO_LINHA}`,
+                                 borderRadius: 4, padding: "1px 6px", letterSpacing: 0.2,
+                                 fontFamily: "var(--fonte-numero)", verticalAlign: "middle" }}>
+                        plano de obra
+                      </span>
+                    )}
                   </td>
                   {colunas.map(c => (
                     <td key={c.key} style={{ ...celulaNum, color: "#5C6166", fontWeight: 600 }}>

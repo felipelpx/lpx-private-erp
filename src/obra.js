@@ -59,7 +59,7 @@ const CATEGORIAS_LPX = {
   funding_cso:  { categoria: "Funding" },
   juros:        { categoria: "Juros" },
   comissao:     { categoria: "Encargos financeiros" },
-  iva_obra:     { categoria: "IVA construção" },
+  iva_obra:     { categoria: "Obra" },
   funding_iva:  { categoria: "Funding" },
   fecho:        { categoria: "Obra" },          // cada despesa pode trazer a sua
   venda:        { categoria: "Vendas" },
@@ -75,7 +75,7 @@ const CATEGORIAS_HDG = {
   funding_cso:  { categoria: "Financiamento",    subcategoria: "Inflow - Obra" },
   juros:        { categoria: "Financiamento",    subcategoria: "Outflow - Juros" },
   comissao:     { categoria: "Financiamento",    subcategoria: "Outflow - Taxas e comissões" },
-  iva_obra:     { categoria: "Impostos e taxas", subcategoria: "IVA" },
+  iva_obra:     { categoria: "Obras",            subcategoria: "Gastos com Obras" },
   funding_iva:  { categoria: "Financiamento",    subcategoria: "Inflow - Obra" },
   fecho:        { categoria: "Obras",            subcategoria: "Buffer/Outros" },
   venda:        { categoria: "Vendas",           subcategoria: "Vendas" },
@@ -85,11 +85,45 @@ const CATEGORIAS_HDG = {
 export const classificacaoDe = (tipo, grupo) =>
   (grupo === "HDG" ? CATEGORIAS_HDG : CATEGORIAS_LPX)[tipo] || { categoria: "Obra" };
 
+// Nomes que o motor usou no passado, ou que o utilizador usa para a mesma
+// coisa. Entram na limpeza do recálculo mas já não são escritos.
+//
+// "IVA construção" é um fantasma: foi o nome que o motor deu ao IVA da obra
+// durante meses, e não existe em plano de contas nenhum — as linhas saíam
+// marcadas como fora do plano, e as previsões manuais de "IVA de obra" nunca
+// eram apagadas no recálculo, o que duplicava o IVA no fluxo. O IVA passou
+// para debaixo da obra; estes nomes ficam aqui só para serem limpos.
+const CATEGORIAS_ANTIGAS = {
+  LPX: ["IVA construção", "IVA de obra"],
+  HDG: ["IVA construção", "IVA de obra", "IVA"],
+};
+
 // As categorias que o motor toma conta. Quando se manda substituir, são as
 // previsões manuais DESTAS categorias que saem — e mais nenhuma.
 export function categoriasDoMotor(grupo) {
   const mapa = grupo === "HDG" ? CATEGORIAS_HDG : CATEGORIAS_LPX;
+  return [...new Set([
+    ...TIPOS.map(t => mapa[t]?.categoria).filter(Boolean),
+    ...(CATEGORIAS_ANTIGAS[grupo === "HDG" ? "HDG" : "LPX"]),
+  ])];
+}
+
+// Só as que o motor ESCREVE — é por estas que o Fluxo Futuro pinta a amarelo
+// as rubricas que o plano preenche. As antigas não entram: já não se escrevem,
+// e marcá-las dava um aviso sobre algo que o motor já não gere.
+export function categoriasGeridasPeloMotor(grupo) {
+  const mapa = grupo === "HDG" ? CATEGORIAS_HDG : CATEGORIAS_LPX;
   return [...new Set(TIPOS.map(t => mapa[t]?.categoria).filter(Boolean))];
+}
+
+// E as rubricas como o fluxo as mostra: nos projetos HDG o eixo é a
+// subcategoria, não a categoria.
+export function rubricasGeridasPeloMotor(grupo) {
+  const mapa = grupo === "HDG" ? CATEGORIAS_HDG : CATEGORIAS_LPX;
+  return [...new Set(TIPOS
+    .map(t => mapa[t] && (grupo === "HDG" ? (mapa[t].subcategoria || mapa[t].categoria)
+                                          : mapa[t].categoria))
+    .filter(Boolean))];
 }
 
 // ─── Aritmética de meses ────────────────────────────────────────────────────
@@ -207,15 +241,21 @@ export function obraRealizada(movimentos, faturas, { empresa, categorias = [], t
   const faturadoPagoBruto = arred2(fs.filter(paga).reduce((s, f) => s + brutoDe(f), 0));
   const porPagarBruto     = arred2(faturadoBruto - faturadoPagoBruto);
 
-  // Saídas do extrato classificadas como obra: o que saiu mesmo da conta.
-  const ms = (movimentos || [])
-    .filter(m => m && bate(m.categoria, categorias))
-    .filter(m => (Number(m.valor) || 0) < 0);
-  const pagoExtrato = arred2(ms.reduce((s, m) => s + Math.abs(Number(m.valor) || 0), 0));
+  // Movimentos do extrato classificados como obra. Contam-se os dois sentidos:
+  // o empreiteiro devolve dinheiro — uma nota de crédito, um auto corrigido,
+  // um adiantamento revertido — e isso entra na conta como POSITIVO, na mesma
+  // categoria de obra. Olhar só para as saídas dava a obra por mais cara do
+  // que é, e o budget consumia-se depressa demais. O que conta é o líquido.
+  const todosMs = (movimentos || []).filter(m => m && bate(m.categoria, categorias));
+  const ms = todosMs.filter(m => (Number(m.valor) || 0) < 0);
+  const devolucoes = todosMs.filter(m => (Number(m.valor) || 0) > 0);
+  const pagoBruto  = arred2(ms.reduce((s, m) => s + Math.abs(Number(m.valor) || 0), 0));
+  const devolvido  = arred2(devolucoes.reduce((s, m) => s + (Number(m.valor) || 0), 0));
+  const pagoExtrato = arred2(pagoBruto - devolvido);
 
   const datas = [
     ...fs.map(f => String(f.data_fatura || f.vencimento || "").slice(0, 10)),
-    ...ms.map(m => String(m.data || "").slice(0, 10)),
+    ...todosMs.map(m => String(m.data || "").slice(0, 10)),
   ].filter(d => /^\d{4}-\d{2}-\d{2}$/.test(d)).sort();
 
   // Quanto do que saiu da conta era IVA — informativo, para o ecrã mostrar
@@ -229,7 +269,7 @@ export function obraRealizada(movimentos, faturas, { empresa, categorias = [], t
   //
   // Sem movimentos de obra no extrato não há nada a somar — aí vale o que as
   // faturas dizem, que é tudo o que o ERP sabe.
-  const jaIncorrido = ms.length > 0
+  const jaIncorrido = todosMs.length > 0
     ? arred2(pagoExtrato + porPagarBruto)
     : faturadoBruto;
   // E as suas duas metades. Decompõe-se à taxa do plano, e o IVA é o resto —
@@ -242,11 +282,14 @@ export function obraRealizada(movimentos, faturas, { empresa, categorias = [], t
     faturado, faturadoPago, porPagar,
     faturadoBruto, faturadoPagoBruto, porPagarBruto,
     pagoExtrato, pagoExtratoBase, ivaNoPago, taxaUsada: taxa,
+    // As devoluções, para o ecrã poder mostrar a conta em vez de um número
+    // que mudou sozinho.
+    pagoBruto, devolvido, nDevolucoes: devolucoes.length,
     nFaturas: fs.length, nMovimentos: ms.length,
     primeiroGasto: datas[0] || null,
     jaIncorrido, jaIncorridoBase, ivaIncorrido,
     // De onde veio o número, para o ecrã poder explicá-lo.
-    fonte: ms.length > 0 ? "extrato" : "faturas",
+    fonte: todosMs.length > 0 ? "extrato" : "faturas",
   };
 }
 
@@ -310,6 +353,8 @@ export const PLANO_VAZIO = {
   // ficou de uma versão anterior). `funding_iva_pct` em branco = o mesmo
   // que a obra.
   recuperar_iva: true, funding_iva_pct: null,
+  // Autoliquidação: o valor do auto já inclui o IVA e paga-se de uma vez.
+  autoliquidacao: false,
   // O banco também pode financiar as avenças. Uma bandeira por cada,
   // porque há bancos que aceitam a fiscalização e não o CSO.
   financia_fiscalizacao: false, financia_cso: false,
@@ -437,6 +482,12 @@ export function planearObra(plano, { gastoObra = 0, hoje = hojeISO(), grupo = "L
   // O campo chama-se `recuperar_iva` por razões históricas; o que ele liga e
   // desliga é o financiamento do IVA pelo banco. O rótulo no ecrã é esse.
   const financiaIva = p.recuperar_iva !== false;
+  // Autoliquidação: quando está ligada, o valor de cada auto JÁ inclui o IVA —
+  // é o que sai da conta no vencimento, de uma vez. Não há apuramento
+  // trimestral a pagar nem funding de IVA, porque não há um segundo pagamento.
+  // O custo total da obra é o mesmo nos dois modos; o que muda é o calendário
+  // e a forma como a despesa aparece no fluxo.
+  const autoliquida = p.autoliquidacao === true;
   const financiaFisc = p.financia_fiscalizacao === true;
   const financiaCso  = p.financia_cso === true;
   // E a percentagem é independente da da obra: há bancos que financiam a
@@ -455,6 +506,7 @@ export function planearObra(plano, { gastoObra = 0, hoje = hojeISO(), grupo = "L
   // portanto nos juros.
   const ivaPorTrimestre = new Map();
   meses.forEach((mes, i) => {
+    if (autoliquida) return;          // o IVA sai junto com o auto
     if (!(ivaPorMes[i] > 0)) return;
     const chave = `${anoDe(noMes(mes, 1))}-${trimestreDe(noMes(mes, 1))}`;
     ivaPorTrimestre.set(chave, arred2((ivaPorTrimestre.get(chave) || 0) + ivaPorMes[i]));
@@ -476,10 +528,14 @@ export function planearObra(plano, { gastoObra = 0, hoje = hojeISO(), grupo = "L
     const ultimo = i === meses.length - 1;
 
     const baseMes = basePorMes[i], ivaMes = ivaPorMes[i];
-    if (baseMes > 0) {
-      linhas.push(linha("obra", mes, baseMes, grupo, {
+    // Com autoliquidação, o auto paga-se de uma vez com o IVA lá dentro.
+    const obraMes = autoliquida ? arred2(baseMes + ivaMes) : baseMes;
+    if (obraMes > 0) {
+      linhas.push(linha("obra", mes, obraMes, grupo, {
         descricao: `Obra — ${rotuloMes(mes)}`,
-        obs: `Base da fatura. O IVA (${ivaMes} € a ${taxa}%) sai no apuramento do trimestre.`,
+        obs: autoliquida
+          ? `Auto com IVA incluído: ${baseMes} € + ${ivaMes} € a ${taxa}%.`
+          : `Base da fatura. O IVA (${ivaMes} € a ${taxa}%) sai no apuramento do trimestre.`,
         base: baseMes, iva: ivaMes,
       }));
     }
@@ -517,13 +573,15 @@ export function planearObra(plano, { gastoObra = 0, hoje = hojeISO(), grupo = "L
       tipo: "entrada",
     });
 
-    // Libertação do mês: a percentagem contratada sobre a base da fatura.
-    const libertado = arred2(baseMes * pctFunding / 100);
+    // Libertação do mês: a percentagem contratada sobre o que se paga. Sem
+    // autoliquidação é a base, porque o IVA tem libertação própria no
+    // apuramento; com autoliquidação é o auto inteiro, que é o que sai.
+    const libertado = arred2(obraMes * pctFunding / 100);
     if (libertado > 0) {
       linhas.push({
         ...linha("funding", mes, libertado, grupo, {
           descricao: `Funding banco — ${rotuloMes(mes)}`,
-          obs: `${arred2(pctFunding)}% de ${baseMes} € (base da fatura)`,
+          obs: `${arred2(pctFunding)}% de ${obraMes} € (${autoliquida ? "auto com IVA" : "base da fatura"})`,
         }),
         tipo: "entrada",
       });

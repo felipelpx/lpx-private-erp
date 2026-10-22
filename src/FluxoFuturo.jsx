@@ -2,7 +2,8 @@ import React, { useState, useMemo, useEffect, useCallback } from "react";
 import { useVendas, useSaldosAtuais, useRecebiveis, useObraPlanos,
          useDespesasRecorrentes, useFracoes } from "./hooks.js";
 import ModalPlanoObra, { BotaoPlanoObra } from "./ObraPlano.jsx";
-import { ANCORAS, dataAncorada, rotuloAncora, diaDe } from "./obra.js";
+import { ANCORAS, dataAncorada, rotuloAncora, diaDe,
+         rubricasGeridasPeloMotor } from "./obra.js";
 import ModalRecorrentes, { BotaoRecorrentes } from "./Recorrentes.jsx";
 import { ocorrenciasDe } from "./recorrentes.js";
 import { linhasDeFluxo as linhasDeVendasBase, soReceita,
@@ -118,6 +119,23 @@ export default function FluxoFuturo({ faturas: faturasTodas, faturasLoading, pag
   const [recorrentesAberto, setRecorrentesAberto] = useState(false);
   const { recorrentes, guardarRecorrente, apagarRecorrente } = useDespesasRecorrentes();
   const planoDaEmpresa = (obraPlanos || []).find(p => p.empresa === empresa) || null;
+  // As rubricas que o plano de obra preenche. Só vale a pena marcá-las quando
+  // há mesmo um plano ativo nesta empresa: sem plano, nada é gerado e o aviso
+  // seria sobre um risco que não existe.
+  const rubricasDoPlano = useMemo(() => {
+    const ativo = (p) => p && p.ativo !== false && p.data_fim;
+    const grupoDe = (id) => EMPRESAS_TODAS.find(e => e.id === id)?.grupo === "HDG" ? "HDG" : "LPX";
+    // Em "Todos os Projetos" marcam-se as rubricas de todas as empresas que
+    // tenham plano ativo: a vista mistura projetos, e o risco de lançar por
+    // cima do que o motor gera é o mesmo — ou maior, porque não se vê de quem
+    // é cada linha.
+    const planos = empresa === "all"
+      ? (obraPlanos || []).filter(ativo)
+      : (ativo(planoDaEmpresa) ? [planoDaEmpresa] : []);
+    if (!planos.length) return null;
+    const todas = planos.flatMap(p => rubricasGeridasPeloMotor(grupoDe(p.empresa)));
+    return new Set(todas.map(c => c.trim().toLowerCase()));
+  }, [obraPlanos, planoDaEmpresa, empresa]);
   const grupoDaEmpresa = EMPRESAS_TODAS.find(e => e.id === empresa)?.grupo || "LPX";
   const nomeDaEmpresa = EMPRESAS_TODAS.find(e => e.id === empresa)?.nome || empresa;
   // As contas deste projeto: é pelo extrato delas que o plano descobre o que
@@ -1228,6 +1246,7 @@ export default function FluxoFuturo({ faturas: faturasTodas, faturasLoading, pag
             </span>
           </div>
           <MatrizFluxo matriz={matriz} isAdmin={isAdmin} acoes={acoesDoItem}
+            rubricasDoPlano={rubricasDoPlano}
             nMeses={mesesMatriz} onNMeses={setMesesMatriz} comVazios={mostrarVazios}
             onNovaDespesa={() => setShowForm(true)} />
         </div>

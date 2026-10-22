@@ -69,6 +69,87 @@ const paraTexto = (n) => {
   return v.toLocaleString("pt-PT", { minimumFractionDigits: 0, maximumFractionDigits: 2 });
 };
 
+
+// ─── O forecast, aberto ──────────────────────────────────────────────────────
+// O forecast é uma soma de quatro ou cinco sítios diferentes, e uma linha que
+// não bate com o esperado obriga a ir procurar a cada um deles. Aqui abre-se a
+// conta ao passar o rato: de onde veio cada parcela e quantos documentos são.
+//
+// O painel é de posição fixa e sai da tabela de propósito: dentro de uma
+// célula com overflow ficava cortado.
+function ForecastDetalhe({ linha, cor }) {
+  const [caixa, setCaixa] = useState(null);
+  const ref = useRef(null);
+  const d = linha.detalhe || {};
+  const vazio = Math.abs(linha.forecast) <= 0.005;
+
+  const parcelas = [
+    { k: "Real (extrato)",      v: linha.realAbs,            n: d.nMovimentos },
+    { k: "Faturas por pagar",   v: Math.abs(d.faturasPorPagar || 0), n: d.nFaturas },
+    { k: "Previsões do fluxo",  v: Math.abs(d.previsoes || 0),       n: d.nPrevisoes },
+    { k: "Despesas recorrentes",v: Math.abs(d.recorrentes || 0),     n: d.nRecorrentes },
+    { k: "Por receber",         v: Math.abs(d.porReceber || 0),      n: d.nPorReceber },
+  ].filter(x => Math.abs(x.v) > 0.005);
+
+  const abrir = () => {
+    const r = ref.current?.getBoundingClientRect();
+    if (!r) return;
+    const largura = 290;
+    const x = Math.max(10, Math.min(window.innerWidth - largura - 10, r.right - largura));
+    const abaixo = r.bottom + 8;
+    const cabe = abaixo + 190 < window.innerHeight;
+    setCaixa({ x, largura, y: cabe ? abaixo : null, yCima: cabe ? null : window.innerHeight - r.top + 8 });
+  };
+
+  return (
+    <td ref={ref} style={{ ...td, fontWeight: 600, color: cor, cursor: vazio ? "default" : "help" }}
+        onMouseEnter={() => { if (!vazio) abrir(); }}
+        onMouseLeave={() => setCaixa(null)}>
+      {vazio ? "—" : fmtEUR0(linha.forecastAbs)}
+
+      {caixa && (
+        <div style={{
+          position: "fixed", zIndex: 400,
+          left: caixa.x,
+          ...(caixa.y !== null ? { top: caixa.y } : { bottom: caixa.yCima }),
+          width: caixa.largura, maxWidth: "92vw", boxSizing: "border-box",
+          background: "#091C2A", color: "#FCF3EB",
+          padding: "11px 13px", borderRadius: 9, fontSize: 11.5, lineHeight: 1.6,
+          boxShadow: "0 12px 34px rgba(9,28,42,0.3)", textAlign: "left",
+          pointerEvents: "none",
+        }}>
+          <div style={{ fontWeight: 700, marginBottom: 6, fontSize: 11,
+                        letterSpacing: 0.3, textTransform: "uppercase", color: "#BAA685" }}>
+            {linha.rubrica}
+          </div>
+          {parcelas.length === 0 ? (
+            <div style={{ color: "#C9C2B8" }}>Sem nada que componha este valor.</div>
+          ) : parcelas.map(x => (
+            <div key={x.k} style={{ display: "flex", justifyContent: "space-between", gap: 12 }}>
+              <span style={{ color: "#C9C2B8" }}>
+                {x.k}{x.n > 0 ? <span style={{ color: "#8C8579" }}> ({x.n})</span> : null}
+              </span>
+              <span style={{ fontVariantNumeric: "tabular-nums" }}>{fmtEUR0(x.v)}</span>
+            </div>
+          ))}
+          <div style={{ height: 1, background: "#2E4152", margin: "7px 0" }} />
+          <div style={{ display: "flex", justifyContent: "space-between", gap: 12, fontWeight: 700 }}>
+            <span>Forecast</span>
+            <span style={{ fontVariantNumeric: "tabular-nums" }}>{fmtEUR0(linha.forecastAbs)}</span>
+          </div>
+          {linha.orcado > 0.005 && (
+            <div style={{ display: "flex", justifyContent: "space-between", gap: 12,
+                          marginTop: 3, color: "#C9C2B8" }}>
+              <span>Orçado</span>
+              <span style={{ fontVariantNumeric: "tabular-nums" }}>{fmtEUR0(linha.orcado)}</span>
+            </div>
+          )}
+        </div>
+      )}
+    </td>
+  );
+}
+
 function Orcado({ valor, onGravar, podeEditar, rubrica, quemPode }) {
   const [v, setV] = useState(paraTexto(valor));
   const [aEscrever, setAEscrever] = useState(false);
@@ -212,16 +293,7 @@ export default function RealOrcadoTabela({
           <td style={{ ...td, color: COR.textoSuave }}>
             {l.detalhe.nMovimentos ? fmtEUR0(l.realAbs) : "—"}
           </td>
-          <td style={{ ...td, fontWeight: 600, color: cor }}
-              title={[
-                `Real ${fmtEUR0(l.realAbs)}`,
-                l.detalhe.faturasPorPagar ? `faturas por pagar ${fmtEUR0(Math.abs(l.detalhe.faturasPorPagar))}` : null,
-                l.detalhe.previsoes ? `previsões do fluxo ${fmtEUR0(Math.abs(l.detalhe.previsoes))}` : null,
-                l.detalhe.recorrentes ? `recorrentes ${fmtEUR0(Math.abs(l.detalhe.recorrentes))} (${l.detalhe.nRecorrentes}×)` : null,
-                l.detalhe.porReceber ? `por receber ${fmtEUR0(Math.abs(l.detalhe.porReceber))} (${l.detalhe.nPorReceber}×)` : null,
-              ].filter(Boolean).join(" · ")}>
-            {Math.abs(l.forecast) > 0.005 ? fmtEUR0(l.forecastAbs) : "—"}
-          </td>
+          <ForecastDetalhe linha={l} cor={cor} />
           <td style={{ ...td, color: l.bom === null ? COR.textoApagado
                                    : l.bom ? COR.positivoForte : COR.negativoForte }}>
             {l.orcado > 0.005 ? `${l.desvio > 0 ? "+" : ""}${fmtEUR0(l.desvio)}` : "—"}

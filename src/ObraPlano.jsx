@@ -293,6 +293,27 @@ export default function ModalPlanoObra({
                 onMudar={muda("budget_obra")} />
               <Numero rotulo="Taxa de IVA da obra" sufixo="%" valor={f.taxa_iva_obra}
                 onMudar={muda("taxa_iva_obra")} />
+
+              {/* Autoliquidação: o auto paga-se de uma vez, com o IVA lá
+                  dentro. O custo total não muda — muda o calendário. */}
+              <div>
+                <label style={{ display: "flex", alignItems: "center", gap: 8,
+                                cursor: "pointer", fontSize: 12 }}>
+                  <input type="checkbox" checked={f.autoliquidacao === true}
+                    onChange={e => muda("autoliquidacao")(e.target.checked)}
+                    style={{ width: 15, height: 15, accentColor: COR.tinta }} />
+                  Autoliquidação — o auto já inclui o IVA
+                </label>
+                <div style={{ fontSize: 10.5, color: "#7E8388", paddingLeft: 23,
+                              marginTop: 3, lineHeight: 1.55 }}>
+                  {f.autoliquidacao === true
+                    ? <>Cada auto sai da conta com o IVA incluído, no vencimento. Não há
+                        apuramento trimestral a pagar nem libertação de IVA — é um
+                        pagamento só. O custo total da obra é o mesmo; muda o calendário.</>
+                    : <>Desligado: paga-se a base no vencimento e o IVA no dia 25 do
+                        apuramento do trimestre, em duas datas.</>}
+                </div>
+              </div>
               <div style={{ background: "#FAF6F0", borderRadius: 9, padding: "10px 12px", fontSize: 11.5 }}>
                 <Linha k="Budget (sem IVA)" v={fmtEUR(resumo.budget)}
                   dica="O orçamento da empreitada como está contratado, pela base." />
@@ -341,17 +362,25 @@ export default function ModalPlanoObra({
                   </div>
                 )}
               </div>
+              {f.autoliquidacao === true ? (
+                <div style={{ fontSize: 11.5, color: "#7E8388", lineHeight: 1.55 }}>
+                  Com autoliquidação ligada não há um pagamento de IVA à parte, por isso
+                  também não há nada que o banco financie separadamente — o IVA vai
+                  dentro do auto, e é o funding da obra que o cobre.
+                </div>
+              ) : (
               <label style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer", fontSize: 12 }}>
                 <input type="checkbox" checked={f.recuperar_iva !== false}
                   onChange={e => muda("recuperar_iva")(e.target.checked)}
                   style={{ width: 15, height: 15, accentColor: COR.tinta }} />
                 O banco financia também o IVA, no dia do apuramento
               </label>
+              )}
 
               {/* A percentagem do IVA é independente da da obra: há bancos que
                   financiam a empreitada a 80% e o IVA a 100%. Em branco segue
                   a da obra, que é o que sempre aconteceu. */}
-              {f.recuperar_iva !== false && (
+              {f.recuperar_iva !== false && f.autoliquidacao !== true && (
                 <div style={{ display: "flex", alignItems: "center", gap: 9, flexWrap: "wrap",
                               paddingLeft: 23 }}>
                   <span style={{ fontSize: 11, color: "#7E8388" }}>Financia</span>
