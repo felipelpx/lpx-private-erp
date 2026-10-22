@@ -170,8 +170,9 @@ export default function ModalPlanoObra({
 
   const aplicacao = useMemo(() => planearAplicacao({
     linhas, pagamentosExistentes: pagamentos, empresa, grupo,
-    primeiroMes: resumo.primeiroMes, hoje,
-  }), [linhas, pagamentos, empresa, grupo, resumo.primeiroMes, hoje]);
+    primeiroMes: resumo.primeiroMes, hoje, plano: f,
+  }), [linhas, pagamentos, empresa, grupo, resumo.primeiroMes, hoje,
+       f.data_fim, f.meses_ate_escritura]);
 
   const comparacao = useMemo(() => {
     if (!simular || !f.data_fim || simular === f.data_fim) return null;
@@ -192,6 +193,7 @@ export default function ModalPlanoObra({
                  updated_by: currentUser?.nome || "" },
         aCriar: aplicacao.aCriar,
         idsAApagar: aplicacao.idsAApagar,
+        aReagendar: aplicacao.aReagendar,
       });
       if (r?.error) {
         alert(/obra_planos|plano_obra|plano_tipo|subcategoria|column/i.test(r.error.message || "")
@@ -715,7 +717,7 @@ const Cartao = ({ rotulo, valor, nota, cor }) => (
 // Antes de apagar o trabalho de alguém, mostra-se o que vai desaparecer: a
 // descrição, a data e o valor, linha a linha.
 function Confirmacao({ aplicacao, aGravar, onVoltar, onAplicar, cats }) {
-  const { aApagarManuais, aApagarDoMotor, jaPagas = [], resumo } = aplicacao;
+  const { aApagarManuais, aApagarDoMotor, jaPagas = [], aReagendar = [], resumo } = aplicacao;
   return (
     <div>
       <div style={{ display: "flex", gap: 16, flexWrap: "wrap", marginBottom: 10 }}>
@@ -726,8 +728,29 @@ function Confirmacao({ aplicacao, aGravar, onVoltar, onAplicar, cats }) {
           {" · "}substituem-se <strong>{resumo.apagarMotor}</strong> de um recálculo anterior
           {resumo.protegidas > 0 && <> · ficam intactas <strong>{resumo.protegidas}</strong> já pagas ou convertidas</>}
           {resumo.jaPagas > 0 && <> · não entram <strong style={{ color: "#8E2A20" }}>{resumo.jaPagas}</strong> que já estão liquidadas</>}
+          {resumo.reagendar > 0 && <> · mudam de data <strong>{resumo.reagendar}</strong> agarradas ao plano</>}
         </div>
       </div>
+
+      {aReagendar.length > 0 && (
+        <div style={{ background: "#F4F6FA", border: "1px solid #D7DEEA", borderRadius: 10,
+                      padding: "11px 14px", marginBottom: 10, maxHeight: 150, overflowY: "auto" }}>
+          <div style={{ fontSize: 11, fontWeight: 700, color: "#2B3C56", marginBottom: 6 }}>
+            Estas estão agarradas ao plano e vão mudar de data — não se apagam, só se mexem:
+          </div>
+          {aReagendar.map(d => (
+            <div key={d.id} style={{ fontSize: 11, color: "#3A4C68", display: "flex", gap: 10,
+                                     justifyContent: "space-between", padding: "2px 0" }}>
+              <span>{d.descricao || d.categoria || "—"}
+                <span style={{ color: "#73839B" }}> · {d.rotulo}</span>
+              </span>
+              <span style={{ fontFamily: "var(--fonte-numero)" }}>
+                {fmtData(d.de)} → <strong>{fmtData(d.para)}</strong>
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
 
       {jaPagas.length > 0 && (
         <div style={{ background: "#F3F6F4", border: "1px solid #D6E0DA", borderRadius: 10,

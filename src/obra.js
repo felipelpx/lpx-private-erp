@@ -719,6 +719,56 @@ function resumir(linhas, { budget, budgetBruto = 0, ivaDoBudget = 0,
   };
 }
 
+// ─── Despesas agarradas ao plano ────────────────────────────────────────────
+// Uma previsão manual pode ficar PRESA a um marco do plano em vez de a uma
+// data fixa. O caso que deu origem a isto: o resgate ao Enchanted paga-se na
+// escritura — se a obra escorregar dois meses, aquela data tem de escorregar
+// também, e ninguém se lembra de a ir muder à mão.
+//
+// Guarda-se a âncora e o desvio em meses; a data continua gravada em
+// `data_inicio`, para tudo o resto no sistema continuar a ler o que sempre
+// leu. O que muda é que um recálculo do plano a volta a escrever.
+export const ANCORAS = {
+  fim_obra:  "Fim da obra",
+  escritura: "Escritura",
+};
+
+/**
+ * A data de uma despesa agarrada ao plano.
+ *
+ * @param alvo   { ancora, ancora_meses, dia } — o dia do mês que se quer
+ *               manter; se o mês for curto, encosta-se ao último dia.
+ * @param plano  o plano de obra da empresa (precisa de data_fim e,
+ *               para a âncora "escritura", de meses_ate_escritura)
+ * @returns      "AAAA-MM-DD", ou null se não houver âncora ou plano
+ */
+export function dataAncorada({ ancora, ancora_meses = 0, dia = 1 } = {}, plano) {
+  if (!ancora || !ANCORAS[ancora]) return null;
+  const fim = mesDe(plano?.data_fim || "");
+  if (!fim) return null;
+  const base = ancora === "escritura"
+    ? somarMeses(fim, Math.max(0, Math.round(num(plano?.meses_ate_escritura))))
+    : fim;
+  const mes = somarMeses(base, Math.round(num(ancora_meses)));
+  const d = Math.min(Math.max(1, Math.round(num(dia, 1))),
+                     Number(ultimoDia(mes).slice(-2)));
+  return noMes(mes, d);
+}
+
+export const diaDe = (iso) => {
+  const d = Number(String(iso || "").slice(8, 10));
+  return Number.isFinite(d) && d >= 1 ? d : 1;
+};
+
+// Como se lê uma âncora, para o ecrã: "Escritura + 1 mês".
+export function rotuloAncora(ancora, meses = 0) {
+  if (!ANCORAS[ancora]) return "";
+  const n = Math.round(num(meses));
+  if (n === 0) return ANCORAS[ancora];
+  const abs = Math.abs(n);
+  return `${ANCORAS[ancora]} ${n > 0 ? "+" : "−"} ${abs} ${abs === 1 ? "mês" : "meses"}`;
+}
+
 // ─── Aplicar o plano ao Fluxo Futuro ────────────────────────────────────────
 // A parte que apaga coisas, e por isso a que tem de ser óbvia antes de correr.
 //
@@ -738,7 +788,7 @@ const INTOCAVEL = /^(paga|pago|convertida)$/i;
 
 export function planearAplicacao({
   linhas = [], pagamentosExistentes = [], empresa, grupo = "LPX",
-  primeiroMes = null, hoje = hojeISO(),
+  primeiroMes = null, hoje = hojeISO(), plano = null,
 } = {}) {
   const cats = categoriasDoMotor(grupo).map(c => c.toLowerCase());
   const corte = primeiroMes ? `${primeiroMes}-01` : mesDe(hoje) + "-01";
@@ -795,15 +845,34 @@ export function planearAplicacao({
     .filter(l => jaLiquidadas.has(l.id))
     .map(l => ({ ...l, existente: jaLiquidadas.get(l.id) }));
 
+  // ── As despesas agarradas ao plano ────────────────────────────────────────
+  // Não são do motor e não se apagam: são do utilizador. O que o recálculo
+  // lhes faz é mudar a data, para continuarem presas ao marco que ele
+  // escolheu. Só entram aqui as que mudam mesmo de data.
+  const aApagarIds = new Set([...aApagarDoMotor, ...aApagarManuais].map(p => p.id));
+  const aReagendar = daEmpresa
+    .filter(p => p.ancora && ANCORAS[p.ancora] && !p.plano_obra && !aApagarIds.has(p.id))
+    .map(p => {
+      const nova = dataAncorada(
+        { ancora: p.ancora, ancora_meses: p.ancora_meses, dia: diaDe(p.data_inicio) }, plano);
+      return (nova && nova !== String(p.data_inicio || ""))
+        ? { id: p.id, de: String(p.data_inicio || ""), para: nova,
+            descricao: p.descricao, valor: p.valor, categoria: p.categoria,
+            rotulo: rotuloAncora(p.ancora, p.ancora_meses) }
+        : null;
+    })
+    .filter(Boolean);
+
   const somar = (arr) => arred2(arr.reduce((s, p) => s + (Number(p.valor) || 0), 0));
   return {
-    aCriar, aApagarDoMotor, aApagarManuais, jaPagas,
+    aCriar, aApagarDoMotor, aApagarManuais, jaPagas, aReagendar,
     idsAApagar: [...aApagarDoMotor, ...aApagarManuais].map(p => p.id),
     resumo: {
       criar: aCriar.length,          valorCriar: somar(aCriar),
       apagarMotor: aApagarDoMotor.length, valorMotor: somar(aApagarDoMotor),
       apagarManuais: aApagarManuais.length, valorManuais: somar(aApagarManuais),
       jaPagas: jaPagas.length,       valorJaPagas: somar(jaPagas),
+      reagendar: aReagendar.length,
       protegidas: (pagamentosExistentes || [])
         .filter(p => p && p.empresa === empresa && INTOCAVEL.test(String(p.status || ""))).length,
     },

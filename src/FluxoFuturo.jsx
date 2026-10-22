@@ -2,6 +2,7 @@ import React, { useState, useMemo, useEffect, useCallback } from "react";
 import { useVendas, useSaldosAtuais, useRecebiveis, useObraPlanos,
          useDespesasRecorrentes, useFracoes } from "./hooks.js";
 import ModalPlanoObra, { BotaoPlanoObra } from "./ObraPlano.jsx";
+import { ANCORAS, dataAncorada, rotuloAncora, diaDe } from "./obra.js";
 import ModalRecorrentes, { BotaoRecorrentes } from "./Recorrentes.jsx";
 import { ocorrenciasDe } from "./recorrentes.js";
 import { linhasDeFluxo as linhasDeVendasBase, soReceita,
@@ -132,13 +133,19 @@ export default function FluxoFuturo({ faturas: faturasTodas, faturasLoading, pag
   // Aplicar: apaga o que foi dito que ia apagar e cria as linhas novas. A
   // ordem importa — apagar primeiro, senão os ids determinísticos chocam com
   // os do recálculo anterior.
-  const aplicarPlanoObra = async ({ plano, aCriar, idsAApagar }) => {
+  const aplicarPlanoObra = async ({ plano, aCriar, idsAApagar, aReagendar }) => {
     if (idsAApagar?.length) {
       const r = await onApagarPagamentos?.(idsAApagar);
       if (r?.error) return r;
     }
     if (aCriar?.length) {
       const r = await onAddPagamentos?.(aCriar);
+      if (r?.error) return r;
+    }
+    // As despesas agarradas ao plano não se apagam nem se recriam: muda-se a
+    // data, para continuarem presas ao marco que o utilizador escolheu.
+    for (const d of (aReagendar || [])) {
+      const r = await onUpdatePagamento?.(d.id, { data_inicio: d.para });
       if (r?.error) return r;
     }
     return await guardarPlano(plano);
@@ -197,6 +204,8 @@ export default function FluxoFuturo({ faturas: faturasTodas, faturasLoading, pag
       parcelas: pag.parcelas ?? 1,
       periodicidade: pag.periodicidade || "unica",
       tipo: pag.tipo || "saida",
+      ancora: pag.ancora || "",
+      ancora_meses: pag.ancora_meses ?? 0,
     });
   };
   const closeEdit = () => { setEditPagamento(null); setEditForm(null); };
@@ -213,6 +222,8 @@ export default function FluxoFuturo({ faturas: faturasTodas, faturasLoading, pag
       parcelas: parseInt(editForm.parcelas) || 1,
       periodicidade: editForm.periodicidade,
       tipo: editForm.tipo,
+      ancora: editForm.ancora || null,
+      ancora_meses: editForm.ancora ? (parseInt(editForm.ancora_meses) || 0) : 0,
     });
     if (res?.error) {
       alert("Erro a guardar:\n\n" + (res.error.message || res.error));
@@ -1571,7 +1582,81 @@ export default function FluxoFuturo({ faturas: faturasTodas, faturasLoading, pag
               </div>
             </div>
 
-            <div style={{ marginTop: 20, padding: 12, background: "#FBF6EC", border: "1px solid #E3CE9F", borderRadius: 8, fontSize: 11, color: "#7A5A22", lineHeight: 1.5 }}>
+            {/* Agarrar a despesa a um marco do plano, em vez de a uma data fixa.
+                O resgate ao Enchanted paga-se na escritura: se a obra escorregar,
+                a data tem de escorregar atrás, sem ninguém se lembrar disso. */}
+            {(() => {
+              const planoDesta = (obraPlanos || []).find(p => p.empresa === editForm.empresa) || null;
+              const temPlano = !!planoDesta?.data_fim;
+              const prevista = editForm.ancora
+                ? dataAncorada({ ancora: editForm.ancora,
+                                 ancora_meses: editForm.ancora_meses,
+                                 dia: diaDe(editForm.data_inicio) }, planoDesta)
+                : null;
+              return (
+                <div style={{ marginTop: 14, padding: "12px 14px", background: "#F6F8F7",
+                              border: "1px solid #DCE5E0", borderRadius: 10 }}>
+                  <div style={{ fontSize: 10, color: "#9DA2A6", fontFamily: "var(--fonte-numero)",
+                                textTransform: "uppercase", marginBottom: 7 }}>
+                    Vincular ao plano de obra
+                  </div>
+                  {!temPlano ? (
+                    <div style={{ fontSize: 11.5, color: "#7E8388", lineHeight: 1.5 }}>
+                      Esta empresa não tem plano de obra com data de fim, por isso não há
+                      a que agarrar a despesa. A data fica como a escreveres.
+                    </div>
+                  ) : (
+                    <>
+                      <div style={{ display: "flex", gap: 9, alignItems: "center", flexWrap: "wrap" }}>
+                        <select value={editForm.ancora}
+                          onChange={e => {
+                            const ancora = e.target.value;
+                            setEditForm(f => {
+                              const d = ancora
+                                ? dataAncorada({ ancora, ancora_meses: f.ancora_meses,
+                                                 dia: diaDe(f.data_inicio) }, planoDesta)
+                                : null;
+                              return { ...f, ancora, data_inicio: d || f.data_inicio };
+                            });
+                          }}
+                          style={{ background: "#fff", border: "1px solid #DCE5E0", borderRadius: 7,
+                                   padding: "7px 10px", fontSize: 12.5, outline: "none" }}>
+                          <option value="">Não vincular — data fixa</option>
+                          {Object.entries(ANCORAS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+                        </select>
+                        {editForm.ancora && (
+                          <>
+                            <input type="number" step={1} value={editForm.ancora_meses}
+                              onChange={e => {
+                                const meses = e.target.value;
+                                setEditForm(f => {
+                                  const d = dataAncorada({ ancora: f.ancora, ancora_meses: meses,
+                                                           dia: diaDe(f.data_inicio) }, planoDesta);
+                                  return { ...f, ancora_meses: meses, data_inicio: d || f.data_inicio };
+                                });
+                              }}
+                              title="Meses depois do marco. Negativo para antes."
+                              style={{ width: 66, background: "#fff", border: "1px solid #DCE5E0",
+                                       borderRadius: 7, padding: "7px 9px", fontSize: 12.5,
+                                       outline: "none", textAlign: "right" }} />
+                            <span style={{ fontSize: 11.5, color: "#7E8388" }}>meses depois</span>
+                          </>
+                        )}
+                      </div>
+                      <div style={{ fontSize: 11, color: "#5F7A6C", marginTop: 8, lineHeight: 1.55 }}>
+                        {editForm.ancora
+                          ? <>Fica em <strong>{prevista || "—"}</strong> ({rotuloAncora(editForm.ancora, editForm.ancora_meses)}).
+                              A obra acaba em {String(planoDesta.data_fim).slice(0, 10)}; se essa data mudar,
+                              esta despesa muda com ela no próximo recálculo do plano.</>
+                          : <>A data fica onde a puseres. Se a obra escorregar, esta despesa não se mexe.</>}
+                      </div>
+                    </>
+                  )}
+                </div>
+              );
+            })()}
+
+            <div style={{ marginTop: 14, padding: 12, background: "#FBF6EC", border: "1px solid #E3CE9F", borderRadius: 8, fontSize: 11, color: "#7A5A22", lineHeight: 1.5 }}>
               💡 Este pagamento foi criado como parcela única. Aqui podes ajustar o valor, a data, ou transformá-lo num pagamento recorrente (mensal/trimestral/anual).
             </div>
 
