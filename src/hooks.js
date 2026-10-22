@@ -215,9 +215,20 @@ export function usePagamentosExtras() {
   // Em lote, para o plano de obra: um recálculo apaga dezenas de linhas e
   // cria outras tantas. Uma chamada por linha seria lento e deixaria o fluxo
   // a meio caminho se falhasse a meio.
+  //
+  // É upsert, não insert. Os ids do motor são determinísticos
+  // (obra_<empresa>_<tipo>_<data>), por isso bastava uma linha ter escapado ao
+  // apagão para o insert rebentar com "duplicate key value violates unique
+  // constraint pagamentos_extras_pkey" e o recálculo ficar a meio. Com upsert,
+  // correr duas vezes dá o mesmo resultado.
+  //
+  // As previsões já pagas ou convertidas em fatura não chegam aqui: o
+  // planearAplicacao tira-as do que entra (ver src/obra.js), justamente para
+  // o upsert não lhes passar por cima.
   const addPagamentos = async (arr) => {
     if (!arr?.length) return { data: [], error: null }
-    const { data, error } = await supabase.from('pagamentos_extras').insert(arr).select()
+    const { data, error } = await supabase.from('pagamentos_extras')
+      .upsert(arr, { onConflict: 'id' }).select()
     if (error) console.error('addPagamentos error:', error)
     return { data, error }
   }

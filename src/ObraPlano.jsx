@@ -345,6 +345,33 @@ export default function ModalPlanoObra({
                   style={{ width: 15, height: 15, accentColor: COR.tinta }} />
                 O banco financia também o IVA, no dia do apuramento
               </label>
+
+              {/* A percentagem do IVA é independente da da obra: há bancos que
+                  financiam a empreitada a 80% e o IVA a 100%. Em branco segue
+                  a da obra, que é o que sempre aconteceu. */}
+              {f.recuperar_iva !== false && (
+                <div style={{ display: "flex", alignItems: "center", gap: 9, flexWrap: "wrap",
+                              paddingLeft: 23 }}>
+                  <span style={{ fontSize: 11, color: "#7E8388" }}>Financia</span>
+                  <input value={f.funding_iva_pct ?? ""}
+                    onChange={e => muda("funding_iva_pct")(e.target.value)}
+                    inputMode="decimal"
+                    placeholder={String(num(f.funding_pct) || 0)}
+                    title="Percentagem do IVA que o banco liberta. Em branco, usa a mesma da obra."
+                    style={{ width: 62, boxSizing: "border-box", textAlign: "right",
+                             background: COR.papel, border: "1px solid #E3D9CC", borderRadius: 6,
+                             padding: "5px 8px", fontSize: 12, outline: "none",
+                             fontVariantNumeric: "tabular-nums" }} />
+                  <span style={{ fontSize: 11, color: "#7E8388" }}>% do IVA</span>
+                  <span style={{ fontSize: 10.5, color: "#9DA2A6" }}>
+                    {f.funding_iva_pct === "" || f.funding_iva_pct === null || f.funding_iva_pct === undefined
+                      ? `em branco = o mesmo da obra (${num(f.funding_pct) || 0}%)`
+                      : num(f.funding_iva_pct) === num(f.funding_pct)
+                        ? "igual ao da obra"
+                        : `a obra é financiada a ${num(f.funding_pct) || 0}%`}
+                  </span>
+                </div>
+              )}
             </Caixa>
 
             <Caixa titulo="Avenças mensais" nota="Cobradas enquanto a obra durar, e com IVA: ao contrário da empreitada, estes serviços não são autoliquidados. Esticar o prazo custa mais meses destas.">
@@ -688,7 +715,7 @@ const Cartao = ({ rotulo, valor, nota, cor }) => (
 // Antes de apagar o trabalho de alguém, mostra-se o que vai desaparecer: a
 // descrição, a data e o valor, linha a linha.
 function Confirmacao({ aplicacao, aGravar, onVoltar, onAplicar, cats }) {
-  const { aApagarManuais, aApagarDoMotor, resumo } = aplicacao;
+  const { aApagarManuais, aApagarDoMotor, jaPagas = [], resumo } = aplicacao;
   return (
     <div>
       <div style={{ display: "flex", gap: 16, flexWrap: "wrap", marginBottom: 10 }}>
@@ -698,8 +725,28 @@ function Confirmacao({ aplicacao, aGravar, onVoltar, onAplicar, cats }) {
           {" · "}saem <strong style={{ color: COR.alerta }}>{resumo.apagarManuais}</strong> previsões tuas
           {" · "}substituem-se <strong>{resumo.apagarMotor}</strong> de um recálculo anterior
           {resumo.protegidas > 0 && <> · ficam intactas <strong>{resumo.protegidas}</strong> já pagas ou convertidas</>}
+          {resumo.jaPagas > 0 && <> · não entram <strong style={{ color: "#8E2A20" }}>{resumo.jaPagas}</strong> que já estão liquidadas</>}
         </div>
       </div>
+
+      {jaPagas.length > 0 && (
+        <div style={{ background: "#F3F6F4", border: "1px solid #D6E0DA", borderRadius: 10,
+                      padding: "11px 14px", marginBottom: 10, maxHeight: 150, overflowY: "auto" }}>
+          <div style={{ fontSize: 11, fontWeight: 700, color: "#2C4A3C", marginBottom: 6 }}>
+            O motor calculou estas, mas elas já estão pagas ou convertidas em fatura
+            ({fmtEUR(resumo.valorJaPagas)}) — fica o que já aconteceu, não a previsão:
+          </div>
+          {jaPagas.map(p => (
+            <div key={p.id} style={{ fontSize: 11, color: "#3C5B4C", display: "flex", gap: 10,
+                                     justifyContent: "space-between", padding: "2px 0" }}>
+              <span>{fmtData(p.data_inicio)} · {p.descricao || "—"}
+                <span style={{ color: "#6B8578" }}> · já {String(p.existente?.status || "").toLowerCase()}</span>
+              </span>
+              <span style={{ fontFamily: "var(--fonte-numero)" }}>{fmtEUR(p.valor)}</span>
+            </div>
+          ))}
+        </div>
+      )}
 
       {aApagarManuais.length > 0 && (
         <div style={{ background: "#FBEDEB", border: "1px solid #EFCFC9", borderRadius: 10,

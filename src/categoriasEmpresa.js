@@ -15,6 +15,12 @@
 // ACRESCENTADO À MÃO (21/10/2026), por existir na FO e faltar aqui:
 //   genero    > "Blessed - Aporte/Resgate"   (linha 22 da folha Fluxo Futuro)
 //   favcloset > "Outras Receitas"            (linha  6 da folha Fluxo Futuro)
+//   simplify  > "Outras Receitas"            (linha  5 da folha Fluxo Futuro)
+// Repara que a posição não é a mesma nas duas: na Favorite a folha põe as
+// outras receitas DEPOIS da comissão, na Simplify ANTES. Aqui segue-se cada
+// folha, para a lista do ecrã ler na mesma ordem que a do Excel.
+// A Género e a Aura não têm esta linha nas FO delas, por isso também não a
+// têm aqui.
 //
 // CORRIGIDO À MÃO (22/10/2026):
 //   favcloset trazia a mesma rubrica escrita de duas maneiras — "Impostos e
@@ -194,6 +200,7 @@ export const CATEGORIAS_POR_EMPRESA = {
     "Amortização",
     "Funding",
     "Vendas",
+    "Outras Receitas",
     "Comissão",
     "Terreno",
     "Impostos e taxas",

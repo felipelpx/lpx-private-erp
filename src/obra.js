@@ -299,7 +299,10 @@ export const PLANO_VAZIO = {
   budget_obra: 0, taxa_iva_obra: 23,
   fiscalizacao_mensal: 0, cso_mensal: 0, taxa_iva_servicos: 23, comissao_avaliacao: 0,
   euribor: 0, spread: 0, funding_pct: 0, divida_inicial: 0,
-  recuperar_iva: true,
+  // `recuperar_iva` liga/desliga o financiamento do IVA pelo banco (o nome
+  // ficou de uma versão anterior). `funding_iva_pct` em branco = o mesmo
+  // que a obra.
+  recuperar_iva: true, funding_iva_pct: null,
   // ── A escritura ──────────────────────────────────────────────────────────
   // O projeto não acaba quando a obra acaba: vende-se, paga-se o banco e
   // fecham-se contas. A escritura é o mês em que isso acontece, e o
@@ -421,7 +424,17 @@ export function planearObra(plano, { gastoObra = 0, hoje = hojeISO(), grupo = "L
   const pctFunding = Math.min(100, Math.max(0, num(p.funding_pct)));
   const comissao   = arred2(num(p.comissao_avaliacao));
   const taxaAnual  = num(p.euribor) + num(p.spread);
+  // O campo chama-se `recuperar_iva` por razões históricas; o que ele liga e
+  // desliga é o financiamento do IVA pelo banco. O rótulo no ecrã é esse.
   const financiaIva = p.recuperar_iva !== false;
+  // E a percentagem é independente da da obra: há bancos que financiam a
+  // empreitada a 80% e o IVA a 100%, porque o IVA volta por reembolso. Em
+  // branco, segue a da obra — que era o que acontecia antes deste campo
+  // existir, e por isso nada muda para quem não lhe tocar.
+  const pctFundingIva = (p.funding_iva_pct === null || p.funding_iva_pct === undefined
+                         || p.funding_iva_pct === "")
+    ? pctFunding
+    : Math.min(100, Math.max(0, num(p.funding_iva_pct)));
   let divida       = arred2(num(p.divida_inicial));
   let mesFimDaObra = "";
 
@@ -439,7 +452,7 @@ export function planearObra(plano, { gastoObra = 0, hoje = hojeISO(), grupo = "L
       const [ano, tri] = chave.split("-").map(Number);
       return (!ano || !tri || !(valor > 0)) ? null
         : { data: dataLimite(ano, tri), valor: arred2(valor), ano, tri,
-            funding: financiaIva ? arred2(valor * pctFunding / 100) : 0 };
+            funding: financiaIva ? arred2(valor * pctFundingIva / 100) : 0 };
     })
     .filter(Boolean)
     .sort((a, b) => a.data.localeCompare(b.data));
@@ -523,7 +536,8 @@ export function planearObra(plano, { gastoObra = 0, hoje = hojeISO(), grupo = "L
       linhas.push({
         ...linha("funding_iva", mesDe(e.data), e.funding, grupo, {
           descricao: `Funding banco — IVA da obra ${rot}`,
-          obs: `${arred2(pctFunding)}% de ${e.valor} € de IVA`,
+          obs: `${arred2(pctFundingIva)}% de ${e.valor} € de IVA` +
+               (pctFundingIva !== pctFunding ? ` (a obra é financiada a ${arred2(pctFunding)}%)` : ""),
         }),
         tipo: "entrada", data: e.data,
       });
@@ -741,7 +755,21 @@ export function planearAplicacao({
     cats.includes(String(p.categoria || "").toLowerCase()) &&
     String(p.data_inicio || "") >= corte);
 
-  const aCriar = linhas.map(l => ({
+  // As previsões já pagas ou convertidas em fatura não são apagadas (regra 1),
+  // mas os ids do motor são determinísticos — por isso o recálculo gerava
+  // outra vez o id de uma que já lá estava, e o INSERT rebentava com
+  // "duplicate key value violates unique constraint pagamentos_extras_pkey".
+  //
+  // A chave primária estava a proteger-te de pior: se a linha entrasse, ficava
+  // ao lado da que já foi paga e a despesa contava duas vezes. Uma despesa
+  // liquidada é passado, e passado não se prevê — por isso sai do que entra,
+  // e diz-se quais foram, para não desaparecerem em silêncio.
+  const jaLiquidadas = new Map(
+    (pagamentosExistentes || [])
+      .filter(p => p && p.empresa === empresa && INTOCAVEL.test(String(p.status || "")))
+      .map(p => [String(p.id), p]));
+
+  const todas = linhas.map(l => ({
     id: `obra_${empresa}_${l.plano_tipo}_${l.data}`,
     tipo: l.tipo || "saida",
     descricao: l.descricao,
@@ -760,14 +788,22 @@ export function planearAplicacao({
     plano_tipo: l.plano_tipo,
   }));
 
+  const aCriar = todas.filter(l => !jaLiquidadas.has(l.id));
+  // O que o motor queria lançar e já está liquidado — com a linha que lá está,
+  // para o ecrã poder dizer qual é e com que estado.
+  const jaPagas = todas
+    .filter(l => jaLiquidadas.has(l.id))
+    .map(l => ({ ...l, existente: jaLiquidadas.get(l.id) }));
+
   const somar = (arr) => arred2(arr.reduce((s, p) => s + (Number(p.valor) || 0), 0));
   return {
-    aCriar, aApagarDoMotor, aApagarManuais,
+    aCriar, aApagarDoMotor, aApagarManuais, jaPagas,
     idsAApagar: [...aApagarDoMotor, ...aApagarManuais].map(p => p.id),
     resumo: {
       criar: aCriar.length,          valorCriar: somar(aCriar),
       apagarMotor: aApagarDoMotor.length, valorMotor: somar(aApagarDoMotor),
       apagarManuais: aApagarManuais.length, valorManuais: somar(aApagarManuais),
+      jaPagas: jaPagas.length,       valorJaPagas: somar(jaPagas),
       protegidas: (pagamentosExistentes || [])
         .filter(p => p && p.empresa === empresa && INTOCAVEL.test(String(p.status || ""))).length,
     },
