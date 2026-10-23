@@ -1166,7 +1166,13 @@ export function planearAplicacao({
     return rubricasDoMotor.has(semAcento(r).replace(/[_\s]+/g, " "));
   };
 
-  const aApagarManuais = daEmpresa.filter(p => !p.plano_obra && noMotor(p));
+  // `plano_obra !== empresa`, não `!plano_obra`: uma previsão com a marca de
+  // OUTRO plano escapava aos dois filtros — não era "do motor desta empresa"
+  // nem "sem marca nenhuma" —, e nunca era apagada. O painel de conferência
+  // conta-a como manual (ver obraNoFluxo), por isso ficavam os dois a
+  // discordar: o ecrã dizia que havia duplicação e aplicar o plano não a
+  // tirava. A definição passa a ser a mesma nos dois sítios.
+  const aApagarManuais = daEmpresa.filter(p => p.plano_obra !== empresa && noMotor(p));
 
   // As previsões já pagas ou convertidas em fatura não são apagadas (regra 1),
   // mas os ids do motor são determinísticos — por isso o recálculo gerava

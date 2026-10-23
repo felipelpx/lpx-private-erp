@@ -155,6 +155,23 @@ export default function FluxoFuturo({ faturas: faturasTodas, faturasLoading, pag
     if (idsAApagar?.length) {
       const r = await onApagarPagamentos?.(idsAApagar);
       if (r?.error) return r;
+      // Um DELETE recusado por uma política de RLS NÃO dá erro: devolve zero
+      // linhas e segue em frente. Sem esta conferência, o plano dizia
+      // "aplicado", criava as linhas novas por cima das antigas, e a obra
+      // ficava a contar duas vezes — sem uma única mensagem em lado nenhum.
+      //
+      // Pára-se aqui de propósito: criar as novas depois de falhar a limpeza
+      // é precisamente o que não se quer.
+      const apagadas = Array.isArray(r?.data) ? r.data.length : null;
+      if (apagadas !== null && apagadas < idsAApagar.length) {
+        return { error: { message:
+          `Apagaram-se ${apagadas} das ${idsAApagar.length} previsões que o plano ia ` +
+          `substituir — as outras ${idsAApagar.length - apagadas} continuam no fluxo.\n\n` +
+          `Não se criaram as linhas novas, para a obra não ficar contada duas vezes.\n\n` +
+          `Isto costuma ser uma permissão da base de dados (RLS) a recusar o apagar ` +
+          `sem dar erro. Se o problema persistir, apaga-as à mão no Fluxo Futuro e ` +
+          `volta a aplicar.` } };
+      }
     }
     if (aCriar?.length) {
       const r = await onAddPagamentos?.(aCriar);
