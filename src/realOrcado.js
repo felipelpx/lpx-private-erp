@@ -27,10 +27,11 @@
 // orçado se escreve, sem ter de pensar em sinais.
 // ─────────────────────────────────────────────────────────────────────────────
 
-import { rubricasDa, rubricaDe, chaveRubrica, rubricaNoPlano,
+import { rubricasDa, rubricaDe, chaveRubrica, rubricaNoPlano, ehProjetoHDG,
          ehCapital, ehFunding, ehAjuste, ordemDaRubrica } from "./rubricas.js";
 import { ocorrenciasDe } from "./recorrentes.js";
 import { comissaoDaVenda, soReceita, vgvPorReceber } from "./vendas.js";
+import { rubricaNoFluxo } from "./obra.js";
 
 const arred2 = (v) => Math.round(((Number(v) || 0) + Number.EPSILON) * 100) / 100;
 const num = (v) => { const n = Number(v); return Number.isFinite(n) ? n : 0; };
@@ -84,6 +85,26 @@ export function calcularRealOrcado({
   // ainda sem um único movimento apareça à mesma — é precisamente essa que
   // interessa ver numa reunião de investidores.
   const baldes = new Map();
+  // ── Uma definição de "obra" só, nos três ecrãs ───────────────────────────
+  // O IVA da obra é obra: entra no custo do projeto, não é um imposto a
+  // recuperar. O plano e o Fluxo Futuro já o liam assim desde o v96; o Real ×
+  // Orçado é que o mantinha como rubrica própria — uma decisão minha, que
+  // passou a ser o que impedia a conta de fechar.
+  //
+  // Na Infinite Change: o IVA do 2T26 está dividido em três prestações de um
+  // plano de flexibilização, e uma delas está classificada em "Obras". O
+  // forecast somava-a por cima das linhas de IVA que o plano já gera —
+  // 23 327,95 € a dobrar — enquanto as outras duas não contavam de todo.
+  //
+  // Agora as três telas perguntam a mesma coisa: em que rubrica é que isto
+  // cai? Ver rubricaDoLancamento em src/obra.js.
+  const grupo = ehProjetoHDG(empresaId) ? "HDG" : "LPX";
+  const rubricaDoDoc = (categoria, subcategoria, descricao = "") => {
+    const r = rubricaDe(empresaId, categoria, subcategoria);
+    if (r === null) return null;
+    return rubricaNoFluxo(grupo, r, descricao);
+  };
+
   const balde = (r) => {
     if (!baldes.has(r)) baldes.set(r, {
       rubrica: r, orcado: 0, real: 0,
@@ -123,11 +144,17 @@ export function calcularRealOrcado({
       || (quando(o) === quando(atual) && o.id === id_orcamento(empresaId, r));
     if (ganha) porRubrica.set(r, o);
   });
-  porRubrica.forEach((o, r) => { balde(r).orcado = Math.abs(num(o.orcado)); });
+  // O orçado segue a mesma dobra: se houver uma linha de orçamento para o
+  // IVA da obra, ela soma-se à da obra em vez de ficar sozinha a comparar-se
+  // com um real que já não existe.
+  porRubrica.forEach((o, r) => {
+    const k = rubricaNoFluxo(grupo, r, "");
+    balde(k).orcado = arred2(num(balde(k).orcado) + Math.abs(num(o.orcado)));
+  });
 
   // ── Real ──────────────────────────────────────────────────────────────────
   (movimentos || []).forEach(m => {
-    const r = rubricaDe(empresaId, m?.categoria, m?.subcategoria);
+    const r = rubricaDoDoc(m?.categoria, m?.subcategoria, m?.movimento || m?.detalhes || "");
     if (r === null) return;
     const b = balde(r);
     b.real += num(m?.valor);
@@ -141,7 +168,7 @@ export function calcularRealOrcado({
     if (f?.empresa !== empresaId) return;
     const estado = String(f?.status || "").trim();
     if (FATURA_PAGA.test(estado) || FATURA_MORTA.test(estado)) return;
-    const r = rubricaDe(empresaId, f?.categoria, f?.subcategoria);
+    const r = rubricaDoDoc(f?.categoria, f?.subcategoria, f?.descricao || f?.obs || "");
     if (r === null) return;
     const b = balde(r);
     b.faturasPorPagar -= Math.abs(num(f?.valor));   // uma fatura por pagar é saída
@@ -155,7 +182,7 @@ export function calcularRealOrcado({
   (pagamentos || []).forEach(p => {
     if (p?.empresa !== empresaId) return;
     if (PREVISAO_FORA.test(String(p?.status || "").trim())) return;
-    const r = rubricaDe(empresaId, p?.categoria, p?.subcategoria);
+    const r = rubricaDoDoc(p?.categoria, p?.subcategoria, p?.descricao || "");
     if (r === null) return;
     const b = balde(r);
     const v = Math.abs(num(p?.valor));
@@ -250,7 +277,7 @@ export function calcularRealOrcado({
   (recorrentes || []).forEach(reg => {
     if (reg?.empresa !== empresaId) return;
     if (reg?.ativa === false) return;
-    const r = rubricaDe(empresaId, reg?.categoria, reg?.subcategoria);
+    const r = rubricaDoDoc(reg?.categoria, reg?.subcategoria, reg?.descricao || "");
     if (r === null) return;
     const oc = ocorrenciasDe(reg, { de: hoje, ate: reg?.data_fim || ate });
     if (!oc.length) return;

@@ -23,6 +23,7 @@ import { ocultarNoGrafico } from "./nomenclatura.js";
 import { EMPRESAS } from "./empresas.js";
 import { LINHAS_FO_HDG, linhaDoFluxoHDG, GRUPOS_FO_HDG } from "./rubricasHDG.js";
 
+import { rubricaNoFluxo } from "./obra.js";
 // Os projetos HDG têm FO hierárquicas e a linha do fluxo é a DESPESA, não o
 // bloco que a contém. Ver src/rubricasHDG.js.
 const HDG = new Set(EMPRESAS.filter(e => e.grupo === "HDG").map(e => e.id));
@@ -208,6 +209,12 @@ export function categoriasDeFatura(empresaId) {
 //
 // `excluidas` é o que ficou de fora e porquê — o rodapé do gráfico precisa
 // disso para dizer o que não está lá.
+// O IVA da obra lido como obra. Vive em src/obra.js, que é onde o plano e o
+// Fluxo Futuro já o liam assim; aqui só se aplica a mesma regra, para o
+// gráfico não contar de uma maneira e a tabela de outra.
+const ehIvaDeObraNaObra = (empresaId, rubrica, descricao) =>
+  rubricaNoFluxo(ehProjetoHDG(empresaId) ? "HDG" : "LPX", rubrica, descricao);
+
 export function agruparPorRubrica(movimentos, { empresaId, agrupar = false } = {}) {
   const porRubrica = new Map();
   let excluido = 0, nExcluidos = 0;
@@ -221,10 +228,15 @@ export function agruparPorRubrica(movimentos, { empresaId, agrupar = false } = {
       if (m?.categoria) nomesExcluidos.add(String(m.categoria).trim());
       return;
     }
+    // O IVA da obra é obra, aqui como nos outros ecrãs. Sem isto o gráfico
+    // mostrava uma barra de "IVA de obra" ao lado de uma linha da tabela que
+    // já o tinha dentro — os dois a dizerem números diferentes sobre o mesmo
+    // movimento, que é a classe de bug que isto toda veio corrigir.
+    const r1 = ehIvaDeObraNaObra(empresaId, r0, m?.movimento || m?.detalhes || "");
     // Com `agrupar`, catorze rubricas de capital tornam-se uma barra só. A
     // rubrica original fica guardada em `inclui`, para a dica poder dizer o
     // que está lá dentro — juntar não é esconder.
-    const r = agrupar ? familiaDe(r0) : r0;
+    const r = agrupar ? familiaDe(r1) : r1;
     const a = porRubrica.get(r) || { rubrica: r, entrada: 0, saida: 0, n: 0, inclui: new Set() };
     if (v >= 0) a.entrada += v; else a.saida += v;
     a.n++;
