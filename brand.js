@@ -17,7 +17,7 @@
 // deploy chegou — aparece ao lado do nome do utilizador na barra de cima.
 // O número que aparece no cabeçalho. Serve para se saber, de um relance,
 // qual é a versão que está mesmo publicada no site.
-export const VERSAO = "v85";
+export const VERSAO = "v99";
 
 // ─── Paleta ──────────────────────────────────────────────────────────────────
 export const COR = {
