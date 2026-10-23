@@ -106,8 +106,8 @@ export default function ModalPlanoObra({
 
   const realizado = useMemo(
     () => obraRealizada(movimentos, faturas, {
-      empresa, categorias: [catObra], taxaIva: f.taxa_iva_obra }),
-    [movimentos, faturas, empresa, catObra, f.taxa_iva_obra]);
+      empresa, categorias: [catObra], grupo, taxaIva: f.taxa_iva_obra }),
+    [movimentos, faturas, empresa, catObra, grupo, f.taxa_iva_obra]);
 
   const bancoJaLibertou = useMemo(
     () => fundingLibertado(movimentos, {

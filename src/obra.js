@@ -211,10 +211,32 @@ export function gastoEmObra(faturas, { empresa, categorias, taxaIva = 23 } = {})
 const semAcento = (t) => String(t || "").normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().trim();
 const bate = (valor, lista) => lista.map(semAcento).includes(semAcento(valor));
 
-export function obraRealizada(movimentos, faturas, { empresa, categorias = [], taxaIva = 23 } = {}) {
+export function obraRealizada(movimentos, faturas,
+    { empresa, categorias = [], grupo = null, taxaIva = 23 } = {}) {
+  // ── Que lançamentos são "obra" ───────────────────────────────────────────
+  // Isto casava só pela CATEGORIA. Nos projetos HDG a categoria é o BLOCO
+  // ("Obras"), que leva lá dentro a Demolição e Preparação, as Taxas (Obras)
+  // e o Buffer/Outros além da empreitada. O plano contava o bloco inteiro
+  // como empreitada paga, mas o budget é só da empreitada — e o Real ×
+  // Orçado, que lê pela subcategoria, via outro número. Na Infinite Change
+  // davam 794 850,14 € contra 606 894 €: 187 956,14 € de diferença entre
+  // dois ecrãs que deviam dizer o mesmo.
+  //
+  // Agora pergunta-se a mesma coisa que o fluxo pergunta: em que RUBRICA é
+  // que este lançamento cai? Uma definição só, nos três ecrãs. Quando o
+  // grupo não é passado, mantém-se o comportamento antigo.
+  const alvo = grupo
+    ? semAcento(rubricaDoLancamento(grupo, classificacaoDe("obra", grupo).categoria,
+        classificacaoDe("obra", grupo).subcategoria || "")).replace(/[_\s]+/g, " ")
+    : null;
+  const daObra = (x) => alvo === null
+    ? bate(x.categoria, categorias)
+    : semAcento(rubricaDoLancamento(grupo, x.categoria, x.subcategoria,
+        x.descricao || x.movimento || "")).replace(/[_\s]+/g, " ") === alvo;
+
   const fs = (faturas || [])
     .filter(f => f && f.empresa === empresa)
-    .filter(f => bate(f.categoria, categorias))
+    .filter(daObra)
     .filter(f => !/anulada|cancelada|rejeitada/i.test(String(f.status || "")));
 
   const taxa = Number(taxaIva) || 0;
@@ -247,7 +269,7 @@ export function obraRealizada(movimentos, faturas, { empresa, categorias = [], t
   // um adiantamento revertido — e isso entra na conta como POSITIVO, na mesma
   // categoria de obra. Olhar só para as saídas dava a obra por mais cara do
   // que é, e o budget consumia-se depressa demais. O que conta é o líquido.
-  const todosMs = (movimentos || []).filter(m => m && bate(m.categoria, categorias));
+  const todosMs = (movimentos || []).filter(m => m && daObra(m));
   const ms = todosMs.filter(m => (Number(m.valor) || 0) < 0);
   const devolucoes = todosMs.filter(m => (Number(m.valor) || 0) > 0);
   const pagoBruto  = arred2(ms.reduce((s, m) => s + Math.abs(Number(m.valor) || 0), 0));
