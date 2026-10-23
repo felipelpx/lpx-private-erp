@@ -165,8 +165,12 @@ export default function ModalPlanoObra({
   // número à mão: assim, vender mais uma fração ou receber mais um sinal muda o
   // fluxo sozinho, sem ser preciso vir aqui corrigir o campo.
   const resultado = useMemo(
-    () => planearObra(f, { gastoObra: gasto, hoje, grupo, vendaNaEscritura: vgvDoProjeto }),
-    [f, gasto, hoje, grupo, vgvDoProjeto]);
+    // O IVA já pago vem MEDIDO dos documentos, não de dividir o incorrido por
+    // 1,23: com inversão do sujeito passivo o empreiteiro fatura sem IVA e o
+    // IVA vai para a AT à parte. Ver obraRealizada em src/obra.js.
+    () => planearObra(f, { gastoObra: gasto, hoje, grupo, vendaNaEscritura: vgvDoProjeto,
+                           ivaJaPago: realizado.ivaJaPago }),
+    [f, gasto, hoje, grupo, vgvDoProjeto, realizado.ivaJaPago]);
   const { linhas, resumo, avisos } = resultado;
 
   const aplicacao = useMemo(() => planearAplicacao({
@@ -346,7 +350,9 @@ export default function ModalPlanoObra({
                 <Linha k="       obra realizada" v={fmtEUR(resumo.gastoBase)} suave
                   dica="A parte do incorrido que é empreitada, sem IVA." />
                 <Linha k="       IVA de obra realizado" v={fmtEUR(resumo.gastoIva)} suave
-                  dica={`A parte do incorrido que é IVA, à taxa de ${num(f.taxa_iva_obra)}%. Já foi pago, mas continua a contar como obra.`} />
+                  dica={realizado.ivaJaPago === null
+                    ? `Estimado: ${num(f.taxa_iva_obra)}% dentro do incorrido. Não há nenhum documento classificado como IVA de obra para medir — classifica-os e este número passa a ser o real.`
+                    : `Medido em ${realizado.nDocsIva} ${realizado.nDocsIva === 1 ? "documento" : "documentos"} de IVA de obra: ${fmtEUR(realizado.ivaPagoExtrato)} no extrato e ${fmtEUR(realizado.ivaPorPagarFat)} faturado por pagar. Não é estimado — é o que foi mesmo liquidado à AT.`} />
                 <div style={{ height: 1, background: "#D8CCBB", margin: "7px 0" }} />
                 <Linha k="=  Falta gastar" v={fmtEUR(resumo.porGastarBruto)} forte
                   dica="Total a gastar menos o incorrido — desconta o que já foi pago tanto de obra como de IVA de obra." />

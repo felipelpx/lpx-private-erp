@@ -234,6 +234,20 @@ export function obraRealizada(movimentos, faturas,
     : semAcento(rubricaDoLancamento(grupo, x.categoria, x.subcategoria,
         x.descricao || x.movimento || "")).replace(/[_\s]+/g, " ") === alvo;
 
+  // Dentro da obra, quais é que são IVA. Com inversão do sujeito passivo o
+  // empreiteiro fatura sem IVA e o IVA vai para a Autoridade Tributária à
+  // parte — são documentos diferentes, e só medindo-os é que se sabe quanto
+  // de IVA já foi pago. Sem isto o plano dividia tudo por 1,23 e inventava
+  // IVA dentro de pagamentos que não o levavam.
+  //
+  // Nos projetos HDG a rubrica já vem dobrada na obra, por isso a pergunta
+  // faz-se à classificação ORIGINAL: "IVA construção", "IVA de obra", ou um
+  // "IVA" seco cuja descrição fale de obra.
+  const ehIva = (x) => ehIvaDeObra(x.subcategoria) || ehIvaDeObra(x.categoria) ||
+    ((semAcento(x.subcategoria).replace(/[_\s]+/g, " ") === "iva" ||
+      semAcento(x.categoria).replace(/[_\s]+/g, " ") === "iva") &&
+     DESC_IVA_OBRA.test(String(x.descricao || x.movimento || x.obs || "")));
+
   const fs = (faturas || [])
     .filter(f => f && f.empresa === empresa)
     .filter(daObra)
@@ -301,6 +315,21 @@ export function obraRealizada(movimentos, faturas,
   const jaIncorridoBase = arred2(jaIncorrido / (1 + taxa / 100));
   const ivaIncorrido    = arred2(jaIncorrido - jaIncorridoBase);
 
+  // ── O IVA de obra MEDIDO ─────────────────────────────────────────────────
+  // O que saiu da conta e o que está faturado por pagar, só dos documentos
+  // que são IVA. É isto que o plano usa em vez de dividir tudo por 1,23.
+  // Devolve `null` quando não há documento de IVA nenhum: aí não há nada
+  // medido, e quem chama volta à imputação em vez de assumir zero — assumir
+  // zero poria todo o IVA do budget por pagar numa obra onde ele já foi.
+  const ivaMs  = todosMs.filter(ehIva);
+  const ivaFs  = fs.filter(ehIva);
+  const ivaPagoExtrato = arred2(ivaMs.reduce((s, m) => s - (Number(m.valor) || 0), 0));
+  const ivaPorPagarFat = arred2(ivaFs.filter(f => !paga(f))
+    .reduce((s, f) => s + brutoDe(f), 0));
+  const temDocsDeIva = ivaMs.length > 0 || ivaFs.length > 0;
+  const ivaJaPago = temDocsDeIva
+    ? arred2(ivaPagoExtrato + ivaPorPagarFat) : null;
+
   return {
     faturado, faturadoPago, porPagar,
     faturadoBruto, faturadoPagoBruto, porPagarBruto,
@@ -311,6 +340,11 @@ export function obraRealizada(movimentos, faturas,
     nFaturas: fs.length, nMovimentos: ms.length,
     primeiroGasto: datas[0] || null,
     jaIncorrido, jaIncorridoBase, ivaIncorrido,
+    // O IVA medido nos documentos (null = não há nenhum para medir), e de
+    // onde veio, para o ecrã poder dizê-lo em vez de mostrar um número que
+    // ninguém sabe explicar.
+    ivaJaPago, ivaPagoExtrato, ivaPorPagarFat,
+    nDocsIva: ivaMs.length + ivaFs.length,
     // De onde veio o número, para o ecrã poder explicá-lo.
     fonte: todosMs.length > 0 ? "extrato" : "faturas",
   };
@@ -400,8 +434,14 @@ export const PLANO_VAZIO = {
  * @param opts.hoje       data de referência (injetável para os testes)
  * @param opts.grupo      "LPX" ou "HDG" — decide o plano de contas
  */
+/**
+ * @param ivaJaPago  o IVA de obra que já foi mesmo pago, medido a partir dos
+ *        documentos (ver obraRealizada). `null` — o valor por omissão — quer
+ *        dizer "não há nada a medir": aí o IVA já pago imputa-se a partir do
+ *        incorrido, como antes.
+ */
 export function planearObra(plano, { gastoObra = 0, hoje = hojeISO(), grupo = "LPX",
-                                     vendaNaEscritura = 0 } = {}) {
+                                     vendaNaEscritura = 0, ivaJaPago = null } = {}) {
   const avisos = [];
   const p = { ...PLANO_VAZIO, ...(plano || {}) };
 
@@ -426,17 +466,47 @@ export function planearObra(plano, { gastoObra = 0, hoje = hojeISO(), grupo = "L
   const ivaDoBudget = arred2(budgetBruto - budget);
   const gasto       = arred2(num(gastoObra));
 
-  // As duas metades do que já se gastou. O IVA é sempre o resto da base, para
-  // que base + IVA feche no bruto ao cêntimo.
-  const gastoBase = arred2(gasto / (1 + taxa / 100));
-  const gastoIva  = arred2(gasto - gastoBase);
+  // ── As duas metades do que já se gastou ──────────────────────────────────
+  // Isto dividia tudo o que saiu por 1,23 e chamava IVA ao resto. É uma
+  // IMPUTAÇÃO, e assume que cada euro pago leva IVA à taxa do plano.
+  //
+  // Com inversão do sujeito passivo — a regra na construção — isso é falso: o
+  // empreiteiro fatura SEM IVA, e o IVA vai para a Autoridade Tributária à
+  // parte, no apuramento do trimestre. Na Infinite Change o plano inventava
+  // 136 010,59 € de IVA dentro de pagamentos ao Complai que não o levavam, e
+  // ao mesmo tempo ignorava o IVA que de facto tinha sido pago à AT —
+  // incluindo um acerto de 23 327,95 € de quando se liquidou a 6% e se
+  // corrigiu depois.
+  //
+  // Agora MEDE-SE: o IVA já pago é a soma dos documentos que são mesmo IVA de
+  // obra, e a base é o resto. Quando não há nenhum documento de IVA, não há
+  // nada a medir e volta-se à imputação, que é o melhor palpite disponível.
+  const ivaMedido = ivaJaPago === null || ivaJaPago === undefined
+    ? null : arred2(num(ivaJaPago));
+  const gastoIva  = ivaMedido === null ? arred2(gasto - arred2(gasto / (1 + taxa / 100)))
+                                       : ivaMedido;
+  const gastoBase = arred2(gasto - gastoIva);
 
-  // E as duas metades do que falta. A base é o que resta do budget; o IVA é
-  // outra vez o resto. Daqui sai a garantia que interessa:
-  //     IVA já incorrido + IVA que falta = IVA do budget, exatamente.
-  const porGastarBruto = arred2(Math.max(0, budgetBruto - gasto));
-  const porGastar      = Math.min(porGastarBruto, arred2(Math.max(0, budget - gastoBase)));
-  const ivaPorGastar   = arred2(porGastarBruto - porGastar);
+  // E as duas metades do que falta, cada uma contra o seu teto:
+  //     base que falta = budget      − base já paga
+  //     IVA que falta  = IVA do budget − IVA já pago
+  //
+  // Daqui sai a garantia que o Felipe pediu, e sai por construção, sem
+  // parcela de acerto nenhuma: o IVA total é SEMPRE a taxa do budget. Um
+  // acerto da AT — para cima ou para baixo — entra como IVA pago e as linhas
+  // trimestrais que faltam encolhem ou crescem sozinhas nesse valor.
+  const porGastar    = arred2(Math.max(0, budget - gastoBase));
+  const ivaPorGastar = arred2(Math.max(0, ivaDoBudget - gastoIva));
+  const porGastarBruto = arred2(porGastar + ivaPorGastar);
+
+  // A rede: se o IVA pago passar o IVA do budget, não se geram linhas
+  // negativas — o IVA que falta fica a zero (o Math.max acima) e diz-se
+  // porquê, que é o que deixa a pessoa decidir.
+  if (ivaMedido !== null && ivaDoBudget > 0 && gastoIva > arred2(ivaDoBudget + 0.01))
+    avisos.push(`Já foi pago mais IVA de obra do que os ${taxa}% do budget — ` +
+                `${arred2(gastoIva)} € contra ${arred2(ivaDoBudget)} €, ` +
+                `${arred2(gastoIva - ivaDoBudget)} € a mais. Não se lança mais IVA: ` +
+                `confirma a taxa do plano ou se há aqui IVA que não é desta obra.`);
 
   if (budgetBruto > 0 && gasto > budgetBruto)
     avisos.push(`Já se gastou mais do que o budget com IVA — ` +
