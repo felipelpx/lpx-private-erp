@@ -1,4 +1,10 @@
 [build]
+  # Sem esta linha o Netlify tinha de adivinhar que isto é um projeto Vite e
+  # que precisa de compilar. Quando não adivinha, publica o que já lá estava e
+  # marca o deploy como bem-sucedido — o site fica na versão anterior sem um
+  # único erro em lado nenhum. Com o comando escrito, ou compila o commit novo
+  # ou falha à vista.
+  command = "npm run build"
   publish = "dist"
   functions = "netlify/functions"
 [[redirects]]
