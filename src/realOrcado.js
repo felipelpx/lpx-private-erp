@@ -28,7 +28,8 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { rubricasDa, rubricaDe, chaveRubrica, rubricaNoPlano, ehProjetoHDG,
-         ehCapital, ehFunding, ehAjuste, ordemDaRubrica } from "./rubricas.js";
+         ehCapital, ehFunding, ehAjuste, ehTransferenciaInterna,
+         ordemDaRubrica } from "./rubricas.js";
 import { ocorrenciasDe } from "./recorrentes.js";
 import { comissaoDaVenda, soReceita, vgvPorReceber } from "./vendas.js";
 import { rubricaNoFluxo } from "./obra.js";
@@ -102,6 +103,10 @@ export function calcularRealOrcado({
   const rubricaDoDoc = (categoria, subcategoria, descricao = "") => {
     const r = rubricaDe(empresaId, categoria, subcategoria);
     if (r === null) return null;
+    // Uma transferência entre contas da mesma empresa não é documento deste
+    // quadro. Devolver null aqui chega: todos os laços já desistem no null,
+    // e assim nem o balde chega a existir.
+    if (ehTransferenciaInterna(r)) return null;
     return rubricaNoFluxo(grupo, r, descricao);
   };
 
@@ -119,7 +124,12 @@ export function calcularRealOrcado({
   };
   // Os ajustes ficam de fora: não são dinheiro que o projeto ganhou ou gastou,
   // e uma linha de ajustes num quadro de orçamento só levanta perguntas.
-  rubricasDa(empresaId).filter(r => !ehAjuste(r)).forEach(balde);
+  //
+  // As transferências entre contas da mesma empresa também: saem de um lado e
+  // entram no outro, e no quadro apareciam como entrada do projeto contra um
+  // orçado vazio. Ver ehTransferenciaInterna em src/rubricas.js.
+  const foraDoQuadro = (r) => ehAjuste(r) || ehTransferenciaInterna(r);
+  rubricasDa(empresaId).filter(r => !foraDoQuadro(r)).forEach(balde);
 
   // ── Orçado ────────────────────────────────────────────────────────────────
   // Guardado em módulo (sempre positivo); a rubrica é a chave.

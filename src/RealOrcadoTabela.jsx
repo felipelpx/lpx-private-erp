@@ -431,8 +431,16 @@ export default function RealOrcadoTabela({
                 Resultado da operação</td>
               <td style={{ ...td, fontWeight: 700, color: COR.creme }}>
                 {Math.abs(res.orcado) > 0.005 ? fmtEUR0(res.orcado) : "—"}</td>
-              <td style={{ ...td, fontWeight: 700, color: COR.sobreEscuroTenue }}>
-                {fmtEUR0(res.real)}</td>
+              {/* O resultado NÃO se mostra no realizado. Numa promoção, os
+                  custos acontecem durante anos e a receita chega toda no fim,
+                  à escritura: a meio do caminho o "resultado real" é sempre um
+                  prejuízo enorme que não quer dizer nada — a Infinite Change
+                  mostrava −2 610 591 € num projeto que fecha positivo. O que
+                  responde à pergunta é o orçado e o forecast; o realizado
+                  responde-a só no dia em que a obra acabar. */}
+              <td style={{ ...td, color: COR.sobreEscuroTenue, opacity: 0.45 }}
+                  title="O resultado só se fecha no fim: os custos vão acontecendo e a receita chega à escritura. A meio, um resultado realizado seria sempre negativo sem querer dizer nada. Olha para o orçado e para o forecast.">
+                —</td>
               <td style={{ ...td, fontWeight: 700,
                            color: res.forecast >= 0 ? "#7FC9A3" : "#E79C92" }}>
                 {fmtEUR0(res.forecast)}</td>

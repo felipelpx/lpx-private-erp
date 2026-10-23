@@ -150,6 +150,21 @@ export function ehCapital(rubrica) {
   return CAPITAL.test(k) || / - aporte\/resgate$/.test(k);
 }
 
+// ─── Movimentos entre contas da mesma empresa ───────────────────────────────
+// "Intra-Group (TRF)" e "Transferências" não são receita nem custo: é
+// dinheiro a mudar de conta dentro da mesma empresa. Aparecem no extrato
+// porque saem de um lado e entram no outro, mas no Real × Orçado inflavam as
+// entradas com um valor que nunca entrou no projeto — 13 000 € nas entradas
+// da Infinite Change contra um orçado vazio, sem nada a explicá-lo.
+//
+// O gráfico já os escondia pela subcategoria ("movimento entre contas do
+// mesmo grupo"); faltava a rubrica ter nome próprio.
+const TRANSFERENCIA_INTERNA = /^(intra[\s-]?group|transferencia)/;
+
+export function ehTransferenciaInterna(rubrica) {
+  return TRANSFERENCIA_INTERNA.test(chaveRubrica(rubrica));
+}
+
 // ─── A terceira secção ──────────────────────────────────────────────────────
 // Receitas, custos e funding são três coisas diferentes, e uma folha que
 // mete o funding no meio dos custos não se consegue ler: a amortização
@@ -163,9 +178,18 @@ export function ehCapital(rubrica) {
 // Inflow - Terreno, Outlow - Repagamento, Outflow - Juros e Outflow - Taxas
 // e comissões. É a própria FO que os junta ali, e os juros de um empréstimo
 // são custo do financiamento, não custo da obra.
+// Do bloco "Financiamento" da FO, só o CAPITAL é que é funding: o desembolso
+// do banco e a amortização. Os juros e as comissões bancárias são CUSTO — o
+// preço do dinheiro, que sai da conta e não volta —, e é assim que já estavam
+// nas empresas LPX, onde "Juros" e "Encargos financeiros" são rubricas de
+// custo. Tê-los no funding punha o mesmo encargo em secções diferentes
+// conforme a empresa, e tirava-os do total de custos onde eles pesam.
+const CUSTO_APESAR_DO_BLOCO = /^(outflow - juros|outflow - taxas e comissoes)$/;
+
 const FINANCIAMENTO_HDG = new Set(
   (GRUPOS_FO_HDG.find(g => g.grupo === "Financiamento")?.linhas || [])
-    .map(chaveRubrica));
+    .map(chaveRubrica)
+    .filter(k => !CUSTO_APESAR_DO_BLOCO.test(k)));
 
 export function ehFunding(rubrica) {
   if (ehCapital(rubrica)) return true;
