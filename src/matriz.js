@@ -17,6 +17,8 @@
 // compõem, para o ecrã os poder abrir e tratar um a um.
 // ─────────────────────────────────────────────────────────────────────────────
 
+import { ehFunding as ehFundingDoPlano } from "./rubricas.js";
+
 const num = (v) => { const n = Number(v); return Number.isFinite(n) ? n : 0; };
 const arred2 = (v) => Math.round((num(v) + Number.EPSILON) * 100) / 100;
 
@@ -70,12 +72,21 @@ export const chaveDaLinha = (item, rubrica) =>
  *        Por omissão é a categoria em cru; nos projetos HDG o ecrã passa aqui
  *        a linha da FO (ver src/rubricasHDG.js), para a grelha mostrar as
  *        mesmas despesas que o fluxo operacional.
+ * @param ehFunding  quais rubricas pertencem ao bloco de financiamento, que
+ *        fica numa terceira secção por baixo das receitas e dos custos. Por
+ *        omissão é o plano de contas (ver ehFunding em src/rubricas.js): o
+ *        Funding e a Amortização nas empresas LPX, o grupo "Financiamento"
+ *        da FO nos projetos HDG. Passar `false` junta tudo em duas secções.
  */
 export function construirMatriz({ meses = [], maxMeses = 6, de = "", ate = "",
-                                  comVazios = false, rubricaDoItem = null } = {}) {
+                                  comVazios = false, rubricaDoItem = null,
+                                  ehFunding = ehFundingDoPlano } = {}) {
   const rubricaDe_ = typeof rubricaDoItem === "function"
     ? (it) => { try { return rubricaDoItem(it) || it?.cat || ""; } catch { return it?.cat || ""; } }
     : (it) => it?.cat || "";
+  const ehFunding_ = typeof ehFunding === "function"
+    ? (r) => { try { return !!ehFunding(r); } catch { return false; } }
+    : () => false;
   let candidatos = (meses || []).filter(Boolean);
   if (de)  candidatos = candidatos.filter(m => m.key >= de);
   if (ate) candidatos = candidatos.filter(m => m.key <= ate);
@@ -104,6 +115,7 @@ export function construirMatriz({ meses = [], maxMeses = 6, de = "", ate = "",
       if (!linhas.has(k)) linhas.set(k, {
         chave: k,
         tipo: item.tipo === "entrada" ? "entrada" : "saida",
+        funding: ehFunding_(rubrica),
         categoria: rubrica || "Sem categoria",
         nome: nomeDaDespesa(item.desc),
         valores: Object.fromEntries(chaves.map(c => [c, 0])),
@@ -135,39 +147,53 @@ export function construirMatriz({ meses = [], maxMeses = 6, de = "", ate = "",
   // Por secção (entradas, saídas) e, dentro dela, por categoria. As
   // categorias vão da que mais pesa para a que menos pesa: numa reunião
   // olha-se para o que pesa, não para o alfabeto.
-  const seccao = (tipo, titulo) => {
-    const todas = [...linhas.values()].filter(l => l.tipo === tipo);
+  // `tipo` identifica a secção no ecrã; `pertence` diz que linhas são dela.
+  // A secção do funding leva os dois sentidos — o desembolso do banco e a
+  // amortização — e por isso os seus valores são ASSINADOS: o que entra soma,
+  // o que sai subtrai, e o total da secção é o funding líquido. Nas outras
+  // duas, onde o sentido é o da secção inteira, os valores continuam
+  // absolutos, como sempre foram.
+  const seccao = (tipo, titulo, pertence, assinado = false) => {
+    const sinalDe = (l) => (assinado && l.tipo === "saida" ? -1 : 1);
+    const todas = [...linhas.values()].filter(pertence);
     // Uma despesa que não tem nada nos meses à vista não vira linha vazia na
     // grelha — mas o que ela vale não desaparece: vai para o total de fora da
     // janela, que o rodapé mostra.
     const naJanela = (l) => chaves.some(c => Math.abs(num(l.valores[c])) > 0.005);
     const minhas = todas.filter(naJanela);
     const soLaFora = arred2(todas.filter(l => !naJanela(l))
-      .reduce((s, l) => s + l.total, 0));
+      .reduce((s, l) => s + sinalDe(l) * l.total, 0));
     const porCategoria = new Map();
     minhas.forEach(l => {
-      if (!porCategoria.has(l.categoria)) porCategoria.set(l.categoria, {
-        categoria: l.categoria, linhas: [],
+      // A chave leva o sentido: numa secção assinada, "Inflow - Obra" e uma
+      // devolução com o mesmo nome são dois grupos, não um com o sinal trocado.
+      const kg = `${l.tipo}|${l.categoria}`;
+      if (!porCategoria.has(kg)) porCategoria.set(kg, {
+        categoria: l.categoria, tipo: l.tipo, linhas: [],
         valores: Object.fromEntries(chaves.map(c => [c, 0])), total: 0,
         foraDaJanela: 0,
       });
-      const g = porCategoria.get(l.categoria);
+      const g = porCategoria.get(kg);
+      const s = sinalDe(l);
       g.linhas.push(l);
-      chaves.forEach(c => { g.valores[c] = arred2(g.valores[c] + l.valores[c]); });
-      g.total = arred2(g.total + l.total);
-      g.foraDaJanela = arred2((g.foraDaJanela || 0) + l.foraDaJanela);
+      chaves.forEach(c => { g.valores[c] = arred2(g.valores[c] + s * l.valores[c]); });
+      g.total = arred2(g.total + s * l.total);
+      g.foraDaJanela = arred2((g.foraDaJanela || 0) + s * l.foraDaJanela);
     });
     const grupos = [...porCategoria.values()]
       .map(g => ({ ...g, linhas: g.linhas.sort((a, b) =>
         primeiroMes(a) - primeiroMes(b) ||
         b.total - a.total ||
         a.nome.localeCompare(b.nome, "pt")) }))
-      .sort((a, b) => b.total - a.total || a.categoria.localeCompare(b.categoria, "pt"));
+      // Numa secção assinada ordena-se pelo peso, não pelo sinal: o
+      // desembolso e a amortização ficam juntos, o maior em cima.
+      .sort((a, b) => Math.abs(b.total) - Math.abs(a.total) ||
+                      a.categoria.localeCompare(b.categoria, "pt"));
 
     const valores = Object.fromEntries(chaves.map(c =>
       [c, arred2(grupos.reduce((s, g) => s + g.valores[c], 0))]));
     return {
-      tipo, titulo, grupos, valores,
+      tipo, titulo, grupos, valores, assinado,
       // O total da secção é do fluxo inteiro: inclui o que está nas colunas,
       // o que ficou para lá delas, e as despesas que só existem lá fora.
       total: arred2(grupos.reduce((s, g) => s + g.total, 0) + soLaFora),
@@ -177,24 +203,36 @@ export function construirMatriz({ meses = [], maxMeses = 6, de = "", ate = "",
     };
   };
 
-  const entradas = seccao("entrada", "Entradas");
-  const saidas = seccao("saida", "Saídas");
+  // i) receitas, ii) custos, iii) funding.
+  const entradas = seccao("entrada", "Receitas", l => l.tipo === "entrada" && !l.funding);
+  const saidas = seccao("saida", "Custos", l => l.tipo === "saida" && !l.funding);
+  const funding = seccao("funding", "Funding", l => l.funding, true);
 
-  const liquido = Object.fromEntries(chaves.map(c =>
+  // O líquido DA OPERAÇÃO — receitas menos custos, sem o funding. É a linha
+  // que diz se o projeto se paga a si mesmo.
+  const liquidoOperacao = Object.fromEntries(chaves.map(c =>
     [c, arred2(entradas.valores[c] - saidas.valores[c])]));
+  // E o do mês, que é esse mais o funding: o que de facto mexe na conta.
+  const liquido = Object.fromEntries(chaves.map(c =>
+    [c, arred2(liquidoOperacao[c] + funding.valores[c])]));
+
+  const totalLiquidoOperacao = arred2(entradas.total - saidas.total);
 
   return {
     colunas, chaves, porMostrar,
     // Quanto é que fica para lá das colunas à vista — o ecrã diz-no, para
     // ninguém ler o total como se fosse só o que está na grelha.
-    foraDaJanela: arred2(entradas.foraDaJanela + saidas.foraDaJanela),
+    foraDaJanela: arred2(entradas.foraDaJanela + saidas.foraDaJanela
+                         + funding.foraDaJanela),
     mesesForaDaJanela: porMostrar,
-    seccoes: [entradas, saidas].filter(s => s.nLinhas > 0),
-    entradas, saidas, liquido,
-    totalLiquido: arred2(entradas.total - saidas.total),
+    seccoes: [entradas, saidas, funding].filter(s => s.nLinhas > 0),
+    entradas, saidas, funding, liquido, liquidoOperacao,
+    temFunding: funding.nLinhas > 0,
+    totalLiquidoOperacao,
+    totalLiquido: arred2(totalLiquidoOperacao + funding.total),
     // As linhas que a grelha mostra. As que só existem para lá das colunas à
     // vista contam no total, mas não são linhas no ecrã.
-    nLinhas: entradas.nLinhas + saidas.nLinhas,
+    nLinhas: entradas.nLinhas + saidas.nLinhas + funding.nLinhas,
     nLinhasTotal: linhas.size,
   };
 }

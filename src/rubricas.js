@@ -21,7 +21,7 @@ import { CATEGORIAS } from "./categorias.js";
 import { categoriasDa } from "./categoriasEmpresa.js";
 import { ocultarNoGrafico } from "./nomenclatura.js";
 import { EMPRESAS } from "./empresas.js";
-import { LINHAS_FO_HDG, linhaDoFluxoHDG } from "./rubricasHDG.js";
+import { LINHAS_FO_HDG, linhaDoFluxoHDG, GRUPOS_FO_HDG } from "./rubricasHDG.js";
 
 // Os projetos HDG têm FO hierárquicas e a linha do fluxo é a DESPESA, não o
 // bloco que a contém. Ver src/rubricasHDG.js.
@@ -147,6 +147,28 @@ const CAPITAL = /^(aporte|resgate|mutuo|suprimento|funding|financiamento|amortiz
 export function ehCapital(rubrica) {
   const k = chaveRubrica(rubrica);
   return CAPITAL.test(k) || / - aporte\/resgate$/.test(k);
+}
+
+// ─── A terceira secção ──────────────────────────────────────────────────────
+// Receitas, custos e funding são três coisas diferentes, e uma folha que
+// mete o funding no meio dos custos não se consegue ler: a amortização
+// aparece ao lado da obra como se fosse mais uma despesa do projeto, e o
+// líquido do mês confunde "o projeto deu dinheiro" com "o banco desembolsou".
+//
+// Daí a terceira secção, no fluxo e no Real × Orçado: i) receitas,
+// ii) custos, iii) funding. Nas empresas LPX o bloco é o Funding e a
+// Amortização (mais aportes, resgates e mútuos, que já viviam à parte); nos
+// projetos HDG é o grupo "Financiamento" da FO inteiro — Inflow - Obra,
+// Inflow - Terreno, Outlow - Repagamento, Outflow - Juros e Outflow - Taxas
+// e comissões. É a própria FO que os junta ali, e os juros de um empréstimo
+// são custo do financiamento, não custo da obra.
+const FINANCIAMENTO_HDG = new Set(
+  (GRUPOS_FO_HDG.find(g => g.grupo === "Financiamento")?.linhas || [])
+    .map(chaveRubrica));
+
+export function ehFunding(rubrica) {
+  if (ehCapital(rubrica)) return true;
+  return FINANCIAMENTO_HDG.has(chaveRubrica(rubrica));
 }
 
 // Onde é que a operação começa no plano desta empresa: a seguir ao bloco de

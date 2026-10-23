@@ -19,6 +19,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { arred2, dataLimite, trimestreDe, anoDe, hojeISO } from "./iva.js";
+import { linhaDoFluxoHDG } from "./rubricasHDG.js";
 
 // Os projetos com obra. Os outros não têm plano nenhum e o ecrã não os mostra.
 export const EMPRESAS_COM_OBRA = ["favcloset", "simplify", "genero", "adseq", "infinite"];
@@ -811,6 +812,113 @@ function resumir(linhas, { budget, budgetBruto = 0, ivaDoBudget = 0,
   };
 }
 
+// ─── O forecast tem de bater o budget ───────────────────────────────────────
+// A aritmética do plano é fechada: budget com IVA = já pago + por lançar. Se
+// o motor lança exatamente o "por lançar" nas rubricas da obra, o forecast do
+// Real × Orçado dá o budget, sempre. Quando não dá, há coisas lá dentro que
+// não são do plano — e é isso que isto encontra e põe por escrito.
+//
+// Não se força nenhum número: forçar o total a dar o budget tapava
+// precisamente o problema que se quer ver, e um forecast que dá sempre o
+// budget por construção não serve para nada. O que se faz é conferir a conta
+// e dizer o que a desequilibra, com data e valor, para se resolver.
+//
+// @param resumo   o resumo do plano (budget, gasto, porGastar)
+// @param noFluxo  o que o Fluxo Futuro tem hoje nas rubricas da obra, já
+//                 somado — obra e IVA da obra juntos.
+/**
+ * O que o Fluxo Futuro tem HOJE na rubrica da obra desta empresa — obra e IVA
+ * da obra juntos, que é como o fluxo os mostra desde que o IVA passou para
+ * debaixo da obra.
+ *
+ * Só conta as previsões que ainda estão por pagar: uma paga ou convertida em
+ * fatura já saiu do fluxo e está no extrato, logo no "já pago" do plano.
+ *
+ * Separa as do motor das lançadas à mão, porque é a diferença que importa: as
+ * do motor são o plano, as outras são o que o desequilibra.
+ */
+export function obraNoFluxo({ pagamentos = [], empresa, grupo = "LPX" } = {}) {
+  const mapa = grupo === "HDG" ? CATEGORIAS_HDG : CATEGORIAS_LPX;
+  const alvo = grupo === "HDG"
+    ? (mapa.obra.subcategoria || mapa.obra.categoria)
+    : mapa.obra.categoria;
+  const chave = (s) => semAcento(s).replace(/[_\s]+/g, " ");
+  const daObra = (p) => chave(rubricaDoLancamento(
+    grupo, p.categoria, p.subcategoria, p.descricao || "")) === chave(alvo);
+
+  const pendentes = (pagamentos || []).filter(p =>
+    p && p.empresa === empresa &&
+    !/^(paga|pago|convertida)$/i.test(String(p.status || "")) &&
+    daObra(p));
+
+  const doMotor = pendentes.filter(p => p.plano_obra === empresa);
+  const manuais = pendentes.filter(p => p.plano_obra !== empresa);
+  const somar = (a) => arred2(a.reduce((s, p) => s + num(p.valor), 0));
+
+  return {
+    rubrica: alvo,
+    total: somar(pendentes),
+    doMotor: somar(doMotor), nDoMotor: doMotor.length,
+    manuais, valorManuais: somar(manuais), nManuais: manuais.length,
+  };
+}
+
+/**
+ * A rubrica onde um lançamento cai NO FLUXO — a mesma conta que o fluxo faz.
+ *
+ * Isto existe porque comparar nomes de categoria em cru não chega. Nos
+ * projetos HDG há previsões lançadas com o vocabulário LPX — categoria
+ * "Obra" em vez de "Obras > Gastos com Obras" —, e o fluxo traduz-as
+ * (EQUIVALENTES_HDG em src/rubricasHDG.js) para a linha certa. Quem fosse à
+ * procura da palavra "Obras" não as encontrava, e elas ficavam no fluxo a
+ * duplicar a obra do plano: eram as duas previsões do Complai de 261 620,27 €
+ * que punham o forecast da Infinite Change 523 240,54 € acima do budget.
+ *
+ * Pergunta-se onde o lançamento CAI, não como ele se chama.
+ */
+export function rubricaDoLancamento(grupo, categoria, subcategoria = "", descricao = "") {
+  const bruta = grupo === "HDG"
+    ? (linhaDoFluxoHDG(categoria, subcategoria) || subcategoria || categoria)
+    : categoria;
+  return rubricaNoFluxo(grupo, bruta, descricao);
+}
+
+export function conferirBudget({ resumo, noFluxo = null, duplicados = [] } = {}) {
+  const budgetComIva = arred2(num(resumo?.budget) + num(resumo?.ivaDoBudget));
+  const jaPago = arred2(num(resumo?.gasto));
+  const porLancar = arred2(num(resumo?.porGastar) + num(resumo?.ivaPorGastar));
+  // O que o motor vai mesmo lançar — a soma das linhas de obra e de IVA.
+  const doMotor = arred2(num(resumo?.totais?.obra) + num(resumo?.totais?.iva_obra));
+
+  const temFluxo = noFluxo !== null && noFluxo !== undefined;
+  const diferenca = temFluxo ? arred2(num(noFluxo) - porLancar) : 0;
+  const bate = !temFluxo || Math.abs(diferenca) <= 0.05;
+
+  // A taxa a que o IVA do budget foi calculado, para o ecrã a poder mostrar:
+  // o utilizador quer ver 6% ou 23% do budget, não um número solto.
+  const taxa = num(resumo?.budget) > 0.005
+    ? Math.round((num(resumo?.ivaDoBudget) / num(resumo?.budget)) * 1000) / 10
+    : 0;
+
+  return {
+    budget: arred2(num(resumo?.budget)), iva: arred2(num(resumo?.ivaDoBudget)),
+    taxa, budgetComIva, jaPago, porLancar, doMotor,
+    // O motor fecha com o plano? (é a conta interna; se isto falhar, o erro é
+    // meu, não dos dados)
+    motorFecha: Math.abs(arred2(doMotor - porLancar)) <= 0.05,
+    temFluxo, noFluxo: temFluxo ? arred2(num(noFluxo)) : null,
+    diferenca, bate,
+    // As previsões que explicam a diferença, se quem chamou as souber.
+    duplicados: (duplicados || []).map(p => ({
+      id: p.id, data: String(p.data_inicio || ""), descricao: p.descricao,
+      categoria: p.categoria, valor: arred2(num(p.valor)),
+      parcelas: parseInt(p.parcelas) || 1,
+    })),
+    valorDuplicados: arred2((duplicados || [])
+      .reduce((s, p) => s + num(p.valor), 0)),
+  };
+}
+
 // ─── O IVA da obra lido como obra ───────────────────────────────────────────
 // O motor passou a classificar o IVA debaixo da obra, mas o que JÁ está
 // gravado no Fluxo Futuro continua com os nomes antigos — "IVA de obra" das
@@ -920,19 +1028,53 @@ export function planearAplicacao({
   primeiroMes = null, hoje = hojeISO(), plano = null,
 } = {}) {
   const cats = categoriasDoMotor(grupo).map(c => c.toLowerCase());
+  // O primeiro mês da obra, para o relatório dizer de quando é que o plano
+  // responde. Já não filtra nada — ver a nota lá abaixo.
   const corte = primeiroMes ? `${primeiroMes}-01` : mesDe(hoje) + "-01";
 
   const daEmpresa = (pagamentosExistentes || [])
     .filter(p => p && p.empresa === empresa)
     .filter(p => !INTOCAVEL.test(String(p.status || "")));
 
-  const aApagarDoMotor = daEmpresa.filter(p =>
-    p.plano_obra === empresa && String(p.data_inicio || "") >= corte);
+  // ── Porque é que o corte saiu daqui ──────────────────────────────────────
+  // Isto filtrava por `data_inicio >= corte`, para não mexer no passado. Mas
+  // o passado desta conta não está nas previsões: o "já pago" do plano vem do
+  // EXTRATO. Uma previsão ainda PENDENTE não passou pela conta — está no
+  // futuro, por muito que a data já tenha ficado atrás.
+  //
+  // E o corte olhava só para a data de INÍCIO. Uma previsão manual de 13
+  // parcelas de 261 620,27 € começada em setembro ficava intacta, e as suas
+  // parcelas caíam mês a mês ao lado das 18 linhas que o motor gera para os
+  // mesmos meses: era a mesma obra contada duas vezes. Na Infinite Change
+  // davam 523 240,39 € a mais no forecast — o budget era 4 874 208,75 € e o
+  // Real × Orçado mostrava 5 329 960 €.
+  //
+  // A regra passa a ser a que já estava implícita: nas rubricas do motor, o
+  // plano responde por TODA a obra que falta. Logo qualquer previsão pendente
+  // lá dentro é dele ou é duplicado. O que já foi pago ou convertido em
+  // fatura está protegido pelo INTOCAVEL acima e não é tocado, e o ecrã de
+  // confirmação lista uma por uma, com data e valor, antes de se confirmar.
+  const aApagarDoMotor = daEmpresa.filter(p => p.plano_obra === empresa);
 
-  const aApagarManuais = daEmpresa.filter(p =>
-    !p.plano_obra &&
-    cats.includes(String(p.categoria || "").toLowerCase()) &&
-    String(p.data_inicio || "") >= corte);
+  // Duas maneiras de pertencer ao motor, e basta uma:
+  //
+  //   · pelo NOME da categoria, como sempre — apanha as que não resolvem para
+  //     linha nenhuma do fluxo (um "Soft_Costs" sem subcategoria, o fantasma
+  //     "IVA construção");
+  //   · pela RUBRICA ONDE CAI no fluxo — apanha as que estão lá com outro
+  //     vocabulário. Numa empresa HDG, uma previsão com a categoria LPX
+  //     "Obra" aparece em "Gastos com Obras" ao lado das linhas do motor,
+  //     mas a palavra "Obras" não está em lado nenhum nela. Era assim que as
+  //     duas do Complai sobreviviam a todos os recálculos.
+  const rubricasDoMotor = new Set(rubricasGeridasPeloMotor(grupo)
+    .map(r => semAcento(r).replace(/[_\s]+/g, " ")));
+  const noMotor = (p) => {
+    if (cats.includes(String(p.categoria || "").toLowerCase())) return true;
+    const r = rubricaDoLancamento(grupo, p.categoria, p.subcategoria, p.descricao || "");
+    return rubricasDoMotor.has(semAcento(r).replace(/[_\s]+/g, " "));
+  };
+
+  const aApagarManuais = daEmpresa.filter(p => !p.plano_obra && noMotor(p));
 
   // As previsões já pagas ou convertidas em fatura não são apagadas (regra 1),
   // mas os ids do motor são determinísticos — por isso o recálculo gerava

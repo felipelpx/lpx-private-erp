@@ -19,6 +19,7 @@ import { temFunding, pctFunding } from "./funding.js";
 import { fmtEUR } from "./formato.js";
 
 const fmtK = (v) => fmtEUR(v);
+const num = (v) => { const n = Number(v); return Number.isFinite(n) ? n : 0; };
 const fmtFull = (v) => fmtEUR(v);
 
 export function BotaoFunding({ fonte, onAlternar, onPct }) {
@@ -167,7 +168,9 @@ export default function MatrizFluxo({ matriz, isAdmin, acoes, nMeses, onNMeses, 
   // o desenho, não dezasseis linhas de detalhe. E cada grupo é independente:
   // abrir um nunca fecha outro, por isso guarda-se um conjunto, não "o aberto".
   const [abertos, setAbertos] = useState(() => new Set());
-  const chaveGrupo = (sec, g) => `${sec.tipo}|${g.categoria}`;
+  // Na secção do funding convivem os dois sentidos, e duas rubricas com o
+  // mesmo nome podem ser grupos diferentes — a chave leva o sentido.
+  const chaveGrupo = (sec, g) => `${sec.tipo}|${g.tipo || sec.tipo}|${g.categoria}`;
   const aberto = (sec, g) => abertos.has(chaveGrupo(sec, g));
   const alternar = (sec, g) => setAbertos(ant => {
     const novo = new Set(ant);
@@ -185,6 +188,21 @@ export default function MatrizFluxo({ matriz, isAdmin, acoes, nMeses, onNMeses, 
   }, [celula]);
 
   const { colunas, seccoes, liquido, porMostrar, foraDaJanela = 0 } = matriz;
+
+  // As três secções distinguem-se à vista: receitas em verde, custos em
+  // vermelho, funding na cor da casa — porque não é nem uma coisa nem outra.
+  const CORES = {
+    entrada: { fundo: "#F2F7F4", letra: "#1F7A54" },
+    saida:   { fundo: "#FBF7F1", letra: "#A93226" },
+    funding: { fundo: "#F0F3F6", letra: "#2C4A63" },
+  };
+  const cores = (sec) => CORES[sec.tipo] || CORES.saida;
+  // Numa secção assinada o número mostra-se com o sinal; nas outras, o
+  // sentido é o da secção e o valor vai em absoluto, como sempre.
+  const valor = (sec, v) => {
+    if (Math.abs(num(v)) <= 0.005) return "—";
+    return sec.assinado && v < 0 ? `−${fmtK(Math.abs(v))}` : fmtK(Math.abs(v));
+  };
   const larguraMes = 118;
 
   // "2026-11" → "nov/26". O label que vem do fluxo sai "11/2026" em pt-PT, e
@@ -298,27 +316,34 @@ export default function MatrizFluxo({ matriz, isAdmin, acoes, nMeses, onNMeses, 
 
           {seccoes.map(sec => (
             <tbody key={sec.tipo}>
-              <tr style={{ background: sec.tipo === "entrada" ? "#F2F7F4" : "#FBF7F1" }}>
-                <td style={{ ...celulaNum, ...colada(sec.tipo === "entrada" ? "#F2F7F4" : "#FBF7F1"),
+              <tr style={{ background: cores(sec).fundo }}>
+                <td style={{ ...celulaNum, ...colada(cores(sec).fundo),
                              textAlign: "left", fontWeight: 800, fontSize: 10.5, letterSpacing: "0.08em",
-                             textTransform: "uppercase", color: sec.tipo === "entrada" ? "#1F7A54" : "#A93226",
+                             textTransform: "uppercase", color: cores(sec).letra,
                              padding: "8px 12px" }}>
                   {sec.titulo}
+                  {sec.assinado && (
+                    <span title="O desembolso do banco e a amortização não são operação do projeto — é como o projeto é pago. Ficam à parte, e o total é o funding líquido."
+                      style={{ marginLeft: 8, fontSize: 9, fontWeight: 600, color: "#7C8A96",
+                               letterSpacing: 0, textTransform: "none" }}>
+                      líquido
+                    </span>
+                  )}
                 </td>
                 {colunas.map(c => (
                   <td key={c.key} style={{ ...celulaNum, fontWeight: 700,
-                                           color: sec.tipo === "entrada" ? "#1F7A54" : "#A93226" }}>
-                    {sec.valores[c.key] > 0.005 ? fmtK(sec.valores[c.key]) : "—"}
+                                           color: cores(sec).letra }}>
+                    {valor(sec, sec.valores[c.key])}
                   </td>
                 ))}
                 <td style={{ ...celulaNum, fontWeight: 800, borderLeft: "1px solid #E7DED2",
-                             color: sec.tipo === "entrada" ? "#1F7A54" : "#A93226" }}>
-                  {fmtK(sec.total)}
+                             color: cores(sec).letra }}>
+                  {valor(sec, sec.total)}
                 </td>
               </tr>
 
               {sec.grupos.map(g => [
-                <tr key={`g_${sec.tipo}_${g.categoria}`} onClick={() => alternar(sec, g)}
+                <tr key={`g_${chaveGrupo(sec, g)}`} onClick={() => alternar(sec, g)}
                   title={aberto(sec, g) ? "Fechar o detalhe" : `Abrir as ${g.linhas.length} despesas`}
                   style={{ background: doPlano(g.categoria) ? AMARELO
                                        : aberto(sec, g) ? "#FBF9F6" : "#fff", cursor: "pointer" }}>
@@ -333,6 +358,12 @@ export default function MatrizFluxo({ matriz, isAdmin, acoes, nMeses, onNMeses, 
                     <span style={{ display: "inline-block", width: 14, color: "#B2B6B9", fontSize: 9 }}>
                       {aberto(sec, g) ? "▼" : "▶"}
                     </span>
+                    {sec.assinado && (
+                      <span style={{ color: g.tipo === "entrada" ? "#1F7A54" : "#A93226",
+                                     fontWeight: 800, marginRight: 4 }}>
+                        {g.tipo === "entrada" ? "+" : "−"}
+                      </span>
+                    )}
                     {g.categoria} <span style={{ color: "#C4C7CA", fontWeight: 400 }}>({g.linhas.length})</span>
                     {doPlano(g.categoria) && (
                       <span title="O plano de obra preenche esta rubrica. Lançar aqui à mão duplica: o próximo recálculo põe a dele ao lado da tua."
@@ -346,11 +377,11 @@ export default function MatrizFluxo({ matriz, isAdmin, acoes, nMeses, onNMeses, 
                   </td>
                   {colunas.map(c => (
                     <td key={c.key} style={{ ...celulaNum, color: "#5C6166", fontWeight: 600 }}>
-                      {g.valores[c.key] > 0.005 ? fmtK(g.valores[c.key]) : "—"}
+                      {valor(sec, g.valores[c.key])}
                     </td>
                   ))}
                   <td style={{ ...celulaNum, color: "#5C6166", fontWeight: 700, borderLeft: "1px solid #E7DED2" }}>
-                    {fmtK(g.total)}
+                    {valor(sec, g.total)}
                   </td>
                 </tr>,
                 ...(aberto(sec, g) ? g.linhas : []).map(l => (
@@ -386,6 +417,31 @@ export default function MatrizFluxo({ matriz, isAdmin, acoes, nMeses, onNMeses, 
           ))}
 
           <tfoot>
+            {/* Com o funding à parte, o líquido passa a ter duas leituras: o
+                que o projeto gera por si, e o que de facto mexe na conta. As
+                duas valem — e são diferentes. */}
+            {matriz.temFunding && (
+              <tr style={{ background: "#F7F5F1", borderTop: "1px solid #E7DED2" }}>
+                <td style={{ ...celulaNum, ...colada("#F7F5F1"), textAlign: "left", fontWeight: 700,
+                             color: "#5C6166", padding: "9px 12px", fontSize: 11.5 }}>
+                  Líquido da operação
+                  <span style={{ color: "#9DA2A6", fontWeight: 400, marginLeft: 6, fontSize: 10.5 }}>
+                    (receitas − custos, sem o funding)
+                  </span>
+                </td>
+                {colunas.map(c => (
+                  <td key={c.key} style={{ ...celulaNum, fontWeight: 700, padding: "9px 10px",
+                                           color: matriz.liquidoOperacao[c.key] >= 0 ? "#1F7A54" : "#A93226" }}>
+                    {fmtK(matriz.liquidoOperacao[c.key])}
+                  </td>
+                ))}
+                <td style={{ ...celulaNum, fontWeight: 800, padding: "9px 10px",
+                             borderLeft: "1px solid #E7DED2",
+                             color: matriz.totalLiquidoOperacao >= 0 ? "#1F7A54" : "#A93226" }}>
+                  {fmtK(matriz.totalLiquidoOperacao)}
+                </td>
+              </tr>
+            )}
             <tr style={{ background: "#EDF1F5", borderTop: "2px solid #dde3f0" }}>
               <td style={{ ...celulaNum, ...colada("#EDF1F5"), textAlign: "left", fontWeight: 800,
                            color: "#2C4A63", padding: "10px 12px" }}>Líquido do mês</td>

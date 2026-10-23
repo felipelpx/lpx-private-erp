@@ -3,7 +3,8 @@ import { fmtEUR, fmtData } from "./formato.js";
 import {
   planearObra, planearAplicacao, gastoEmObra, sugerirAvenca, planoDesatualizado,
   compararPrazos, categoriasDoMotor, classificacaoDe, temObra, rotuloMes,
-  obraRealizada, fundingLibertado, PLANO_VAZIO, TIPOS, ROTULO_TIPO,
+  obraRealizada, fundingLibertado, obraNoFluxo, conferirBudget,
+  PLANO_VAZIO, TIPOS, ROTULO_TIPO,
 } from "./obra.js";
 import { useMovimentosPeriodo, useFracoes, useVendas, useRecebiveis } from "./hooks.js";
 import { vgvPorReceber } from "./vendas.js";
@@ -173,6 +174,15 @@ export default function ModalPlanoObra({
     primeiroMes: resumo.primeiroMes, hoje, plano: f,
   }), [linhas, pagamentos, empresa, grupo, resumo.primeiroMes, hoje,
        f.data_fim, f.meses_ate_escritura]);
+
+  // O forecast tem de bater o budget. Isto confere a conta contra o que o
+  // Fluxo Futuro tem HOJE na rubrica da obra e, quando não fecha, diz o que
+  // está lá a mais — com data e valor. Ver conferirBudget em src/obra.js.
+  const naObra = useMemo(() => obraNoFluxo({ pagamentos, empresa, grupo }),
+    [pagamentos, empresa, grupo]);
+  const conferencia = useMemo(() => conferirBudget({
+    resumo, noFluxo: naObra.total, duplicados: naObra.manuais,
+  }), [resumo, naObra]);
 
   const comparacao = useMemo(() => {
     if (!simular || !f.data_fim || simular === f.data_fim) return null;
@@ -359,6 +369,91 @@ export default function ModalPlanoObra({
                   <div style={{ fontSize: 10.5, color: COR.negativoForte, marginTop: 5, lineHeight: 1.5 }}>
                     As duas pontas não fecham no IVA do budget — já se gastou mais do que o
                     orçamento com IVA, por isso não sobra IVA nenhum por lançar.
+                  </div>
+                )}
+              </div>
+
+              {/* ── O forecast bate o budget? ──────────────────────────────
+                  A conta do plano é fechada: budget com IVA = já pago + por
+                  lançar. Se o fluxo tiver exatamente o "por lançar" nas
+                  rubricas da obra, o forecast do Real × Orçado dá o budget.
+                  Quando não dá, há no fluxo coisas que não são do plano — e
+                  é isso que isto mostra, em vez de forçar o total a bater. */}
+              <div style={{ background: conferencia.bate ? "#F1F7F3" : "#FBF1EF",
+                            border: `1px solid ${conferencia.bate ? "#CBE3D6" : COR.negativoLinha}`,
+                            borderRadius: 9, padding: "10px 12px", fontSize: 11 }}>
+                <div style={{ fontSize: 10, letterSpacing: "0.1em", textTransform: "uppercase",
+                              fontWeight: 700, marginBottom: 7,
+                              color: conferencia.bate ? COR.positivoForte : COR.negativoForte }}>
+                  {conferencia.bate ? "O forecast bate o budget" : "O forecast não bate o budget"}
+                </div>
+                <Linha k={`Budget com IVA (${conferencia.taxa}%)`} v={fmtEUR(conferencia.budgetComIva)}
+                  dica="É este o valor que o forecast de obra do Real × Orçado tem de dar: nem mais, nem menos." />
+                <Linha k="−  já pago (extrato e faturas)" v={fmtEUR(conferencia.jaPago)} suave />
+                <div style={{ height: 1, background: "#D8CCBB", margin: "6px 0" }} />
+                <Linha k="=  por lançar no fluxo" v={fmtEUR(conferencia.porLancar)} forte
+                  dica="O que o plano vai escrever no Fluxo Futuro, obra e IVA de obra juntos." />
+                <div style={{ height: 9 }} />
+                <Linha k={`No fluxo hoje — ${naObra.rubrica}`} v={fmtEUR(conferencia.noFluxo)}
+                  dica={`${naObra.nDoMotor + naObra.nManuais} previsões por pagar nesta rubrica: ${naObra.nDoMotor} do plano e ${naObra.nManuais} à mão.`} />
+                {!conferencia.bate && (
+                  <Linha k="   diferença" v={`${conferencia.diferenca > 0 ? "+" : ""}${fmtEUR(conferencia.diferenca)}`} forte />
+                )}
+
+                {!conferencia.bate && conferencia.duplicados.length > 0 && (
+                  <div style={{ marginTop: 8, paddingTop: 8, borderTop: `1px solid ${COR.negativoLinha}` }}>
+                    <div style={{ fontSize: 10.5, color: COR.negativoForte, lineHeight: 1.5,
+                                  marginBottom: 6 }}>
+                      {conferencia.duplicados.length === 1
+                        ? "Está no fluxo uma previsão lançada à mão na rubrica da obra"
+                        : `Estão no fluxo ${conferencia.duplicados.length} previsões lançadas à mão na rubrica da obra`}
+                      {" "}({fmtEUR(conferencia.valorDuplicados)}). O plano já conta toda a obra
+                      que falta, por isso cada uma delas é a mesma obra contada duas vezes.
+                      Aplicar o plano apaga-as.
+                    </div>
+                    {conferencia.duplicados.slice(0, 8).map(d => (
+                      <div key={d.id} style={{ display: "flex", justifyContent: "space-between",
+                                               gap: 10, fontSize: 10.5, color: "#7E8388",
+                                               padding: "2px 0" }}>
+                        <span style={{ overflow: "hidden", textOverflow: "ellipsis",
+                                       whiteSpace: "nowrap" }}>
+                          {fmtData(d.data)} · {d.descricao}
+                          {d.parcelas > 1 && (
+                            <span style={{ color: COR.negativoForte, fontWeight: 600 }}>
+                              {" "}({d.parcelas}×)
+                            </span>
+                          )}
+                        </span>
+                        <span style={{ fontFamily: "var(--fonte-numero)", whiteSpace: "nowrap" }}>
+                          {fmtEUR(d.valor)}
+                        </span>
+                      </div>
+                    ))}
+                    {conferencia.duplicados.length > 8 && (
+                      <div style={{ fontSize: 10, color: "#9DA2A6", marginTop: 3 }}>
+                        e mais {conferencia.duplicados.length - 8}.
+                      </div>
+                    )}
+                  </div>
+                )}
+                {!conferencia.bate && conferencia.duplicados.length === 0 && (
+                  <div style={{ fontSize: 10.5, color: COR.negativoForte, marginTop: 7,
+                                lineHeight: 1.5 }}>
+                    {conferencia.diferenca > 0
+                      ? <>O fluxo tem mais do que o plano prevê, e não é de previsões lançadas
+                          à mão. São linhas do plano de uma versão anterior: aplicar o plano
+                          substitui-as.</>
+                      : <>O fluxo tem menos do que o plano prevê — o plano ainda não foi
+                          aplicado desde a última alteração. Aplicar escreve as{" "}
+                          {aplicacao.resumo.criar} linhas em falta.</>}
+                  </div>
+                )}
+                {!conferencia.motorFecha && (
+                  <div style={{ fontSize: 10.5, color: COR.negativoForte, marginTop: 7,
+                                lineHeight: 1.5 }}>
+                    As linhas que o motor gera somam {fmtEUR(conferencia.doMotor)} em vez
+                    de {fmtEUR(conferencia.porLancar)}. Isto é um erro meu no cálculo, não
+                    nos teus dados — diz-me e eu corrijo.
                   </div>
                 )}
               </div>

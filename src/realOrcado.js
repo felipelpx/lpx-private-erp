@@ -28,7 +28,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { rubricasDa, rubricaDe, chaveRubrica, rubricaNoPlano,
-         ehCapital, ehAjuste, ordemDaRubrica } from "./rubricas.js";
+         ehCapital, ehFunding, ehAjuste, ordemDaRubrica } from "./rubricas.js";
 import { ocorrenciasDe } from "./recorrentes.js";
 import { comissaoDaVenda, soReceita, vgvPorReceber } from "./vendas.js";
 
@@ -308,9 +308,10 @@ export function calcularRealOrcado({
       // Uma rubrica sem orçado e sem nada que se lhe diga não vale uma linha.
       vazia: orcado <= 0.005 && Math.abs(real) <= 0.005 && Math.abs(comprometido) <= 0.005,
       // Capital e financiamento: aportes, resgates, mútuos, funding e
-      // amortização. É como o projeto é PAGO, não o que o projeto FAZ, e por
-      // isso não entra na conta de exploração. O ecrã mostra-os à parte.
-      capital: ehCapital(b.rubrica),
+      // amortização nas empresas LPX; o grupo "Financiamento" da FO inteiro
+      // nos projetos HDG. É como o projeto é PAGO, não o que o projeto FAZ, e
+      // por isso não entra na conta de exploração: é a terceira secção.
+      capital: ehFunding(b.rubrica),
       ordem: ordemDaRubrica(empresaId, b.rubrica),
     };
   }).sort((a, b) => a.ordem - b.ordem ||
@@ -332,11 +333,24 @@ export function calcularRealOrcado({
   });
   const tE = totalDe(entradas), tS = totalDe(saidas);
 
+  // A terceira secção leva os dois sentidos — o desembolso e a amortização —,
+  // por isso o seu total é LÍQUIDO: somar os dois em absoluto daria um número
+  // que não quer dizer nada.
+  const fundingEntradas = capital.filter(l => l.lado === "entrada");
+  const fundingSaidas = capital.filter(l => l.lado === "saida");
+  const tFE = totalDe(fundingEntradas), tFS = totalDe(fundingSaidas);
   const tC = totalDe(capital);
+  const tFL = {
+    orcado: arred2(tFE.orcado - tFS.orcado),
+    real: arred2(tFE.real - tFS.real),
+    forecast: arred2(tFE.forecast - tFS.forecast),
+  };
 
   return {
     linhas, operacao, capital,
     entradas, saidas,
+    fundingEntradas, fundingSaidas,
+    totaisFunding: { entradas: tFE, saidas: tFS, liquido: tFL },
     totaisCapital: tC,
     totais: {
       entradas: tE, saidas: tS,

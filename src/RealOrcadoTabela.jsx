@@ -234,9 +234,9 @@ export default function RealOrcadoTabela({
   loading = false, hoje,
 }) {
   const [soComDados, setSoComDados] = useState(true);
-  // O capital (aportes, resgates, mútuos, funding, amortização) fica fechado:
-  // a tabela é da operação, de "Vendas" para baixo.
-  const [verCapital, setVerCapital] = useState(false);
+  // O funding (aportes, resgates, mútuos, desembolso, amortização) tem secção
+  // própria, por baixo do resultado da operação. Antes estava atrás de um
+  // visto, e quem abria a tabela não via como o projeto estava a ser pago.
   const [aSemear, setASemear] = useState(false);
   const [erro, setErro] = useState("");
 
@@ -288,12 +288,20 @@ export default function RealOrcadoTabela({
   const saidas = visiveis(r.saidas);
   const capital = visiveis(r.capital);
 
-  const Secao = ({ titulo, linhas, total, cor }) => (
+  // `comSinal` é para a secção do funding, onde convivem o desembolso e a
+  // amortização: cada rubrica mostra o sentido e o total da secção é líquido.
+  const Secao = ({ titulo, linhas, total, cor, comSinal = false, nota = "" }) => (
     <>
       <tr>
         <td colSpan={6} style={{ ...td, textAlign: "left", paddingTop: 16, paddingBottom: 5,
                                  fontSize: 10, letterSpacing: "0.12em", textTransform: "uppercase",
-                                 color: COR.textoTenue, fontWeight: 600 }}>{titulo}</td>
+                                 color: COR.textoTenue, fontWeight: 600 }}>
+          {titulo}
+          {nota && (
+            <span style={{ marginLeft: 8, fontSize: 9.5, letterSpacing: 0, textTransform: "none",
+                           fontWeight: 400, color: COR.textoApagado }}>{nota}</span>
+          )}
+        </td>
       </tr>
       {linhas.length === 0 && (
         <tr><td colSpan={6} style={{ ...td, textAlign: "left", color: COR.textoApagado, fontSize: 11 }}>
@@ -303,6 +311,12 @@ export default function RealOrcadoTabela({
         <tr key={l.rubrica} style={{ borderTop: `1px solid ${COR.linhaSuave}` }}>
           <td style={{ ...td, textAlign: "left", color: l.noPlano ? COR.texto : COR.negativoForte }}
               title={l.noPlano ? undefined : `${l.rubrica} — fora do plano de contas da empresa`}>
+            {comSinal && (
+              <span style={{ fontWeight: 800, marginRight: 5,
+                             color: l.lado === "entrada" ? COR.positivoForte : COR.negativoForte }}>
+                {l.lado === "entrada" ? "+" : "−"}
+              </span>
+            )}
             {l.rubrica}{l.noPlano ? "" : " ⚠"}
           </td>
           <td style={td}><Orcado valor={l.orcado} podeEditar={podeEditar}
@@ -323,7 +337,8 @@ export default function RealOrcadoTabela({
         </tr>
       ))}
       <tr style={{ borderTop: `1px solid ${COR.linhaForte}`, background: COR.fundoTenue }}>
-        <td style={{ ...td, textAlign: "left", fontWeight: 700 }}>Total {titulo.toLowerCase()}</td>
+        <td style={{ ...td, textAlign: "left", fontWeight: 700 }}>
+          {comSinal ? "Funding líquido" : `Total ${titulo.toLowerCase()}`}</td>
         <td style={{ ...td, fontWeight: 700 }}>{total.orcado > 0.005 ? fmtEUR0(total.orcado) : "—"}</td>
         <td style={{ ...td, fontWeight: 700, color: COR.textoSuave }}>{fmtEUR0(total.real)}</td>
         <td style={{ ...td, fontWeight: 700, color: cor }}>{fmtEUR0(total.forecast)}</td>
@@ -351,13 +366,10 @@ export default function RealOrcadoTabela({
           {r.nOrcadas} de {r.operacao.length} rubricas orçadas
         </span>
         {r.nCapital > 0 && (
-          <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 11,
-                          color: COR.textoSuave, cursor: "pointer" }}
-                 title="Aportes, resgates, mútuos, funding e amortização — como o projeto é pago, não o que o projeto faz">
-            <input type="checkbox" checked={verCapital} onChange={e => setVerCapital(e.target.checked)}
-              style={{ width: 14, height: 14, accentColor: COR.navy }} />
-            Incluir capital e financiamento ({r.nCapital})
-          </label>
+          <span style={{ fontSize: 11, color: COR.textoApagado }}
+                title="Funding, amortização, aportes, resgates e mútuos nas empresas LPX; o bloco Inflow/Outflow da FO nos projetos HDG. Está na terceira secção, por baixo do resultado da operação.">
+            {r.nCapital} {r.nCapital === 1 ? "rubrica" : "rubricas"} de funding
+          </span>
         )}
         {podeEditar && porSemear.length > 0 && (
           <button onClick={semear} disabled={aSemear}
@@ -408,18 +420,15 @@ export default function RealOrcadoTabela({
             </tr>
           </thead>
           <tbody>
-            <Secao titulo="Entradas" linhas={entradas} total={r.totais.entradas}
+            {/* i) receitas · ii) custos · iii) funding */}
+            <Secao titulo="Receitas" linhas={entradas} total={r.totais.entradas}
                    cor={COR.positivoForte} />
-            <Secao titulo="Saídas" linhas={saidas} total={r.totais.saidas}
+            <Secao titulo="Custos" linhas={saidas} total={r.totais.saidas}
                    cor={COR.negativoForte} />
-            {verCapital && (
-              <Secao titulo="Capital e financiamento" linhas={capital}
-                     total={r.totaisCapital} cor={COR.infoForte} />
-            )}
             <tr style={{ borderTop: `2px solid ${COR.navy}`, background: COR.navy }}>
               <td style={{ ...td, textAlign: "left", fontWeight: 700, color: COR.creme,
                            padding: "10px 12px" }}>
-                Resultado da operação{verCapital ? " (sem o capital)" : ""}</td>
+                Resultado da operação</td>
               <td style={{ ...td, fontWeight: 700, color: COR.creme }}>
                 {Math.abs(res.orcado) > 0.005 ? fmtEUR0(res.orcado) : "—"}</td>
               <td style={{ ...td, fontWeight: 700, color: COR.sobreEscuroTenue }}>
@@ -431,14 +440,20 @@ export default function RealOrcadoTabela({
                 {Math.abs(res.orcado) > 0.005 ? fmtEUR0(res.forecast - res.orcado) : "—"}</td>
               <td style={td} />
             </tr>
+            {capital.length > 0 && (
+              <Secao titulo="Funding" linhas={capital}
+                     nota="como o projeto é pago — não entra no resultado da operação"
+                     total={r.totaisFunding.liquido} cor={COR.infoForte} comSinal />
+            )}
           </tbody>
         </table>
       </div>
 
       <div style={{ fontSize: 10.5, color: COR.textoApagado, marginTop: 11, lineHeight: 1.6 }}>
         As rubricas são as do plano de contas desta empresa — as mesmas do extrato e dos
-        gráficos —, da operação: começa nas vendas, que é onde acaba o bloco de capital e
-        financiamento que abre o plano. O <strong>Orçado</strong> é estático. O{" "}
+        gráficos — em três secções: <strong>receitas</strong>, <strong>custos</strong> e,
+        por baixo do resultado, <strong>funding</strong>, que é como o projeto é pago e não
+        o que o projeto faz. O <strong>Orçado</strong> é estático. O{" "}
         <strong>Forecast</strong> soma ao realizado tudo o que já está comprometido: as
         vendas por receber, as faturas por pagar, as previsões do Fluxo Futuro (onde entra
         o plano de obra) e as despesas recorrentes. Por isso muda sozinho sempre que uma
