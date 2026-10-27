@@ -1227,6 +1227,10 @@ function ImportarView({faturas, setFaturas, caixaUnico, setCaixaUnico, setTab, a
               fatura: fat.numero_fatura || fat.id,
               fornecedor: fat.fornecedor_nome,
               categoria: fat.categoria,
+              // Nos projetos HDG é a subcategoria que é a linha do fluxo
+              // operacional ("Obras > Gastos com Obras"). Sem ela, a fatura
+              // ficava com o bloco e nunca encontrava a sua linha.
+              subcategoria: fat.subcategoria || "",
               tipo_projeto: "Residencial",
               valor: parseFloat(fat.valor_total) || 0,
               vencimento: fat.data_vencimento || fat.data_fatura || null,

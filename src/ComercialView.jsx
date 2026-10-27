@@ -1,6 +1,7 @@
 import { useState, useMemo, useEffect } from "react";
 import { useFracoes, useVendas } from "./hooks.js";
-import { EMPRESAS, GRUPOS, GRUPOS_INFO } from "./empresas.js";
+import { supabase } from "./supabase.js";
+import { EMPRESAS, GRUPOS, GRUPOS_INFO, empresaDoProjeto } from "./empresas.js";
 import { precoDaFracao, contaDaVenda, comissaoDaVenda, parcelasDaVenda } from "./vendas.js";
 import { fmtEUR, fmtPct as fmtPctCfg, fmtNum, fmtArea, parseNumero } from "./formato.js";
 
@@ -8,6 +9,134 @@ import { fmtEUR, fmtPct as fmtPctCfg, fmtNum, fmtArea, parseNumero } from "./for
 const EMPRESA_COMISSOES = EMPRESAS[EMPRESAS.length - 1]?.id || "";
 
 const STATUS_OPTIONS = ["Disponível", "Reservada", "CPCV", "Escriturada"];
+
+// ─── O CPCV anexado ──────────────────────────────────────────────────────────
+// O estado da fração dizia "CPCV" e mais nada: para ver o contrato era preciso
+// ir à drive, à pasta certa, encontrar o ficheiro. O anexo vive onde o estado
+// vive — na fração —, porque nem toda a fração tem ficha de venda.
+//
+// O ficheiro NÃO vai para a base de dados. Um CPCV são vários MB de PDF, e a
+// tabela das frações é lida inteira a cada abertura do ecrã e a cada evento de
+// realtime: guardá-lo em base64 na linha fazia toda a gente descarregar todos
+// os contratos sempre. Vai para o Storage, e na linha fica só o caminho.
+const BUCKET_CPCV = "cpcv";
+
+function BotaoCPCV({ fracao, canEdit, onUpdateFracao }) {
+  const [aEnviar, setAEnviar] = useState(false);
+  const [erro, setErro] = useState("");
+  const tem = !!fracao?.cpcv_path;
+
+  const abrir = async () => {
+    setErro("");
+    // Um link assinado e temporário: o bucket é privado, por isso o URL não se
+    // guarda nem se partilha — pede-se um novo de cada vez que se abre.
+    const { data, error } = await supabase.storage.from(BUCKET_CPCV)
+      .createSignedUrl(fracao.cpcv_path, 300);
+    if (error || !data?.signedUrl) {
+      setErro("Não foi possível abrir o CPCV.");
+      return;
+    }
+    window.open(data.signedUrl, "_blank", "noopener,noreferrer");
+  };
+
+  const enviar = async (file) => {
+    if (!file) return;
+    if (file.size > 25 * 1024 * 1024) {
+      setErro("O ficheiro passa os 25 MB."); return;
+    }
+    // ── Porque é que o caminho começa pela EMPRESA ─────────────────────────
+    // O acesso no ERP é por empresa: um investidor vê os projetos que lhe
+    // foram atribuídos. A política do Storage lê o id da empresa do primeiro
+    // segmento do caminho — `pode_ver_empresa(split_part(name,'/',1))` —, tal
+    // como já acontece nas fotos. Se o caminho começasse pela fração, não
+    // haveria como dar a um investidor o CPCV do projeto dele sem lhe dar os
+    // contratos dos compradores de todos os outros projetos.
+    const empresaId = empresaDoProjeto(fracao?.projeto);
+    if (!empresaId) {
+      setErro(`A fração está no projeto "${fracao?.projeto || "(sem projeto)"}", ` +
+              `que não corresponde a nenhuma empresa. Corrige o projeto da fração ` +
+              `primeiro — sem empresa não há como controlar quem vê o contrato.`);
+      return;
+    }
+    setAEnviar(true); setErro("");
+    // E o id da fração a seguir, para não haver colisões dentro do projeto;
+    // mais um sufixo aleatório, para substituir um CPCV não deixar o anterior
+    // em cache com o mesmo nome.
+    const ext = (file.name.match(/\.[A-Za-z0-9]+$/) || [".pdf"])[0].toLowerCase();
+    const path = `${empresaId}/${fracao.id}/${Date.now()}-${Math.random().toString(36).slice(2, 8)}${ext}`;
+    const { error: upErr } = await supabase.storage.from(BUCKET_CPCV)
+      .upload(path, file, { contentType: file.type || "application/pdf", upsert: false });
+    if (upErr) {
+      setAEnviar(false);
+      setErro(/bucket/i.test(upErr.message || "")
+        ? "Falta criar o bucket 'cpcv' — corre cpcv-anexos.sql no Supabase."
+        : (upErr.message || "Não foi possível enviar."));
+      return;
+    }
+    const anterior = fracao.cpcv_path;
+    const r = await onUpdateFracao?.(fracao.id, {
+      cpcv_path: path, cpcv_nome: file.name,
+      cpcv_tamanho: file.size, cpcv_em: new Date().toISOString(),
+    });
+    if (r?.error) {
+      // Não deixa o ficheiro órfão no Storage se a linha não gravar.
+      await supabase.storage.from(BUCKET_CPCV).remove([path]);
+      setAEnviar(false);
+      setErro(/column|cpcv_path/i.test(r.error.message || "")
+        ? "Faltam as colunas do CPCV — corre cpcv-anexos.sql no Supabase."
+        : (r.error.message || "Não foi possível guardar."));
+      return;
+    }
+    // O CPCV substituído sai do Storage: não serve para nada e ocupa espaço.
+    if (anterior && anterior !== path) {
+      await supabase.storage.from(BUCKET_CPCV).remove([anterior]);
+    }
+    setAEnviar(false);
+  };
+
+  const remover = async () => {
+    if (!tem) return;
+    if (!window.confirm(`Remover o CPCV de ${fracao.fracao}?`)) return;
+    const path = fracao.cpcv_path;
+    const r = await onUpdateFracao?.(fracao.id, {
+      cpcv_path: null, cpcv_nome: null, cpcv_tamanho: null, cpcv_em: null,
+    });
+    if (r?.error) { setErro(r.error.message || "Não foi possível remover."); return; }
+    await supabase.storage.from(BUCKET_CPCV).remove([path]);
+  };
+
+  return (
+    <div style={{ display: "flex", gap: 3, alignItems: "center", justifyContent: "center" }}
+         title={erro || (tem ? `${fracao.cpcv_nome || "CPCV"} — clica para abrir` : "")}>
+      {tem ? (
+        <>
+          <button onClick={abrir}
+            style={{ background: "#EDF1F5", border: "1px solid #CBDAE5", color: "#1F3A52",
+                     padding: "2px 7px", borderRadius: 5, fontSize: 10, cursor: "pointer",
+                     fontWeight: 600, whiteSpace: "nowrap" }}>
+            📄 CPCV
+          </button>
+          {canEdit && (
+            <button onClick={remover} title="Remover o CPCV"
+              style={{ background: "none", border: "none", color: "#C4C7CA",
+                       fontSize: 11, cursor: "pointer", padding: "0 2px" }}>✕</button>
+          )}
+        </>
+      ) : canEdit ? (
+        <label title="Anexar o CPCV assinado (PDF)"
+          style={{ background: "none", border: "1px dashed #DFD5C8", color: "#9DA2A6",
+                   padding: "2px 7px", borderRadius: 5, fontSize: 10,
+                   cursor: aEnviar ? "default" : "pointer", whiteSpace: "nowrap" }}>
+          {aEnviar ? "a enviar…" : "+ CPCV"}
+          <input type="file" accept="application/pdf,image/*" disabled={aEnviar}
+            onChange={e => { enviar(e.target.files?.[0]); e.target.value = ""; }}
+            style={{ display: "none" }} />
+        </label>
+      ) : <span style={{ color: "#E0E2E4", fontSize: 10 }}>—</span>}
+      {erro && <span style={{ color: "#A93226", fontSize: 9 }}>!</span>}
+    </div>
+  );
+}
 const STATUS_STYLES = {
   "Disponível":  { bg:"#FAF6F0", text:"#7E8388",    border:"#DFD5C8" },
   "Reservada":   { bg:"#FBF6EC", text:"#A8762F",  border:"#E3CE9F" },
@@ -790,14 +919,14 @@ function TabelaVendas({ fracoes, vendas, canEdit, onAddFatura, onUpdateFracao, o
               <tr style={{ background: "#FAF6F0" }}>
                 {[["Projeto","left"],["Fração","center"],["Piso","center"],["Tipologia","center"],
                   ["Área (m²)","right"],["Preço","right"],["Venda estimada","right"],["Preço/m²","right"],
-                  ["Comissão","right"],["Status","center"],["Cliente","left"],["Ações","center"]].map(([h,al]) => (
+                  ["Comissão","right"],["Status","center"],["CPCV","center"],["Cliente","left"],["Ações","center"]].map(([h,al]) => (
                   <th key={h} style={{ padding: "9px 8px", textAlign: al, color: "#9DA2A6", fontSize: 9, letterSpacing: "0.05em", textTransform: "uppercase", fontFamily: "var(--fonte-numero)", borderBottom: "1px solid #E7DED2", whiteSpace: "nowrap" }}>{h}</th>
                 ))}
               </tr>
             </thead>
             <tbody>
               {rows.length === 0
-                ? <tr><td colSpan={12} style={{ padding: 40, textAlign: "center", color: "#C4C7CA" }}>
+                ? <tr><td colSpan={13} style={{ padding: 40, textAlign: "center", color: "#C4C7CA" }}>
                     {filterProj ? "Nenhuma fração encontrada neste projeto." : "Escolhe um projeto no seletor acima."}
                   </td></tr>
                 : rows.map(f => {
@@ -902,6 +1031,10 @@ function TabelaVendas({ fracoes, vendas, canEdit, onAddFatura, onUpdateFracao, o
                         </select>
                       </td>
 
+                      <td style={{ padding: "6px 4px" }}>
+                        <BotaoCPCV fracao={f} canEdit={canEdit} onUpdateFracao={onUpdateFracao} />
+                      </td>
+
                       <td style={{ padding: "6px 8px", color: "#23292D", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={venda?.cliente || ""}>
                         {venda?.cliente || "—"}
                       </td>
@@ -999,13 +1132,25 @@ export default function ComercialView({ currentUser, onAddFatura, empresasVisive
   const projetosPermitidos = empresas.map(e => e.nome);
   const limitado = Array.isArray(empresasVisiveis) && empresasVisiveis.length < EMPRESAS.length;
 
+  // Isto comparava só com `e.nome`, e as frações estão gravadas com o nome
+  // longo — "Favorite Closet (Amadeu 07)" —, por isso o filtro não apanhava
+  // nada e um utilizador limitado via o prédio todo. Passa pelo mesmo
+  // resolvedor de variantes que o resto do sistema usa.
+  const idsPermitidos = new Set(empresas.map(e => e.id));
+  const doMeuProjeto = (projeto) => {
+    const id = empresaDoProjeto(projeto);
+    // Uma fração cujo projeto não bate com empresa nenhuma fica de fora de um
+    // utilizador limitado: não se sabe de quem é, logo não se mostra.
+    return id ? idsPermitidos.has(id) : projetosPermitidos.includes(projeto);
+  };
+
   const { fracoes: fracoesTodas, loaded: fracoesLoaded, upsertFracao, deleteFracao } = useFracoes();
   const { vendas: vendasTodas, loaded: vendasLoaded, upsertVenda, deleteVenda } = useVendas();
 
-  const fracoes = limitado ? fracoesTodas.filter(f => projetosPermitidos.includes(f.projeto)) : fracoesTodas;
+  const fracoes = limitado ? fracoesTodas.filter(f => doMeuProjeto(f.projeto)) : fracoesTodas;
   const vendas  = limitado ? vendasTodas.filter(v => {
     const f = fracoesTodas.find(x => x.id === v.fracao_id);
-    return projetosPermitidos.includes(f?.projeto || v.projeto);
+    return doMeuProjeto(f?.projeto || v.projeto);
   }) : vendasTodas;
 
   const canEdit = currentUser?.role === "admin" || currentUser?.role === "gestor";
@@ -1015,9 +1160,13 @@ export default function ComercialView({ currentUser, onAddFatura, empresasVisive
     // Only used for local status changes — persist each change
   };
 
+  // Devolve o resultado: quem anexa um CPCV precisa de saber se a linha
+  // gravou, para apagar o ficheiro do Storage se não gravou. Sem isto, uma
+  // escrita recusada deixava o PDF lá para sempre sem nada a apontar para ele.
   const updateFracao = (id, changes) => {
     const frac = fracoes.find(f => f.id === id);
-    if (frac) upsertFracao({ ...frac, ...changes });
+    if (!frac) return Promise.resolve({ error: { message: "Fração não encontrada." } });
+    return upsertFracao({ ...frac, ...changes });
   };
 
   const updateVenda = (id, changes) => {

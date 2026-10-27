@@ -1,5 +1,7 @@
 import { useState, useRef } from "react";
 import { CATEGORIAS_FATURA as CATEGORIAS } from "./categorias.js";
+import { categoriasDeFatura } from "./rubricas.js";
+import { usaSubcategoria, subcategoriasDa, comOValorAtual } from "./categoriasEmpresa.js";
 import { EMPRESAS_SIMPLE } from "./empresas.js";
 import { fmtEUR, fmtTamanho } from "./formato.js";
 import { MODELO_IA } from "./ia.js";
@@ -194,6 +196,13 @@ export default function ImportarFatura({ onSave }) {
   // Form state — flat, stable, never recreated
   const [empresa, setEmpresa] = useState("");
   const [categoria, setCategoria] = useState("");
+  const [subcategoria, setSubcategoria] = useState("");
+
+  // As categorias que fazem sentido NESTA empresa. `comOValorAtual` mantém
+  // na lista um valor que a IA tenha extraído e que o plano não conheça, em
+  // vez de o apagar em silêncio do ecrã mas o gravar na mesma.
+  const opcoesCategoria = comOValorAtual(
+    empresa ? categoriasDeFatura(empresa) : CATEGORIAS, categoria);
   const [projeto, setProjeto] = useState("");
   const [status, setStatus] = useState("Pendente");
   const [nFatura, setNFatura] = useState("");
@@ -311,7 +320,7 @@ export default function ImportarFatura({ onSave }) {
     if (!parcelado || parcelasArr.length < 2) {
       return [{
         id: baseId,
-        empresa, categoria, projeto, status,
+        empresa, categoria, subcategoria, projeto, status,
         numero_fatura: nFatura, data_fatura: dataFatura,
         data_vencimento: venc0, taxa_iva: taxaIva, iva_dedutivel: deduzIva,
         fornecedor_nome: fornNome, fornecedor_nif: fornNif,
@@ -330,7 +339,7 @@ export default function ImportarFatura({ onSave }) {
     const n = parcelasArr.length;
     return parcelasArr.map((p, i) => ({
       id: `${baseId}_p${i+1}`,
-      empresa, categoria, projeto, status,
+      empresa, categoria, subcategoria, projeto, status,
       numero_fatura: nFatura ? `${nFatura} (${i+1}/${n})` : "",
       data_fatura: dataFatura,
       data_vencimento: p.data,
@@ -357,6 +366,10 @@ export default function ImportarFatura({ onSave }) {
   const handleSave = async () => {
     if (!categoria) { setErro("A classificação é obrigatória."); return; }
     if (!empresa)   { setErro("Seleciona a empresa."); return; }
+    // Nos projetos HDG é a SUBCATEGORIA que é a linha do fluxo. Sem ela a
+    // fatura entra classificada só pelo bloco e nunca encontra a sua linha.
+    if (usaSubcategoria(empresa) && !subcategoria) {
+      setErro("Nos projetos HDG a subcategoria é obrigatória: é ela a linha do fluxo."); return; }
     if (parcelado) {
       if (parcelasArr.length < 2) { setErro("Para parcelado, indica pelo menos 2 parcelas."); return; }
       if (parcelasArr.some(p => !p.data)) { setErro("Todas as parcelas precisam de data."); return; }
@@ -468,7 +481,12 @@ export default function ImportarFatura({ onSave }) {
 
           <div style={fieldWrap}>
             <label style={reqLabelStyle}>Empresa *</label>
-            <select value={empresa} onChange={e=>setEmpresa(e.target.value)} style={{...selectStyle,borderColor:!empresa?"#C19A4A":"#EFE8DE"}}>
+            {/* Mudar de empresa limpa a classificação: os planos de contas são
+                diferentes, e uma categoria LPX escolhida antes de se trocar
+                para uma empresa HDG ficava gravada sem existir no plano dela. */}
+            <select value={empresa} onChange={e=>{ setEmpresa(e.target.value);
+                                                  setCategoria(""); setSubcategoria(""); }}
+              style={{...selectStyle,borderColor:!empresa?"#C19A4A":"#EFE8DE"}}>
               <option value="">Selecionar...</option>
               {EMPRESAS_LIST.map(e=><option key={e.id} value={e.id}>{e.nome}</option>)}
             </select>
@@ -476,11 +494,42 @@ export default function ImportarFatura({ onSave }) {
 
           <div style={fieldWrap}>
             <label style={reqLabelStyle}>Classificação / Categoria *</label>
-            <select value={categoria} onChange={e=>setCategoria(e.target.value)} style={{...selectStyle,borderColor:!categoria?"#C19A4A":"#EFE8DE"}}>
+            {/* O plano de contas é DA EMPRESA. Os projetos HDG classificam por
+                categoria + subcategoria, e a subcategoria é que é a linha do
+                fluxo operacional. Aqui oferecia-se a lista global, igual para
+                todas: escolhia-se "Obra" numa empresa cujo plano fala de
+                "Obras > Gastos com Obras", e a fatura entrava fora do plano. */}
+            <select value={categoria}
+              onChange={e=>{ setCategoria(e.target.value); setSubcategoria(""); }}
+              style={{...selectStyle,borderColor:!categoria?"#C19A4A":"#EFE8DE"}}>
               <option value="">Selecionar...</option>
-              {CATEGORIAS.map(c=><option key={c}>{c}</option>)}
+              {opcoesCategoria.map(c=><option key={c}>{c}</option>)}
             </select>
+            {empresa && (
+              <span style={{fontSize:10,color:"#9DA2A6"}}>
+                plano de contas de {EMPRESAS_LIST.find(e=>e.id===empresa)?.nome||empresa}
+              </span>
+            )}
           </div>
+
+          {usaSubcategoria(empresa) && (
+            <div style={fieldWrap}>
+              <label style={reqLabelStyle}>Subcategoria *</label>
+              <select value={subcategoria} onChange={e=>setSubcategoria(e.target.value)}
+                disabled={!categoria}
+                title={categoria ? "A linha do fluxo operacional" : "Escolhe primeiro a categoria"}
+                style={{...selectStyle,
+                        background: categoria ? undefined : "#F2EDE5",
+                        borderColor: categoria && !subcategoria ? "#C19A4A" : "#EFE8DE"}}>
+                <option value="">{categoria ? "Selecionar..." : "— escolhe a categoria —"}</option>
+                {comOValorAtual(subcategoriasDa(empresa, categoria), subcategoria)
+                  .map(o=><option key={o}>{o}</option>)}
+              </select>
+              <span style={{fontSize:10,color:"#9DA2A6"}}>
+                é a subcategoria que é a linha do fluxo nos projetos HDG
+              </span>
+            </div>
+          )}
 
           <div style={fieldWrap}>
             <label style={labelStyle}>Projeto</label>

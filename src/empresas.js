@@ -99,6 +99,28 @@ export const BANCO_COLORS = {
 
 export default EMPRESAS;
 
+// ─── Da fração para a empresa ───────────────────────────────────────────────
+// A tabela `fracoes` identifica o projeto por NOME, numa coluna de texto, e o
+// mesmo projeto aparece lá escrito de várias maneiras: "Favorite Closet",
+// "Amadeu 07", "Favorite Closet (Amadeu 07)". Isto resolve as variantes todas
+// para o id da empresa.
+//
+// Interessa porque o acesso no ERP é POR EMPRESA — um investidor vê os
+// projetos que lhe foram atribuídos. Sem esta ponte não havia como dizer de
+// quem é uma fração, e portanto não havia como dar a um investidor o CPCV do
+// projeto dele sem lhe dar os dos outros.
+export const nomesDoProjeto = (e) => [
+  e?.nome, e?.projeto, e?.razaoSocial,
+  e?.projeto && e?.nome ? `${e.nome} (${e.projeto})` : null,
+].filter(Boolean).map((x) => String(x).trim().toLowerCase());
+
+export function empresaDoProjeto(projeto) {
+  const k = String(projeto || "").trim().toLowerCase();
+  if (!k) return null;
+  const e = EMPRESAS.find((x) => nomesDoProjeto(x).includes(k));
+  return e ? e.id : null;
+}
+
 // Nome legível de uma empresa a partir do id, do nome ou do projeto.
 // Usado pelo Fluxo Futuro e pelo Contas a Pagar.
 const POR_ID = Object.fromEntries(EMPRESAS.map((e) => [e.id, e]));
