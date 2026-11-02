@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo, useRef } from "react";
 import CelulaObs from "./CelulaObs.jsx";
 import ImportarExtrato from "./ImportarExtrato.jsx";
 import ImportarFatura from "./ImportarFatura.jsx";
+import FluxoRealizado from "./FluxoRealizado.jsx";
 import FluxoFuturo from "./FluxoFuturo.jsx";
 import ExtratosView from "./ExtratosView.jsx";
 import { useAuth, useContas, useFaturas, usePagamentosExtras, useOrcamento, useMovimentosCounts, useProfiles, useQuestionamentos } from "./hooks.js";
@@ -1296,6 +1297,7 @@ const TABS_CONFIG = [
   {id:"comercial", label:"Comercial",          roles:["admin","gestor","viewer","investidor"]},
   {id:"fotos",     label:"Fotos",              roles:["admin","gestor","viewer","investidor"]},
   {id:"fluxo",     label:"Fluxo Futuro",       roles:["admin","gestor","viewer"]},
+  {id:"realizado", label:"Fluxo Realizado",    roles:["admin","gestor","viewer"]},
   {id:"receber",   label:"Contas a Receber",  roles:["admin","gestor","viewer","investidor"]},
   {id:"pagar",     label:"Contas a Pagar",     roles:["admin","gestor","viewer","investidor"]},
   {id:"iva",       label:"IVA",               roles:["admin","gestor","viewer"]},
@@ -1587,6 +1589,7 @@ export default function App() {
           {tab==="ir"        && <IRView currentUser={currentUser} empresasVisiveis={empresasVisiveis}/>}
           {tab==="fotos"     && <FotosView currentUser={currentUser} empresasVisiveis={empresasVisiveis}/>}
           {tab==="fluxo"     && <FluxoFuturo faturas={faturas} faturasLoading={faturasLoading} pagamentosExtras={pagamentosExtras} pagamentosLoading={pagamentosLoading} onAddPagamento={addPagamento} onUpdatePagamento={updatePagamento} onDeletePagamento={deletePagamento} onAddPagamentos={addPagamentos} onApagarPagamentos={apagarPagamentos} onUpdateFatura={updateFatura} onDeleteFatura={deleteFatura} currentUser={currentUser} EMPRESAS={empresasVisiveis} caixaUnico={caixaUnico}/>}
+          {tab==="realizado" && <FluxoRealizado currentUser={currentUser} EMPRESAS={empresasVisiveis}/>}
           {tab==="receber"   && <ContasReceber currentUser={currentUser} empresasVisiveis={empresasVisiveis}/>}
           {tab==="pagar"     && <ContasPagar canEdit={canEdit && !isInvestidor} EMPRESAS={empresasVisiveis} faturas={faturas} setFaturas={handleSetFaturas} addFatura={addFatura} updateFatura={updateFatura} deleteFatura={deleteFatura}/>}
           {tab==="pagamentos"&& <PagamentosView faturas={faturas.filter(f=>empresasVisiveis.some(e=>e.id===f.empresa)||!f.empresa)} pagamentosExtras={pagamentosExtras.filter(p=>empresasVisiveis.some(e=>e.id===p.empresa)||!p.empresa)} currentUser={currentUser} profiles={profiles}/>}
