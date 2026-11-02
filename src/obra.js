@@ -947,11 +947,26 @@ export function obraNoFluxo({ pagamentos = [], empresa, grupo = "LPX" } = {}) {
   const manuais = pendentes.filter(p => p.plano_obra !== empresa);
   const somar = (a) => arred2(a.reduce((s, p) => s + num(p.valor), 0));
 
+  // ── O que a grelha do fluxo NÃO mostra ───────────────────────────────────
+  // O Fluxo Futuro arruma em "Vencidas" — um balde à parte, fora das colunas
+  // dos meses — tudo o que ficou em meses anteriores ao corrente. Esse
+  // dinheiro continua por lançar, mas não aparece na matriz.
+  //
+  // Sem isto, o painel de conferência lia a base, somava tudo e dizia "bate"
+  // enquanto a grelha ao lado mostrava menos. Dois ecrãs, duas respostas para
+  // a mesma pergunta — exatamente o que estes painéis existem para evitar.
+  const mesCorrente = mesDe(hojeISO());
+  const emAtraso = pendentes.filter(p =>
+    String(p.data_inicio || "").slice(0, 7) < mesCorrente);
+
   return {
     rubrica: alvo,
     total: somar(pendentes),
     doMotor: somar(doMotor), nDoMotor: doMotor.length,
     manuais, valorManuais: somar(manuais), nManuais: manuais.length,
+    // O que está por lançar mas fora das colunas da matriz.
+    emAtraso, valorEmAtraso: somar(emAtraso), nEmAtraso: emAtraso.length,
+    naGrelha: arred2(somar(pendentes) - somar(emAtraso)),
   };
 }
 

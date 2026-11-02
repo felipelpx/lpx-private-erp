@@ -400,6 +400,10 @@ export default function ModalPlanoObra({
                 <Linha k="=  por lançar no fluxo" v={fmtEUR(conferencia.porLancar)} forte
                   dica="O que o plano vai escrever no Fluxo Futuro, obra e IVA de obra juntos." />
                 <div style={{ height: 9 }} />
+                {naObra.nEmAtraso > 0 && (
+                  <Linha k="   dos quais em atraso" v={fmtEUR(naObra.valorEmAtraso)} suave
+                    dica={`${naObra.nEmAtraso} ${naObra.nEmAtraso === 1 ? "previsão ficou" : "previsões ficaram"} em meses anteriores ao corrente. Continuam por lançar, mas a grelha do Fluxo Futuro arruma-as em "Vencidas", fora das colunas dos meses — por isso a matriz mostra ${fmtEUR(naObra.naGrelha)} e não ${fmtEUR(conferencia.noFluxo)}.`} />
+                )}
                 <Linha k={`No fluxo hoje — ${naObra.rubrica}`} v={fmtEUR(conferencia.noFluxo)}
                   dica={`${naObra.nDoMotor + naObra.nManuais} previsões por pagar nesta rubrica: ${naObra.nDoMotor} do plano e ${naObra.nManuais} à mão.`} />
                 {!conferencia.bate && (

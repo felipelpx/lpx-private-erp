@@ -686,8 +686,18 @@ export default function FluxoFuturo({ faturas: faturasTodas, faturasLoading, pag
         pagamento: p,
       };
 
-      // Se a parcela cai antes de hoje → bucket "vencidas"
-      if (dataParcelaISO < hojeISO) {
+      // ── Vencida é o que ficou em MESES ANTERIORES ────────────────────────
+      // Isto comparava com o dia de hoje, e uma previsão é planeamento
+      // MENSAL: o plano de obra escreve-a sempre no dia 1 do mês. A partir do
+      // dia 2, a obra do próprio mês passava a "vencida" e saía da grelha —
+      // na Favorite Closet, 142 654,87 € de obra de novembro desapareciam da
+      // matriz no dia 2 de novembro, e o quadro mostrava 427 964,61 € onde o
+      // plano dizia 570 619,48 €. Todos os meses, em todas as empresas.
+      //
+      // As FATURAS continuam a ser medidas ao dia (ver faturaAtrasada acima):
+      // essas têm vencimento a sério e uma que passou do prazo está mesmo em
+      // atraso. Uma previsão do mês corrente não está atrasada — é deste mês.
+      if (getMesKey(dataParcelaISO) < mesAtualKey) {
         if (p.tipo === "entrada") {
           vencidas.entradas += valor;
           vencidas.items.push({ ...base, tipo: "entrada", vencimento: dataParcelaISO });
