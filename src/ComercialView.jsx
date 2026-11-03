@@ -152,6 +152,18 @@ const lbl = {fontSize:9,color:"#9DA2A6",fontFamily: "var(--fonte-numero)",textTr
 
 // ─── COMISSÃO MODAL ────────────────────────────────────────────────────────────
 function ComissaoModal({ venda, fracao, onSave, onClose, onGerarFatura }) {
+  const [aGuardar, setAGuardar] = useState(false);
+
+  // ── A base é a MESMA da tabela ──────────────────────────────────────────
+  // Estava `venda.valor_venda`, que numa fração sem venda fechada é zero: o
+  // diálogo dizia "Valor de Venda 0,00 €" e "Total Comissões 0,00 €" enquanto
+  // a coluna da tabela, ao lado, cobrava 5% dos 456.000 € do preço de tabela.
+  // Duas contas do mesmo número em dois sítios — é sempre a mesma avaria.
+  // `precoDaFracao` é a ordem certa: o que foi vendido, senão o que se estima
+  // vender, senão o preço de tabela.
+  const preco = precoDaFracao(fracao, venda);
+  const fechada = (parseFloat(venda?.valor_venda) || 0) > 0.005;
+
   // Multiple mediadores support
   const [mediadores, setMediadores] = useState(
     venda.mediadores?.length > 0 ? venda.mediadores :
@@ -163,7 +175,7 @@ function ComissaoModal({ venda, fracao, onSave, onClose, onGerarFatura }) {
     ]}]
   );
 
-  const totalComissao = mediadores.reduce((s,m) => s + (venda.valor_venda||0) * ((parseFloat(m.pct)||0)/100), 0);
+  const totalComissao = mediadores.reduce((s,m) => s + preco * ((parseFloat(m.pct)||0)/100), 0);
   const totalPago = mediadores.reduce((s,m) => s + m.parcelas.filter(p=>p.pago).reduce((ps,p)=>ps+(parseFloat(p.valor)||0),0), 0);
   const totalPend = mediadores.reduce((s,m) => s + m.parcelas.filter(p=>!p.pago).reduce((ps,p)=>ps+(parseFloat(p.valor)||0),0), 0);
   const faturaJaCriada = venda.fatura_criada;
@@ -189,7 +201,16 @@ function ComissaoModal({ venda, fracao, onSave, onClose, onGerarFatura }) {
 
         {/* Valores */}
         <div style={{background:"#FAF6F0",borderRadius:10,padding:14,marginBottom:16,display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
-          <div><div style={lbl}>Valor de Venda</div><div style={{fontSize:14,fontWeight:700,color:"#091C2A",fontFamily: "var(--fonte-numero)"}}>{fmt(venda.valor_venda)}</div></div>
+          <div>
+            <div style={lbl}>{fechada ? "Valor de Venda" : "Base da comissão"}</div>
+            <div style={{fontSize:14,fontWeight:700,color:"#091C2A",fontFamily: "var(--fonte-numero)"}}>{fmt(preco)}</div>
+            {!fechada && (
+              <div style={{fontSize:9.5,color:"#9DA2A6",marginTop:2}}
+                   title="Sem venda fechada, a comissão calcula-se sobre o que se espera encaixar — ou, na falta disso, sobre o preço de tabela. É a mesma base da coluna da tabela.">
+                {(parseFloat(fracao?.venda_estimada)||0) > 0.005 ? "venda estimada" : "preço de tabela"}
+              </div>
+            )}
+          </div>
           <div>
             <div style={lbl}>Total Comissões ({fmtPct(mediadores.reduce((s,m)=>s+(parseFloat(m.pct)||0),0))})</div>
             <div style={{fontSize:14,fontWeight:700,color:"#A93226",fontFamily: "var(--fonte-numero)"}}>{fmt(totalComissao)}</div>
@@ -215,7 +236,7 @@ function ComissaoModal({ venda, fracao, onSave, onClose, onGerarFatura }) {
                   <input type="number" value={med.pct} onChange={e=>updMed(mi,"pct",parseFloat(e.target.value)||0)} style={{...inp,width:80,color:"#2C4A63",fontWeight:700}} step="0.1"/>
                 </div>
                 <div style={{display:"flex",gap:6,alignItems:"flex-end",paddingBottom:2}}>
-                  <span style={{fontSize:12,fontFamily: "var(--fonte-numero)",color:"#A93226",fontWeight:700,whiteSpace:"nowrap"}}>{fmt((venda.valor_venda||0)*(med.pct/100))}</span>
+                  <span style={{fontSize:12,fontFamily: "var(--fonte-numero)",color:"#A93226",fontWeight:700,whiteSpace:"nowrap"}}>{fmt(preco*((parseFloat(med.pct)||0)/100))}</span>
                   {mediadores.length>1&&<button onClick={()=>removeMediador(mi)}
                     style={{background:"#FBEDEB",border:"none",color:"#A93226",padding:"5px 8px",borderRadius:5,cursor:"pointer",fontSize:11}}>✕</button>}
                 </div>
@@ -272,18 +293,29 @@ function ComissaoModal({ venda, fracao, onSave, onClose, onGerarFatura }) {
         </div>
 
         <div style={{display:"flex",justifyContent:"space-between"}}>
-          <button onClick={onClose} style={{background:"#E7DED2",color:"#5C6166",border:"none",padding:"10px 20px",borderRadius:8,fontSize:13,cursor:"pointer"}}>Cancelar</button>
-          <button onClick={()=>onSave({
-              mediadores,
-              mediador: mediadores.map(m=>m.nome).filter(Boolean).join(', '),
-              comissao_pct: mediadores.reduce((s,m)=>s+(parseFloat(m.pct)||0),0),
-              comissao_valor: totalComissao,
-              comissao_parcelas: mediadores.flatMap(m=>m.parcelas.map(p=>({...p,mediador:m.nome}))),
-              comissao_paga_sinal: totalPago,
-              comissao_pendente_sinal: totalPend,
-            })}
-            style={{background:"#091C2A",color:"#fff",border:"none",padding:"10px 24px",borderRadius:8,fontSize:13,cursor:"pointer",fontWeight:700}}>
-            💾 Guardar Comissão
+          <button onClick={onClose} disabled={aGuardar} style={{background:"#E7DED2",color:"#5C6166",border:"none",padding:"10px 20px",borderRadius:8,fontSize:13,cursor:aGuardar?"default":"pointer"}}>Cancelar</button>
+          <button disabled={aGuardar}
+            onClick={async ()=>{
+              setAGuardar(true);
+              try {
+                await onSave({
+                  mediadores,
+                  mediador: mediadores.map(m=>m.nome).filter(Boolean).join(', '),
+                  comissao_pct: mediadores.reduce((s,m)=>s+(parseFloat(m.pct)||0),0),
+                  // ZERO, de propósito. `comissao_valor` é a comissão negociada
+                  // a valor fixo e MANDA sobre a percentagem onde estiver
+                  // preenchida. Gravá-la aqui congelava o número: mudar o preço
+                  // da fração depois já não mexia na comissão, e pôr a % a 0
+                  // deixava lá o valor velho. Quem manda é a percentagem.
+                  comissao_valor: 0,
+                  comissao_parcelas: mediadores.flatMap(m=>m.parcelas.map(p=>({...p,mediador:m.nome}))),
+                  comissao_paga_sinal: totalPago,
+                  comissao_pendente_sinal: totalPend,
+                });
+              } finally { setAGuardar(false); }
+            }}
+            style={{background:aGuardar?"#5C6166":"#091C2A",color:"#fff",border:"none",padding:"10px 24px",borderRadius:8,fontSize:13,cursor:aGuardar?"default":"pointer",fontWeight:700}}>
+            {aGuardar ? "a guardar…" : "💾 Guardar Comissão"}
           </button>
         </div>
       </div>
@@ -477,8 +509,24 @@ function ComissaoEmBlocoModal({ linhas, vendaDe, projeto, onAplicar, onClose }) 
   const [taxa, setTaxa] = useState(23);
   const [pctCpcv, setPctCpcv] = useState(0);
   const [aAplicar, setAAplicar] = useState(false);
+  const [preservar, setPreservar] = useState(true);
 
-  const base = linhas.reduce((s, f) => s + precoDaFracao(f, vendaDe.get(f.id)), 0) * (pct / 100);
+  // ── O que já foi afinado à mão ──────────────────────────────────────────
+  // Uma fração pode ter sido posta a 0% de propósito — a que foi vendida sem
+  // mediador, por exemplo. O bloco escrevia por cima de todas e apagava esse
+  // trabalho em silêncio: punha-se o 0, voltava-se aqui por outra razão, e o
+  // 0 desaparecia sem aviso. Agora dizem-se quais são e pode deixar-se
+  // quietas.
+  const jaAfinadas = useMemo(() => linhas.filter(f => {
+    const v = vendaDe.get(f.id);
+    if (!v) return false;                       // sem ficha, nada foi afinado
+    const atual = parseFloat(comissaoDaVenda(v, f).pct) || 0;
+    return Math.abs(atual - (parseFloat(pct) || 0)) > 0.0001;
+  }), [linhas, vendaDe, pct]);
+
+  const alvo = preservar ? linhas.filter(f => !jaAfinadas.includes(f)) : linhas;
+
+  const base = alvo.reduce((s, f) => s + precoDaFracao(f, vendaDe.get(f.id)), 0) * (pct / 100);
   const comIva = base * (1 + taxa / 100);
 
   return (
@@ -522,19 +570,42 @@ function ComissaoEmBlocoModal({ linhas, vendaDe, projeto, onAplicar, onClose }) 
           <LinhaConta k={`na escritura (${Math.round((100 - pctCpcv) * 100) / 100}%)`} v={fmt(comIva * (100 - pctCpcv) / 100)} />
         </div>
 
+        {jaAfinadas.length > 0 && (
+          <div style={{background:"#FBF6EC",border:"1px solid #E3CE9F",borderRadius:9,
+                       padding:"10px 13px",marginTop:12}}>
+            <label style={{display:"flex",gap:7,alignItems:"flex-start",cursor:"pointer",
+                           fontSize:11.5,color:"#96702A",lineHeight:1.5}}>
+              <input type="checkbox" checked={preservar}
+                onChange={e=>setPreservar(e.target.checked)}
+                style={{marginTop:2,accentColor:"#A8762F"}} />
+              <span>
+                Não mexer nas <strong>{jaAfinadas.length}</strong>{" "}
+                {jaAfinadas.length === 1 ? "fração que já tem" : "frações que já têm"} outra
+                percentagem:{" "}
+                {jaAfinadas.slice(0, 8).map(f => {
+                  const p = parseFloat(comissaoDaVenda(vendaDe.get(f.id), f).pct) || 0;
+                  return `${f.fracao || "?"} (${fmtPct(p)})`;
+                }).join(", ")}
+                {jaAfinadas.length > 8 ? ` e mais ${jaAfinadas.length - 8}` : ""}.
+              </span>
+            </label>
+          </div>
+        )}
+
         <div style={{fontSize:10.5,color:"#96702A",marginTop:10,lineHeight:1.5}}>
-          Isto escreve a comissão em todas as frações à vista. As que ainda não têm
-          ficha de venda passam a ter uma, só com estes campos.
+          Isto escreve a comissão em{" "}
+          <strong>{alvo.length} {alvo.length === 1 ? "fração" : "frações"}</strong>. As que
+          ainda não têm ficha de venda passam a ter uma, só com estes campos.
         </div>
 
         <div style={{display:"flex",justifyContent:"flex-end",gap:10,marginTop:20}}>
           <button onClick={onClose} style={{background:"#E7DED2",color:"#5C6166",border:"none",padding:"10px 20px",borderRadius:8,fontSize:13,cursor:"pointer"}}>Cancelar</button>
-          <button disabled={aAplicar}
+          <button disabled={aAplicar || alvo.length === 0}
             onClick={async()=>{ setAAplicar(true);
               await onAplicar({ comissao_pct: pct, comissao_taxa_iva: taxa,
-                                comissao_pct_cpcv: pctCpcv, comissao_valor: 0 }); }}
-            style={{background:aAplicar?"#8E9398":"#091C2A",color:"#fff",border:"none",padding:"10px 24px",borderRadius:8,fontSize:13,cursor:aAplicar?"default":"pointer",fontWeight:700}}>
-            {aAplicar ? "A aplicar…" : `Aplicar a ${linhas.length}`}
+                                comissao_pct_cpcv: pctCpcv, comissao_valor: 0 }, alvo); }}
+            style={{background:(aAplicar||alvo.length===0)?"#8E9398":"#091C2A",color:"#fff",border:"none",padding:"10px 24px",borderRadius:8,fontSize:13,cursor:(aAplicar||alvo.length===0)?"default":"pointer",fontWeight:700}}>
+            {aAplicar ? "A aplicar…" : `Aplicar a ${alvo.length}`}
           </button>
         </div>
       </div>
@@ -1010,8 +1081,11 @@ function TabelaVendas({ fracoes, vendas, canEdit, onAddFatura, onUpdateFracao, o
                               : "Escreve a percentagem da comissão"}>
                               <CelulaNumero valor={com.pct} editavel={canEdit}
                                 formatar={v => (v > 0 ? fmtPct(v) : "—")}
-                                onGuardar={async v => { const r = await guardarComissao(f, { comissao_pct: v, comissao_valor: 0 });
-                                  if (r?.error) alert("Não foi possível guardar a comissão."); }}
+                                onGuardar={async v => {
+                                  const r = await guardarComissao(f, { comissao_pct: v, comissao_valor: 0 });
+                                  if (r?.error) alert("Não foi possível guardar a comissão.\n\n" + (r.error.message || r.error));
+                                  else if (r?.semEfeito) alert("A comissão não foi guardada: a base de dados não alterou nenhuma linha.");
+                                }}
                                 estilo={{ color: com.pct > 0 ? "#A8762F" : "#C4C7CA", fontWeight: 600 }} />
                               {com.comIva > 0.005 && (
                                 <div style={{ fontSize: 9, color: "#9DA2A6", fontFamily: "var(--fonte-numero)", marginTop: -2 }}>
@@ -1090,31 +1164,78 @@ function TabelaVendas({ fracoes, vendas, canEdit, onAddFatura, onUpdateFracao, o
 
       {comissaoEmBloco && (
         <ComissaoEmBlocoModal linhas={rows} vendaDe={vendaDe} projeto={filterProj}
-          onAplicar={async (campos) => {
-            for (const f of rows) await guardarComissao(f, campos);
+          onAplicar={async (campos, alvo) => {
+            // Em bloco é onde um erro passa despercebido com mais facilidade:
+            // onze frações, uma falha, e ninguém dá por ela. Conta-se.
+            const lista = Array.isArray(alvo) && alvo.length ? alvo : rows;
+            const falhas = [];
+            for (const f of lista) {
+              const r = await guardarComissao(f, campos);
+              if (r?.error || r?.semEfeito) falhas.push(f.fracao || f.id);
+            }
+            if (falhas.length) alert(`Não foi possível guardar a comissão em ${falhas.length} `
+              + `de ${lista.length} frações: ${falhas.join(", ")}.`);
             setComissaoEmBloco(false);
           }}
           onClose={() => setComissaoEmBloco(false)} />
       )}
       {editVenda && <EditVendaModal venda={editVenda} fracao={editVenda._frac}
-        onSave={bruto => {
+        onSave={async bruto => {
+          // Guardar e CONFERIR, como na comissão. As condições de pagamento do
+          // CPCV mudam-se aqui: fechar o editor sem saber se gravou dava a
+          // mesma avaria calada — o ecrã a dizer uma coisa e a base outra.
           const u = limparVenda(bruto);
+          let r;
           if (editVenda._semVenda) {
             const f = editVenda._frac;
-            onUpsertVenda?.({
+            r = await onUpsertVenda?.({
               ...u,
               id: "v_" + f.id + "_" + Date.now().toString(36),
               fracao_id: f.id, projeto: f.projeto, fracao: f.fracao,
               preco_tabela: u.preco_tabela ?? f.preco_tabela,
             });
           } else {
-            onUpdateVenda?.(editVenda.id, u);
+            r = await onUpdateVenda?.(editVenda.id, u);
+          }
+          if (r?.error) {
+            alert("Não foi possível guardar a venda.\n\n" + (r.error.message || r.error));
+            return;
+          }
+          if (r?.semEfeito) {
+            alert("A venda não foi guardada: a base de dados não alterou nenhuma linha.");
+            return;
+          }
+          if (r?.ignoradas?.length) {
+            alert("Venda guardada.\n\nEstes campos ainda não existem na base de dados e"
+                + " ficaram por gravar: " + r.ignoradas.join(", ")
+                + ".\nCorre a migração para os teres.");
           }
           setEditVenda(null);
         }}
         onClose={() => setEditVenda(null)} />}
       {editComissao && <ComissaoModal venda={editComissao} fracao={editComissao._frac}
-        onSave={u => { onUpdateVenda?.(editComissao.id, u); setEditComissao(null); }}
+        onSave={async u => {
+          // Guardar e CONFERIR. Antes era disparar e fechar: o diálogo fechava
+          // na mesma quando a base recusava, e a tabela continuava a mostrar a
+          // percentagem antiga sem ninguém perceber porquê.
+          const r = await onUpdateVenda?.(editComissao.id, u);
+          if (r?.error) {
+            alert("Não foi possível guardar a comissão.\n\n" + (r.error.message || r.error));
+            return;                       // fica aberto, com o que ele escreveu
+          }
+          if (r?.semEfeito) {
+            alert("A comissão não foi guardada: a base de dados não alterou nenhuma linha."
+                + "\n\nOu a ficha de venda já não existe, ou a tua conta não tem permissão"
+                + " para a alterar.");
+            return;
+          }
+          if (r?.ignoradas?.length) {
+            alert("Comissão guardada.\n\nEstes campos ainda não existem na base de dados e"
+                + " ficaram por gravar: " + r.ignoradas.join(", ")
+                + ".\nCorre a migração para os teres.");
+          }
+          setEditComissao(null);
+        }}
         onClose={() => setEditComissao(null)}
         onGerarFatura={v => { handleGerarFatura(v); setEditComissao(null); }} />}
     </div>
@@ -1144,8 +1265,12 @@ export default function ComercialView({ currentUser, onAddFatura, empresasVisive
     return id ? idsPermitidos.has(id) : projetosPermitidos.includes(projeto);
   };
 
-  const { fracoes: fracoesTodas, loaded: fracoesLoaded, upsertFracao, deleteFracao } = useFracoes();
-  const { vendas: vendasTodas, loaded: vendasLoaded, upsertVenda, deleteVenda } = useVendas();
+  const { fracoes: fracoesTodas, upsertFracao, deleteFracao } = useFracoes();
+  // `updateVenda` do hook, que escreve SÓ os campos alterados e devolve o
+  // resultado. (Havia aqui um `loaded` que o hook nunca devolveu — era sempre
+  // undefined e não era usado para nada. Saiu.)
+  const { vendas: vendasTodas, upsertVenda, updateVenda: updateVendaNaBase,
+          deleteVenda } = useVendas();
 
   const fracoes = limitado ? fracoesTodas.filter(f => doMeuProjeto(f.projeto)) : fracoesTodas;
   const vendas  = limitado ? vendasTodas.filter(v => {
@@ -1169,9 +1294,33 @@ export default function ComercialView({ currentUser, onAddFatura, empresasVisive
     return upsertFracao({ ...frac, ...changes });
   };
 
+  // ── Era AQUI que a comissão a 0 se perdia ────────────────────────────────
+  // Estava assim:
+  //
+  //     const updateVenda = (id, changes) => {
+  //       const v = vendas.find(v => v.id === id);
+  //       if (v) upsertVenda({ ...v, ...changes });   // sem return
+  //     };
+  //
+  // Três defeitos no mesmo sítio, e os três calados:
+  //
+  //  1. Não devolvia nada. Quem chamava fazia `const r = await onUpdateVenda(…)`
+  //     e recebia `undefined`, por isso `r?.error` NUNCA era verdade. O diálogo
+  //     fechava como se tivesse guardado, acontecesse o que acontecesse.
+  //  2. Fazia upsert da linha INTEIRA em vez de um update dos campos mexidos:
+  //     reescrevia colunas que ninguém tocou e podia apagar por cima do que
+  //     outra pessoa tivesse mudado entretanto.
+  //  3. Com a fração sem ficha de venda (`if (v)` falso) não fazia nada — nem
+  //     gravava, nem avisava.
+  //
+  // Agora escreve só o que mudou, pelo id, e devolve o resultado para o ecrã
+  // poder dizer que não gravou.
   const updateVenda = (id, changes) => {
-    const v = vendas.find(v => v.id === id);
-    if (v) upsertVenda({ ...v, ...changes });
+    if (!id) return Promise.resolve({ error: { message: "Venda sem identificador." } });
+    const v = vendas.find(x => x.id === id);
+    if (!v) return Promise.resolve({
+      error: { message: "Ficha de venda não encontrada — recarrega a página e tenta outra vez." } });
+    return updateVendaNaBase(id, changes);
   };
 
   return (

@@ -1,5 +1,6 @@
 import { useEffect, useState, useCallback } from 'react'
 import { supabase } from './supabase'
+import { escreverTolerante, semAuxiliares, aplicarNaLista } from './escrita.js'
 
 // ─── HELPER: generic realtime table hook ─────────────────────────────────────
 function useRealtimeTable(table, queryFn) {
@@ -479,15 +480,39 @@ export function useVendas() {
     return () => { supabase.removeChannel(ch); clearTimeout(timeout) }
   }, [])
 
-  const upsertVenda = (v) => {
-    const { _frac, ...rest } = v
-    return supabase.from('vendas').upsert({ ...rest, updated_at: new Date().toISOString() })
+  // A tabela só se atualizava quando o realtime devolvesse a alteração. Se o
+  // realtime não estiver ligado nesta tabela — ou simplesmente demorar — o
+  // ecrã continuava a mostrar o número velho depois de guardar, como se não
+  // tivesse guardado nada. As frações já faziam isto bem: escreve-se já no
+  // estado local e, se a base recusar, repõe-se.
+  const aplicarLocal = (linha) => setVendas(list => aplicarNaLista(list, linha))
+
+  const upsertVenda = async (v) => {
+    const corpo = { ...semAuxiliares(v), updated_at: new Date().toISOString() }
+    const anterior = vendas
+    aplicarLocal(corpo)
+    const r = await escreverTolerante(
+      (c) => supabase.from('vendas').upsert(c).select(), corpo)
+    if (r.error) { console.error('upsertVenda error:', r.error); setVendas(anterior) }
+    else if (r.semEfeito) setVendas(anterior)
+    else if (r.data?.[0]) aplicarLocal(r.data[0])
+    if (r.ignoradas?.length) console.warn('upsertVenda: colunas em falta', r.ignoradas)
+    return r
   }
+
   const updateVenda = async (id, u) => {
-    const { id: _i, ...rest } = u || {}
-    const { data, error } = await supabase.from('vendas').update(rest).eq('id', id).select()
-    if (error) console.error('updateVenda error:', error)
-    return { data, error }
+    const corpo = semAuxiliares(u)
+    delete corpo.id
+    const anterior = vendas
+    aplicarLocal({ id, ...corpo })
+    const r = await escreverTolerante(
+      (c) => supabase.from('vendas').update(c).eq('id', id).select(), corpo)
+    if (r.error) { console.error('updateVenda error:', r.error); setVendas(anterior) }
+    // `data: []` sem erro é a recusa calada do RLS: não gravou, repõe-se.
+    else if (r.semEfeito) setVendas(anterior)
+    else if (r.data?.[0]) aplicarLocal(r.data[0])
+    if (r.ignoradas?.length) console.warn('updateVenda: colunas em falta', r.ignoradas)
+    return r
   }
   const deleteVenda = (id) => supabase.from('vendas').delete().eq('id', id)
   return { vendas, loading, upsertVenda, updateVenda, deleteVenda }
