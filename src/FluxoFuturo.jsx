@@ -608,7 +608,19 @@ export default function FluxoFuturo({ faturas: faturasTodas, faturasLoading, pag
               && !["Paga", "Pago", "Convertida"].includes(p?.status))
     .map(p => p?.empresa).filter(Boolean));
 
-  linhasDeVendasBase({ vendas, fracoes }).forEach(l => {
+  // A data da escritura segundo o plano, por empresa. A comissão do mediador
+  // passa a sair nessa data em vez da `previsão de escritura` da ficha da
+  // venda: reprogramar a obra mexia na entrada e deixava a comissão para
+  // trás, e sem previsão na ficha ela nem sequer era lançada.
+  const escrituraDoPlanoPorEmpresa = new Map((pagamentosExtras || [])
+    .filter(p => p?.plano_tipo === "venda"
+              && !["Paga", "Pago", "Convertida"].includes(p?.status)
+              && p?.empresa && p?.data_inicio)
+    .map(p => [p.empresa, String(p.data_inicio).slice(0, 10)]));
+  const escrituraDoPlano = (v) =>
+    escrituraDoPlanoPorEmpresa.get(PROJETO_EMPRESA_MAP[v?.projeto]) || null;
+
+  linhasDeVendasBase({ vendas, fracoes, escrituraDoPlano }).forEach(l => {
     const v = (vendas || []).find(x => x.id === l.vendaId);
     const empId = PROJETO_EMPRESA_MAP[v?.projeto];
     if (empresa !== "all" && empId !== empresa) return;

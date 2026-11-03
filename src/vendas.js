@@ -289,7 +289,21 @@ export const soReceita = (recebiveis) =>
 //
 // A comissão vai toda para a escritura de propósito: é a prática — paga-se ao
 // mediador o que lhe falta receber quando o negócio fecha.
-export function linhasDeFluxo({ vendas = [], fracoes = [], projeto } = {}) {
+/**
+ * @param escrituraDoPlano  (venda) => "AAAA-MM-DD" | null — a data da
+ *        escritura segundo o PLANO DE OBRA, quando a empresa tem um.
+ *
+ *        A comissão do mediador sai no mesmo ato da venda, ao mesmo notário.
+ *        Mas a entrada da venda vem do plano de obra (que a põe no seu mês de
+ *        escritura) e a comissão vinha da `previsão de escritura` gravada na
+ *        ficha da venda: reprogramar a obra mexia numa e deixava a outra para
+ *        trás, meses à frente ou atrás. Quando o plano manda, manda nas duas.
+ *
+ *        E sem data nenhuma na ficha, a comissão não era lançada de todo —
+ *        agora o plano dá-lhe a data que falta.
+ */
+export function linhasDeFluxo({ vendas = [], fracoes = [], projeto,
+                                escrituraDoPlano = null } = {}) {
   const porId = new Map((fracoes || []).map(f => [f.id, f]));
   const linhas = [];
 
@@ -337,12 +351,20 @@ export function linhasDeFluxo({ vendas = [], fracoes = [], projeto } = {}) {
     // Sem data de CPCV não se perde dinheiro: essa fatia cai na escritura.
     const naEscritura = arred2(com.naEscritura.porPagarComIva
       + (dataCpcv ? 0 : com.noCpcv.porPagarComIva));
-    if (naEscritura > 0.005 && c.dataEscritura) {
+    // A data da escritura: a do plano de obra quando há plano, senão a que
+    // está na ficha da venda. É isto que faz a comissão andar com a venda.
+    const doPlano = typeof escrituraDoPlano === "function"
+      ? (() => { try { return escrituraDoPlano(v) || null; } catch { return null; } })()
+      : null;
+    const dataEscritura = doPlano || c.dataEscritura;
+    if (naEscritura > 0.005 && dataEscritura) {
       linhas.push({
-        tipo: "saida", data: c.dataEscritura, valor: naEscritura,
+        tipo: "saida", data: dataEscritura, valor: naEscritura,
+        peloPlano: !!doPlano,
         categoria: "Comissão", origem: "Comissão na escritura",
         descricao: `Comissão ${quem}` +
-          (dataCpcv ? comIvaTxt(com.naEscritura) : comIvaTxt(com)),
+          (dataCpcv ? comIvaTxt(com.naEscritura) : comIvaTxt(com)) +
+          (doPlano ? " · na escritura do plano de obra" : ""),
         vendaId: v.id,
       });
     }
