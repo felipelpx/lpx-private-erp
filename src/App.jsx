@@ -22,6 +22,8 @@ import IVAView from "./IVAView.jsx";
 import { STATUS_FATURA, STATUS_STYLES, statusFatura, faturaPaga, faturaAtrasada } from "./status.js";
 import { temFunding, pctFunding, valorFunding, ERRO_SEM_COLUNAS, faltamColunas } from "./funding.js";
 import { TAXAS_IVA, decomporPorTaxa } from "./iva.js";
+import FiltroMulti from "./FiltroMulti.jsx";
+import { passaNoFiltro, comparaStatus, limparEscolhasMortas } from "./filtros.js";
 
 // Filtros do Contas a Pagar: "Pendente atrasado" e "Pendente em dia" juntam-se
 // num só botão "Pendente". Cada linha continua a mostrar se está em atraso.
@@ -368,10 +370,27 @@ export function ContasPagar({canEdit, faturas: faturasTodas, setFaturas, addFatu
 
   const [showForm,setShowForm]=useState(false);
   const [editId,setEditId]=useState(null);
-  const [fStatus,setFStatus]=useState("Todos");
-  // Por defeito mostra um projeto de cada vez; há uma caixa para ver todos
-  const [fEmp,setFEmp]=useState(()=> (EMPRESAS_PROP && EMPRESAS_PROP[0]?.id) || EMPRESAS_ALL[0]?.id || "Todas");
-  const [verTodas,setVerTodas]=useState(false);
+  // ── Os filtros escolhem MAIS DO QUE UM ───────────────────────────────────
+  // Antes era um estado de cada vez e um projeto de cada vez: "quanto devo de
+  // fiscalização nos três projetos do Amadeu?" obrigava a ver o ecrã três
+  // vezes e a somar à mão. Agora são listas, e a regra é a de sempre em
+  // src/filtros.js: NADA ESCOLHIDO QUER DIZER TUDO.
+  //
+  // Arranca com o primeiro projeto escolhido, que era o comportamento antigo
+  // — abrir no inventário inteiro de todas as empresas não ajuda ninguém.
+  const [fStatus,setFStatus]=useState([]);
+  const [fEmps,setFEmps]=useState(()=>{
+    const primeiro=(EMPRESAS_PROP && EMPRESAS_PROP[0]?.id) || EMPRESAS_ALL[0]?.id;
+    return primeiro?[String(primeiro)]:[];
+  });
+  // Um projeto escolhido que deixe de estar à vista — porque mudou o filtro de
+  // grupo lá em cima, ou porque o utilizador perdeu o acesso — ficava preso na
+  // seleção: o ecrã aparecia vazio e nada no ecrã explicava porquê. Guardar um
+  // filtro invisível é pior do que não ter filtro nenhum.
+  useEffect(()=>{
+    setFEmps(l=>limparEscolhasMortas(l,EMPRESAS.map(e=>String(e.id))));
+  },[EMPRESAS]);
+
   const [fFornec,setFFornec]=useState("");
   const [mapaSelected,setMapaSelected]=useState([]);
   const [viewAnexo,setViewAnexo]=useState(null);
@@ -405,8 +424,10 @@ export function ContasPagar({canEdit, faturas: faturasTodas, setFaturas, addFatu
 
   const hoje=new Date().toISOString().split("T")[0];
   const filtered=faturas.filter(f=>
-    (fStatus==="Todos"||(fStatus==="Pendente"?statusFatura(f).startsWith("Pendente"):statusFatura(f)===fStatus)) &&
-    (verTodas||fEmp==="Todas"||f.empresa===fEmp) &&
+    // O "Pendente" é um botão só para dois estados (em dia e atrasado): quem
+    // sabe disso é o comparaStatus, para a regra viver num sítio só.
+    passaNoFiltro(fStatus,statusFatura(f),comparaStatus) &&
+    passaNoFiltro(fEmps,f.empresa) &&
     (fFornec===""||(f.fornecedor||"").toLowerCase().includes(fFornec.toLowerCase()))
   );
   // Sugestões únicas de fornecedores para o datalist
@@ -418,7 +439,7 @@ export function ContasPagar({canEdit, faturas: faturasTodas, setFaturas, addFatu
   };
 
   // Subtotal do que está filtrado no ecrã (só aparece quando há filtro ativo)
-  const haFiltro = fStatus!=="Todos" || fEmp!=="Todas" || fFornec!=="";
+  const haFiltro = fStatus.length>0 || fEmps.length>0 || fFornec!=="";
   const sub = {
     n: filtered.length,
     total: filtered.reduce((s,f)=>s+(f.valor||0),0),
@@ -545,23 +566,37 @@ export function ContasPagar({canEdit, faturas: faturasTodas, setFaturas, addFatu
 
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",flexWrap:"wrap",gap:10}}>
         <div style={{display:"flex",gap:8,flexWrap:"wrap",alignItems:"center"}}>
-          {["Todos",...STATUS_FILTRO].map(s=>(
-            <button key={s} onClick={()=>setFStatus(s)} style={{background:fStatus===s?"#091C2A":"#E7DED2",color:fStatus===s?"#fff":"#5C6166",border:"none",padding:"6px 14px",borderRadius:20,fontSize:12,cursor:"pointer"}}>
-              {s}
-            </button>
-          ))}
-          <select value={fEmp} onChange={e=>setFEmp(e.target.value)} disabled={verTodas} style={{background:verTodas?"#F7F2EA":"#fff",border:"1px solid #D8CCBB",borderRadius:20,padding:"6px 14px",fontSize:12,outline:"none",fontWeight:600,opacity:verTodas?0.5:1}}>
-            {GRUPOS.filter(g=>EMPRESAS.some(e=>e.grupo===g)).map(g=>(
-              <optgroup key={g} label={GRUPOS_INFO[g]?.nome||g}>
-                {EMPRESAS.filter(e=>e.grupo===g).map(e=><option key={e.id} value={e.id}>{e.nome}</option>)}
-              </optgroup>
-            ))}
-          </select>
-          <label style={{display:"flex",alignItems:"center",gap:6,fontSize:11.5,color:verTodas?"#091C2A":"#7E8388",cursor:"pointer",whiteSpace:"nowrap",fontWeight:verTodas?600:400}}
-            title="Mostrar as faturas de todos os projetos">
-            <input type="checkbox" checked={verTodas} onChange={e=>setVerTodas(e.target.checked)} style={{cursor:"pointer"}}/>
-            ver todas
-          </label>
+          {/* Os estados: botões que LIGAM E DESLIGAM, em vez de um de cada
+              vez. "Todos" não é um estado — é limpar a escolha, e por isso
+              acende quando não há nenhuma. */}
+          <button onClick={()=>setFStatus([])}
+            title="Sem filtro de estado"
+            style={{background:fStatus.length===0?"#091C2A":"#E7DED2",color:fStatus.length===0?"#fff":"#5C6166",border:"none",padding:"6px 14px",borderRadius:20,fontSize:12,cursor:"pointer"}}>
+            Todos
+          </button>
+          {STATUS_FILTRO.map(s=>{
+            const ligado=fStatus.includes(s);
+            return (
+              <button key={s} onClick={()=>setFStatus(l=>ligado?l.filter(x=>x!==s):[...l,s])}
+                title={ligado?`A mostrar ${s} — clica para tirar`:`Juntar ${s} ao que está à vista`}
+                style={{background:ligado?"#091C2A":"#E7DED2",color:ligado?"#fff":"#5C6166",border:"none",padding:"6px 14px",borderRadius:20,fontSize:12,cursor:"pointer"}}>
+                {ligado?"✓ ":""}{s}
+              </button>
+            );
+          })}
+
+          {/* Os projetos: tantos quantos se quiser. A caixa «ver todas» que
+              estava aqui era uma maneira pobre de dizer "nenhum escolhido" —
+              agora isso é o próprio estado vazio do filtro. */}
+          <FiltroMulti
+            titulo="Projeto"
+            rotuloVazio="Todos os projetos"
+            singular="projeto" plural="projetos"
+            escolhidos={fEmps} onMudar={setFEmps}
+            opcoes={GRUPOS.filter(g=>EMPRESAS.some(e=>e.grupo===g)).flatMap(g=>
+              EMPRESAS.filter(e=>e.grupo===g).map(e=>({
+                valor:String(e.id), rotulo:e.nome, grupo:GRUPOS_INFO[g]?.nome||g })))}
+          />
           <div style={{position:"relative",display:"flex",alignItems:"center"}}>
             <span style={{position:"absolute",left:12,fontSize:12,color:"#9DA2A6",pointerEvents:"none"}}>🔎</span>
             <input type="text" list="fornecedores-datalist" placeholder="Pesquisar fornecedor..." value={fFornec} onChange={e=>setFFornec(e.target.value)}
