@@ -98,7 +98,9 @@ export default function ModalPlanoObra({
 
   const muda = (k) => (v) => setF(x => ({ ...x, [k]: v }));
 
-  const cats = useMemo(() => categoriasDoMotor(grupo), [grupo]);
+  // Com o plano, para o ecrã de confirmação dizer a verdade: as rubricas das
+  // avenças que lá estão escritas também passam a ser varridas.
+  const cats = useMemo(() => categoriasDoMotor(grupo, f), [grupo, f]);
   const catObra = classificacaoDe("obra", grupo).categoria;
   const catFisc = classificacaoDe("fiscalizacao", grupo).categoria;
   const catCso  = classificacaoDe("cso", grupo).categoria;

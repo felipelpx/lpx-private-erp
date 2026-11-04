@@ -133,7 +133,11 @@ export default function FluxoFuturo({ faturas: faturasTodas, faturasLoading, pag
       ? (obraPlanos || []).filter(ativo)
       : (ativo(planoDaEmpresa) ? [planoDaEmpresa] : []);
     if (!planos.length) return null;
-    const todas = planos.flatMap(p => rubricasGeridasPeloMotor(grupoDe(p.empresa)));
+    // O PLANO vai junto, e não só o grupo. As rubricas das avenças extra e das
+    // despesas de fecho dependem do que está escrito no plano — uma avença de
+    // "Taxa de Gestão" só é do motor quando existe mesmo. Sem o passar aqui, a
+    // rubrica dela aparecia sem a marca amarela, como se fosse lançada à mão.
+    const todas = planos.flatMap(p => rubricasGeridasPeloMotor(grupoDe(p.empresa), p));
     return new Set(todas.map(c => c.trim().toLowerCase()));
   }, [obraPlanos, planoDaEmpresa, empresa]);
   const grupoDaEmpresa = EMPRESAS_TODAS.find(e => e.id === empresa)?.grupo || "LPX";
