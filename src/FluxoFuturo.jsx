@@ -862,7 +862,13 @@ export default function FluxoFuturo({ faturas: faturasTodas, faturasLoading, pag
     meses: mesesComSaldo, maxMeses: mesesMatriz,
     de: dataInicio, ate: dataFim, comVazios: mostrarVazios,
     rubricaDoItem,
-  }), [mesesComSaldo, mesesMatriz, dataInicio, dataFim, mostrarVazios, rubricaDoItem]);
+    // O caixa de onde a linha do acumulado parte. É o MESMO ponto de partida
+    // do `saldo_fim` da vista mensal e do KPI do saldo projetado — o saldo de
+    // hoje menos o que está vencido por pagar —, para os três não dizerem
+    // coisas diferentes sobre o mesmo dinheiro.
+    saldoInicial: saldoLiquido,
+  }), [mesesComSaldo, mesesMatriz, dataInicio, dataFim, mostrarVazios, rubricaDoItem,
+       saldoLiquido]);
 
   const anoGroups = useMemo(() => {
     const groups = {};

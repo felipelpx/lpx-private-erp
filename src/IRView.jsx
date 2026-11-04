@@ -1047,18 +1047,24 @@ export default function IRView({ currentUser, empresasVisiveis }) {
   // já passou está no fluxo de caixa realizado, logo acima.
   const [mesesMatriz, setMesesMatriz] = useState(6);
   const mesesPorVir = useMemo(() => futuro.filter(m => !m.passado), [futuro]);
+  // O saldo de hoje vem ANTES da matriz porque esta precisa dele: é dele que
+  // parte a linha do caixa acumulado.
+  const saldoHoje = useMemo(
+    () => empresasAtivas.reduce((s, e) => s + e.contas.reduce((t, c) => t + (Number(c.saldo) || 0), 0), 0),
+    [empresasAtivas]
+  );
+
   const matrizFuturo = useMemo(() => construirMatriz({
     meses: mesesPorVir, maxMeses: mesesMatriz,
     // A mesma régua do Fluxo Futuro: nos projetos HDG, as linhas da FO.
     rubricaDoItem: (it) => rubricaNoFluxo(
       EMPRESAS.find(e => e.id === empSel)?.grupo === "HDG" ? "HDG" : "LPX",
       rubricaDe(empSel, it?.cat, it?.subcategoria) || it?.cat || "", it?.desc || ""),
-  }), [mesesPorVir, mesesMatriz, empSel]);
-
-  const saldoHoje = useMemo(
-    () => empresasAtivas.reduce((s, e) => s + e.contas.reduce((t, c) => t + (Number(c.saldo) || 0), 0), 0),
-    [empresasAtivas]
-  );
+    // Aqui só há meses por vir, por isso o acumulado parte mesmo do dinheiro
+    // que está na conta hoje. É a linha que um investidor procura primeiro:
+    // em que mês é que isto precisa de mais dinheiro.
+    saldoInicial: saldoHoje,
+  }), [mesesPorVir, mesesMatriz, empSel, saldoHoje]);
   const totalPrevEntradas = futuro.reduce((s, m) => s + m.entradas, 0);
   const totalPrevSaidas = futuro.reduce((s, m) => s + m.saidas, 0);
 

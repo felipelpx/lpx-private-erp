@@ -77,10 +77,19 @@ export const chaveDaLinha = (item, rubrica) =>
  *        omissão é o plano de contas (ver ehFunding em src/rubricas.js): o
  *        Funding e a Amortização nas empresas LPX, o grupo "Financiamento"
  *        da FO nos projetos HDG. Passar `false` junta tudo em duas secções.
+ * @param saldoInicial  o dinheiro que está na conta HOJE. Com ele, a matriz
+ *        devolve também o CAIXA ACUMULADO mês a mês — o líquido do mês
+ *        responde a "este mês sobra ou falta?", e o acumulado à pergunta que
+ *        interessa mesmo: "em que mês é que isto fica negativo?".
+ *
+ *        Sem ele (null), não há linha de caixa. É o que acontece no Fluxo
+ *        Realizado, onde os meses vêm do mais recente para o mais antigo e um
+ *        acumulado que partisse do saldo de hoje andaria para trás no tempo.
  */
 export function construirMatriz({ meses = [], maxMeses = 6, de = "", ate = "",
                                   comVazios = false, rubricaDoItem = null,
-                                  ehFunding = ehFundingDoPlano } = {}) {
+                                  ehFunding = ehFundingDoPlano,
+                                  saldoInicial = null } = {}) {
   const rubricaDe_ = typeof rubricaDoItem === "function"
     ? (it) => { try { return rubricaDoItem(it) || it?.cat || ""; } catch { return it?.cat || ""; } }
     : (it) => it?.cat || "";
@@ -218,8 +227,51 @@ export function construirMatriz({ meses = [], maxMeses = 6, de = "", ate = "",
 
   const totalLiquidoOperacao = arred2(entradas.total - saidas.total);
 
+  // ── O caixa acumulado ────────────────────────────────────────────────────
+  // Parte do dinheiro que está na conta hoje e vai somando o líquido de cada
+  // mês. É a linha que responde à pergunta que o líquido do mês não responde:
+  // não "este mês sobra ou falta", mas "em que mês é que o caixa fica
+  // negativo".
+  //
+  // Acumula-se sobre TODOS os meses do fluxo, não só sobre as colunas à
+  // vista. Filtrar a vista para começar em janeiro não pode fazer o caixa
+  // recomeçar do saldo de hoje — em janeiro já se gastou o que se gastou em
+  // novembro e dezembro. Por isso a conta corre pela lista inteira, por ordem
+  // cronológica, e só se mostram os meses que estão à vista.
+  //
+  // O líquido de cada mês é o dos ITENS, com o sinal de cada um: é a mesma
+  // conta que o `liquido` das colunas faz por outro caminho (receitas menos
+  // custos, mais o funding líquido). Que as duas batem é o que o
+  // teste-caixa-acumulado.mjs verifica — se alguma vez divergirem, esta linha
+  // deixava de fechar com a de cima, que é o pior defeito possível num quadro
+  // destes.
+  const liquidoDosItens = (m) => arred2((m?.items || []).reduce((s, it) =>
+    s + (it?.tipo === "entrada" ? 1 : -1) * Math.abs(num(it?.valor)), 0));
+
+  let caixa = null, caixaAbertura = null, caixaFim = null;
+  if (saldoInicial !== null && saldoInicial !== undefined
+      && Number.isFinite(Number(saldoInicial))) {
+    const visiveis = new Set(chaves);
+    const cronologico = [...(meses || []).filter(Boolean)]
+      .sort((a, b) => (String(a.key) < String(b.key) ? -1 : 1));
+    let corrente = arred2(num(saldoInicial));
+    caixa = {};
+    cronologico.forEach(m => {
+      // O saldo com que o primeiro mês à vista ABRE, para o ecrã o poder
+      // dizer em vez de deixar o leitor a adivinhar de onde vem o número.
+      if (caixaAbertura === null && visiveis.has(m.key)) caixaAbertura = corrente;
+      corrente = arred2(corrente + liquidoDosItens(m));
+      if (visiveis.has(m.key)) caixa[m.key] = corrente;
+    });
+    if (caixaAbertura === null) caixaAbertura = arred2(num(saldoInicial));
+    caixaFim = corrente;        // depois do fluxo inteiro, não só das colunas
+  }
+
   return {
     colunas, chaves, porMostrar,
+    // O caixa mês a mês, o saldo com que o primeiro mês à vista abre, e o que
+    // sobra no fim do fluxo todo. `null` quando não se passou saldo inicial.
+    caixa, caixaAbertura, caixaFim, temCaixa: caixa !== null,
     // Quanto é que fica para lá das colunas à vista — o ecrã diz-no, para
     // ninguém ler o total como se fosse só o que está na grelha.
     foraDaJanela: arred2(entradas.foraDaJanela + saidas.foraDaJanela

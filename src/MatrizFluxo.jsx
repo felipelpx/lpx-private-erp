@@ -456,6 +456,45 @@ export default function MatrizFluxo({ matriz, isAdmin, acoes, nMeses, onNMeses, 
                 {fmtK(matriz.totalLiquido)}
               </td>
             </tr>
+
+            {/* ── O caixa acumulado ────────────────────────────────────────
+                A linha de cima diz se o mês sobra ou falta. Esta diz o que
+                interessa a seguir: em que mês é que o dinheiro acaba. Parte
+                do que está na conta hoje e vai somando o líquido de cada mês.
+
+                A coluna do TOTAL não é uma soma — é o caixa no fim do fluxo
+                inteiro, incluindo os meses que estão fora da vista. Somar
+                saldos de meses não quer dizer nada, e o cabeçalho diz isso. */}
+            {matriz.temCaixa && (
+              <tr style={{ background: "#F3F0EA", borderTop: "1px solid #dde3f0" }}>
+                <td style={{ ...celulaNum, ...colada("#F3F0EA"), textAlign: "left", fontWeight: 800,
+                             color: "#23292D", padding: "10px 12px" }}>
+                  Caixa acumulado
+                  <span style={{ color: "#9DA2A6", fontWeight: 400, marginLeft: 6, fontSize: 10.5 }}>
+                    (abre com {fmtK(matriz.caixaAbertura)})
+                  </span>
+                </td>
+                {colunas.map(c => {
+                  const v = matriz.caixa[c.key];
+                  const negativo = v < 0;
+                  return (
+                    <td key={c.key}
+                        title={negativo ? "O caixa fica negativo neste mês." : undefined}
+                        style={{ ...celulaNum, fontWeight: 800, padding: "10px",
+                                 background: negativo ? "#FBEDEB" : undefined,
+                                 color: negativo ? "#A93226" : "#23292D" }}>
+                      {negativo ? "⚠ " : ""}{fmtK(v)}
+                    </td>
+                  );
+                })}
+                <td title="O caixa no fim do fluxo, já com os meses que estão fora da vista. Não é a soma da linha."
+                    style={{ ...celulaNum, fontWeight: 800, padding: "10px",
+                             borderLeft: "1px solid #dde3f0",
+                             color: matriz.caixaFim >= 0 ? "#1F7A54" : "#A93226" }}>
+                  {fmtK(matriz.caixaFim)}
+                </td>
+              </tr>
+            )}
           </tfoot>
         </table>
       </div>
