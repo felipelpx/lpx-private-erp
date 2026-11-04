@@ -32,7 +32,8 @@ import { rubricasDa, rubricaDe, chaveRubrica, rubricaNoPlano, ehProjetoHDG,
          ordemDaRubrica } from "./rubricas.js";
 import { ocorrenciasDe } from "./recorrentes.js";
 import { comissaoDaVenda, soReceita, vgvPorReceber } from "./vendas.js";
-import { rubricaNoFluxo } from "./obra.js";
+import { rubricaNoFluxo, classificacaoDe } from "./obra.js";
+import { temFunding, valorFunding, descFunding } from "./funding.js";
 
 const arred2 = (v) => Math.round(((Number(v) || 0) + Number.EPSILON) * 100) / 100;
 const num = (v) => { const n = Number(v); return Number.isFinite(n) ? n : 0; };
@@ -108,6 +109,31 @@ export function calcularRealOrcado({
     // e assim nem o balde chega a existir.
     if (ehTransferenciaInterna(r)) return null;
     return rubricaNoFluxo(grupo, r, descricao);
+  };
+
+  // ── A entrada do banco por trás de uma despesa financiada ────────────────
+  // Marcar uma despesa como financiada quer dizer que o banco liberta o mesmo
+  // montante (ou a percentagem contratada): em caixa a despesa fica
+  // neutralizada, e o que pesa no projeto é só a parte não financiada.
+  //
+  // O Fluxo Futuro já desenhava esta entrada; este quadro não. A mesma marca
+  // significava uma coisa num ecrã e outra no outro — que é exatamente a
+  // avaria que não pára de voltar aqui. Agora é a mesma conta nos dois.
+  //
+  // A rubrica é a MESMA que o plano de obra usa para o funding dele
+  // (`classificacaoDe`), para o dinheiro do banco não aparecer em dois sítios
+  // com dois nomes conforme a porta por onde entrou.
+  const fundingComprometido = (fonte, valorSaida, desc, data, campo) => {
+    if (!temFunding(fonte)) return;
+    const valor = arred2(valorFunding(fonte, valorSaida));
+    if (!(valor > 0.005)) return;
+    const classe = classificacaoDe("funding", grupo);
+    const r = rubricaDoDoc(classe.categoria, classe.subcategoria || "", "Funding banco");
+    if (r === null) return;
+    const b = balde(r);
+    b[campo] += valor;                       // é entrada: soma
+    if (campo === "previsoes") b.nPrevisoes++; else b.nRecorrentes++;
+    b.docs[campo].push({ texto: descFunding(desc), valor, data: data || "" });
   };
 
   const balde = (r) => {
@@ -201,6 +227,13 @@ export function calcularRealOrcado({
     b.docs.previsoes.push({ texto: p?.descricao || "(previsão)",
                             valor: p?.tipo === "entrada" ? v : -v,
                             data: p?.data_inicio || "" });
+    // Uma saída financiada traz atrás de si a entrada do banco. O Fluxo
+    // Futuro já a desenhava; aqui não — e a mesma marca significava uma coisa
+    // num ecrã e outra no outro. As linhas do plano de obra não passam por
+    // aqui: o motor escreve o funding dele como previsão própria e não marca
+    // a despesa, por isso não há risco de contar duas vezes.
+    if (p?.tipo !== "entrada") fundingComprometido(p, v, p?.descricao,
+                                                   p?.data_inicio, "previsoes");
   });
 
   // ── Comprometido: as vendas por receber ──────────────────────────────────
@@ -299,6 +332,12 @@ export function calcularRealOrcado({
       texto: `${reg?.descricao || "(recorrente)"} · ${oc.length}× ${reg?.periodicidade || ""}`.trim(),
       valor: reg?.tipo === "entrada" ? total : -total,
       data: oc[0]?.data || "" });
+    // Há recorrentes que o banco financia — a taxa de gestão de um projeto em
+    // obra, por exemplo. A marca está na REGRA, e vale para todas as
+    // ocorrências que ainda faltam.
+    if (reg?.tipo !== "entrada") fundingComprometido(
+      reg, total, `${reg?.descricao || "recorrente"} · ${oc.length}×`,
+      oc[0]?.data || "", "recorrentes");
   });
 
   // ── Fechar as contas de cada rubrica ─────────────────────────────────────

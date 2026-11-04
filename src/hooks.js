@@ -252,11 +252,17 @@ export function useDespesasRecorrentes() {
     () => supabase.from('despesas_recorrentes').select('*').order('descricao'))
 
   const guardarRecorrente = async (r) => {
-    const linha = { ...r, id: r.id || `rec_${Date.now()}_${Math.random().toString(36).slice(2, 7)}` }
-    const { data, error } = await supabase.from('despesas_recorrentes')
-      .upsert([linha], { onConflict: 'id' }).select()
-    if (error) console.error('guardarRecorrente error:', error)
-    return { data, error }
+    const linha = { ...semAuxiliares(r),
+      id: r.id || `rec_${Date.now()}_${Math.random().toString(36).slice(2, 7)}` }
+    // As colunas de funding podem ainda não existir na base. Sem isto, a
+    // gravação INTEIRA era recusada e a regra não ficava gravada — o mesmo
+    // buraco que escondeu a comissão a 0.
+    const res = await escreverTolerante(
+      (c) => supabase.from('despesas_recorrentes').upsert([c], { onConflict: 'id' }).select(),
+      linha)
+    if (res.error) console.error('guardarRecorrente error:', res.error)
+    if (res.ignoradas?.length) console.warn('guardarRecorrente: colunas em falta', res.ignoradas)
+    return res
   }
   const apagarRecorrente = async (id) => {
     const { data, error } = await supabase.from('despesas_recorrentes')
@@ -334,11 +340,16 @@ export function useObraPlanos() {
     () => supabase.from('obra_planos').select('*').order('empresa'))
 
   const guardarPlano = async (plano) => {
-    const linha = { ...plano, id: plano.id || plano.empresa, updated_at: new Date().toISOString() }
-    const { data: r, error: e } = await supabase.from('obra_planos')
-      .upsert([linha], { onConflict: 'empresa' }).select()
-    if (e) console.error('guardarPlano:', e)
-    return { data: r, error: e }
+    const linha = { ...semAuxiliares(plano), id: plano.id || plano.empresa,
+                    updated_at: new Date().toISOString() }
+    // `avencas` pode ainda não existir como coluna. Sem tolerância, o plano
+    // INTEIRO deixava de gravar por causa dela — e o ecrã fechava na mesma.
+    const r = await escreverTolerante(
+      (c) => supabase.from('obra_planos').upsert([c], { onConflict: 'empresa' }).select(),
+      linha)
+    if (r.error) console.error('guardarPlano:', r.error)
+    if (r.ignoradas?.length) console.warn('guardarPlano: colunas em falta', r.ignoradas)
+    return r
   }
 
   return { planos: data, loading, error, guardarPlano }

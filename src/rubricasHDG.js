@@ -97,6 +97,13 @@ LINHAS_FO_HDG.forEach(l => { POR_CHAVE[chave(l)] = l; });
 export const GRUPO_DA_LINHA = {};
 GRUPOS_FO_HDG.forEach(g => g.linhas.forEach(l => { GRUPO_DA_LINHA[chave(l)] = g.grupo; }));
 
+// O bloco da FO a que uma linha pertence — "Taxa de Gestão" → "Soft_Costs".
+// Quem escolhe uma linha num formulário escolhe a DESPESA; o bloco é o que a
+// classificação do extrato precisa, e deduz-se daqui em vez de se perguntar.
+// O índice está normalizado (sem acentos, sem underscores), por isso aceita
+// "taxa de gestao" tal como "Taxa de Gestão".
+export const blocoDaLinhaHDG = (linha) => GRUPO_DA_LINHA[chave(linha)] || "";
+
 // ─── O que já está lançado com o vocabulário LPX ─────────────────────────────
 // Os planos de obra e as previsões lançadas à mão usaram os nomes das empresas
 // LPX ("Obra", "Fee Gestão", "Contabilidade"). São a mesma despesa da FO com

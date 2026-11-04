@@ -30,7 +30,8 @@ export const temObra = (empresaId) => EMPRESAS_COM_OBRA.includes(empresaId);
 // em cada previsão: é por ela que um recálculo sabe o que é dele e o que é do
 // utilizador.
 export const TIPOS = ["obra", "funding", "fiscalizacao", "funding_fiscalizacao",
-                      "cso", "funding_cso", "juros", "comissao",
+                      "cso", "funding_cso", "avenca", "funding_avenca",
+                      "juros", "comissao",
                       "iva_obra", "funding_iva", "fecho", "venda", "amortizacao"];
 
 export const ROTULO_TIPO = {
@@ -40,6 +41,8 @@ export const ROTULO_TIPO = {
   funding_fiscalizacao: "Funding banco (fiscalização)",
   cso:          "CSO",
   funding_cso:  "Funding banco (CSO)",
+  avenca:       "Avença mensal",
+  funding_avenca: "Funding banco (avença)",
   juros:        "Juros do financiamento",
   comissao:     "Comissão de avaliação",
   iva_obra:     "IVA da obra",
@@ -58,6 +61,9 @@ const CATEGORIAS_LPX = {
   funding_fiscalizacao: { categoria: "Funding" },
   cso:          { categoria: "CSO" },
   funding_cso:  { categoria: "Funding" },
+  // A avença traz sempre a sua rubrica do ecrã; isto é só a rede.
+  avenca:       { categoria: "Projetos/Soft Costs" },
+  funding_avenca: { categoria: "Funding" },
   juros:        { categoria: "Juros" },
   comissao:     { categoria: "Encargos financeiros" },
   iva_obra:     { categoria: "Obra" },
@@ -74,6 +80,8 @@ const CATEGORIAS_HDG = {
   funding_fiscalizacao: { categoria: "Financiamento", subcategoria: "Inflow - Obra" },
   cso:          { categoria: "Soft_Costs",       subcategoria: "CSO" },
   funding_cso:  { categoria: "Financiamento",    subcategoria: "Inflow - Obra" },
+  avenca:       { categoria: "Soft_Costs",       subcategoria: "Taxa de Gestão" },
+  funding_avenca: { categoria: "Financiamento",  subcategoria: "Inflow - Obra" },
   juros:        { categoria: "Financiamento",    subcategoria: "Outflow - Juros" },
   comissao:     { categoria: "Financiamento",    subcategoria: "Outflow - Taxas e comissões" },
   iva_obra:     { categoria: "Obras",            subcategoria: "Gastos com Obras" },
@@ -101,10 +109,39 @@ const CATEGORIAS_ANTIGAS = {
 
 // As categorias que o motor toma conta. Quando se manda substituir, são as
 // previsões manuais DESTAS categorias que saem — e mais nenhuma.
-export function categoriasDoMotor(grupo) {
+// ── Os tipos de rubrica variável ──────────────────────────────────────────
+// Uma avença extra e uma despesa de fecho vão para a rubrica que o utilizador
+// lhes deu, não para uma fixa. Por isso os seus valores por omissão NÃO
+// entram na varredura: se entrassem, uma obra sem avença nenhuma configurada
+// passava a apagar as previsões manuais de "Taxa de Gestão" — rubrica que o
+// motor não ia reocupar. A rubrica de uma avença só é varrida quando a avença
+// existe mesmo, e é o plano que o diz.
+const TIPOS_DE_RUBRICA_LIVRE = new Set(["avenca", "fecho"]);
+const TIPOS_FIXOS = TIPOS.filter(t => !TIPOS_DE_RUBRICA_LIVRE.has(t));
+
+// As rubricas que as linhas livres de UM plano ocupam mesmo. Uma linha sem
+// rubrica escolhida cai na de omissão do seu tipo — é para lá que o motor a
+// manda, por isso é essa que ele passa a tomar conta.
+function rubricasLivresDoPlano(plano, grupo) {
+  const mapa = grupo === "HDG" ? CATEGORIAS_HDG : CATEGORIAS_LPX;
+  const daLista = (lista, tipo) => (Array.isArray(lista) ? lista : [])
+    .filter(d => Math.abs(Number(d?.valor) || 0) > 0.005)
+    .map(d => {
+      const categoria = String(d?.categoria || "").trim();
+      if (categoria) return { categoria, subcategoria: String(d?.subcategoria || "").trim() };
+      return { categoria: mapa[tipo]?.categoria || "",
+               subcategoria: mapa[tipo]?.subcategoria || "" };
+    })
+    .filter(c => c.categoria || c.subcategoria);
+  return [...daLista(plano?.avencas, "avenca"),
+          ...daLista(plano?.despesas_fecho, "fecho")];
+}
+
+export function categoriasDoMotor(grupo, plano = null) {
   const mapa = grupo === "HDG" ? CATEGORIAS_HDG : CATEGORIAS_LPX;
   return [...new Set([
-    ...TIPOS.map(t => mapa[t]?.categoria).filter(Boolean),
+    ...TIPOS_FIXOS.map(t => mapa[t]?.categoria).filter(Boolean),
+    ...rubricasLivresDoPlano(plano, grupo).map(c => c.categoria).filter(Boolean),
     ...(CATEGORIAS_ANTIGAS[grupo === "HDG" ? "HDG" : "LPX"]),
   ])];
 }
@@ -119,12 +156,13 @@ export function categoriasGeridasPeloMotor(grupo) {
 
 // E as rubricas como o fluxo as mostra: nos projetos HDG o eixo é a
 // subcategoria, não a categoria.
-export function rubricasGeridasPeloMotor(grupo) {
+export function rubricasGeridasPeloMotor(grupo, plano = null) {
   const mapa = grupo === "HDG" ? CATEGORIAS_HDG : CATEGORIAS_LPX;
-  return [...new Set(TIPOS
-    .map(t => mapa[t] && (grupo === "HDG" ? (mapa[t].subcategoria || mapa[t].categoria)
-                                          : mapa[t].categoria))
-    .filter(Boolean))];
+  const daClasse = (c) => grupo === "HDG" ? (c.subcategoria || c.categoria) : c.categoria;
+  return [...new Set([
+    ...TIPOS_FIXOS.map(t => mapa[t] && daClasse(mapa[t])),
+    ...rubricasLivresDoPlano(plano, grupo).map(daClasse),
+  ].filter(Boolean))];
 }
 
 // ─── Aritmética de meses ────────────────────────────────────────────────────
@@ -415,6 +453,18 @@ export const PLANO_VAZIO = {
   // O banco também pode financiar as avenças. Uma bandeira por cada,
   // porque há bancos que aceitam a fiscalização e não o CSO.
   financia_fiscalizacao: false, financia_cso: false,
+  // ── As outras avenças ────────────────────────────────────────────────────
+  // A fiscalização e o CSO estão aqui em cima porque existem em todas as
+  // obras. Mas não são as únicas que correm enquanto a obra durar: a taxa de
+  // gestão, o seguro de obra, o TOC. Esta lista é para elas, cada uma com a
+  // sua rubrica e a sua bandeira de financiamento:
+  //
+  //   [{ descricao, valor, categoria, subcategoria, financia }]
+  //
+  // Correm nos mesmos meses da obra e esticam com o prazo, como as outras —
+  // que é precisamente o que uma despesa recorrente com data de fim fixa NÃO
+  // faz. É essa a diferença entre pôr uma coisa aqui e pô-la nas recorrentes.
+  avencas: [],
   // ── A escritura ──────────────────────────────────────────────────────────
   // O projeto não acaba quando a obra acaba: vende-se, paga-se o banco e
   // fecham-se contas. A escritura é o mês em que isso acontece, e o
@@ -559,6 +609,27 @@ export function planearObra(plano, { gastoObra = 0, hoje = hojeISO(), grupo = "L
   const fisc = comIva(fiscBase);
   const cso  = comIva(csoBase);
 
+  // As outras avenças da obra — taxa de gestão, seguro, TOC. Mesma regra:
+  // correm os meses todos da obra, vêm com IVA, e cada uma pode ser
+  // financiada ou não. O `slot` é a posição na lista e entra no id, para três
+  // avenças no mesmo mês não colidirem numa só.
+  const avencas = (Array.isArray(p.avencas) ? p.avencas : [])
+    .map((a, i) => {
+      const base = arred2(Math.abs(num(a?.valor)));
+      return {
+        slot: `a${i + 1}`,
+        descricao: String(a?.descricao || "").trim() || `Avença ${i + 1}`,
+        base,
+        comIva: comIva(base),
+        financia: a?.financia === true,
+        classe: String(a?.categoria || "").trim()
+          ? { categoria: a.categoria,
+              ...(a.subcategoria ? { subcategoria: a.subcategoria } : {}) }
+          : null,
+      };
+    })
+    .filter(a => a.base > 0.005);
+
   // 4, 5 e 6. Banco. Dois pagamentos distintos, em duas datas, ambos
   //    financiados:
   //
@@ -666,6 +737,34 @@ export function planearObra(plano, { gastoObra = 0, hoje = hojeISO(), grupo = "L
       tipo: "entrada",
     });
 
+    // As outras avenças da obra, cada uma na sua rubrica e com a sua
+    // bandeira. Correm nos mesmos meses: esticar o prazo custa mais meses
+    // destas, tal como custa mais fiscalização.
+    let fundAvencas = 0;
+    avencas.forEach(a => {
+      linhas.push({
+        ...linha("avenca", mes, a.comIva, grupo, {
+          slot: a.slot,
+          descricao: `${a.descricao} — ${rotuloMes(mes)}`,
+          obs: `Avença ${a.base} € + IVA ${arred2(a.comIva - a.base)} € (${taxaServicos}%)`,
+          base: a.base, iva: arred2(a.comIva - a.base),
+        }),
+        ...(a.classe || {}),
+      });
+      if (!a.financia) return;
+      const fund = arred2(a.comIva * pctFunding / 100);
+      if (!(fund > 0.005)) return;
+      fundAvencas = arred2(fundAvencas + fund);
+      linhas.push({
+        ...linha("funding_avenca", mes, fund, grupo, {
+          slot: a.slot,
+          descricao: `Funding banco — ${a.descricao} ${rotuloMes(mes)}`,
+          obs: `${arred2(pctFunding)}% de ${a.comIva} € (avença com IVA)`,
+        }),
+        tipo: "entrada",
+      });
+    });
+
     // Libertação do mês: a percentagem contratada sobre o que se paga. Sem
     // autoliquidação é a base, porque o IVA tem libertação própria no
     // apuramento; com autoliquidação é o auto inteiro, que é o que sai.
@@ -686,7 +785,10 @@ export function planearObra(plano, { gastoObra = 0, hoje = hojeISO(), grupo = "L
 
     // Juros sobre o SALDO MÉDIO do mês: a libertação não espera pelo mês
     // seguinte para contar, nem conta o mês inteiro.
-    const dividaFim = arred2(divida + libertado + fundFisc + fundCso + fundingIvaNoMes(mes));
+    // Tudo o que o banco libertou neste mês engrossa a dívida, e é sobre ela
+    // que correm os juros — incluindo o funding das avenças extra.
+    const dividaFim = arred2(divida + libertado + fundFisc + fundCso + fundAvencas
+                             + fundingIvaNoMes(mes));
     if (taxaAnual > 0 && (divida > 0 || dividaFim > 0)) {
       const medio = arred2((divida + dividaFim) / 2);
       const juros = arred2(medio * taxaAnual / 100 / 12);
@@ -734,10 +836,18 @@ export function planearObra(plano, { gastoObra = 0, hoje = hojeISO(), grupo = "L
 
   if (mesFimDaObra) {
     const jurosMaisLonge = Math.max(0, Math.round(num(p.meses_ate_escritura))) > 0;
+    // As avenças extra param com a obra, como a fiscalização e o CSO: é essa
+    // a diferença entre pô-las aqui e pô-las nas despesas recorrentes, que
+    // correm até à data de fim que lá estiver escrita.
+    const oQuePara = ["fiscalização", "CSO",
+                       ...avencas.map(a => a.descricao.toLowerCase())];
+    const lista = oQuePara.length > 1
+      ? oQuePara.slice(0, -1).join(", ") + " e " + oQuePara[oQuePara.length - 1]
+      : oQuePara[0];
     avisos.push(`A obra termina em ${rotuloMes(mesFimDaObra)}: é até aí que se pagam ` +
       (jurosMaisLonge
-        ? `fiscalização e CSO. Os juros continuam até à escritura, porque a dívida continua lá.`
-        : `fiscalização, CSO e juros.`));
+        ? `${lista}. Os juros continuam até à escritura, porque a dívida continua lá.`
+        : `${lista} e juros.`));
   }
 
   // ── 7. Da obra à escritura ───────────────────────────────────────────────
@@ -807,6 +917,10 @@ export function planearObra(plano, { gastoObra = 0, hoje = hojeISO(), grupo = "L
         : null;
       linhas.push({
         ...linha("fecho", mesEscritura, valor, grupo, {
+          // Sem slot, duas despesas de fecho no mesmo mês geravam o MESMO id
+          // e a segunda rebentava o INSERT com "duplicate key" — ou, pior,
+          // ficava só uma delas.
+          slot: `f${i + 1}`,
           descricao: String(d?.descricao || "").trim() || `Despesa de fecho ${i + 1}`,
           obs: "Fecho de obra, no mês da escritura",
           dia: "fim",
@@ -858,9 +972,17 @@ export function planearObra(plano, { gastoObra = 0, hoje = hojeISO(), grupo = "L
 }
 
 function linha(tipo, mes, valor, grupo, extra = {}) {
-  const { dia, ...resto } = extra;
+  const { dia, slot, ...resto } = extra;
   return {
     plano_tipo: tipo,
+    // ── Porque é que existe um `slot` ──────────────────────────────────────
+    // O id de cada previsão do motor é `obra_<empresa>_<tipo>_<data>`. Com
+    // UMA linha por tipo e mês isso é único; com uma LISTA — três avenças no
+    // mesmo mês, duas despesas de fecho na mesma escritura — deixa de ser, e
+    // o INSERT rebenta com "duplicate key" ou, pior, fica só uma delas.
+    // O slot desempata, e é estável: é a posição da linha na lista que o
+    // utilizador escreveu, por isso um recálculo gera o mesmo id outra vez.
+    slot: slot === undefined || slot === null || slot === "" ? "" : String(slot),
     tipo: "saida",
     data: dia === "fim" ? ultimoDia(mes) : noMes(mes, 1),
     mes,
@@ -869,6 +991,13 @@ function linha(tipo, mes, valor, grupo, extra = {}) {
     funding: false, funding_pct: 100,
     ...resto,
   };
+}
+
+// O id de uma linha do motor. Determinístico de propósito: recalcular o plano
+// tem de dar os mesmos ids, senão cada recálculo duplicava tudo.
+export function idDaLinha(empresa, l) {
+  const slot = l?.slot ? `_${l.slot}` : "";
+  return `obra_${empresa}_${l?.plano_tipo}${slot}_${l?.data}`;
 }
 
 const NOMES_MES_CURTO = ["jan", "fev", "mar", "abr", "mai", "jun",
@@ -1134,7 +1263,7 @@ export function planearAplicacao({
   linhas = [], pagamentosExistentes = [], empresa, grupo = "LPX",
   primeiroMes = null, hoje = hojeISO(), plano = null,
 } = {}) {
-  const cats = categoriasDoMotor(grupo).map(c => c.toLowerCase());
+  const cats = categoriasDoMotor(grupo, plano).map(c => c.toLowerCase());
   // O primeiro mês da obra, para o relatório dizer de quando é que o plano
   // responde. Já não filtra nada — ver a nota lá abaixo.
   const corte = primeiroMes ? `${primeiroMes}-01` : mesDe(hoje) + "-01";
@@ -1173,7 +1302,7 @@ export function planearAplicacao({
   //     "Obra" aparece em "Gastos com Obras" ao lado das linhas do motor,
   //     mas a palavra "Obras" não está em lado nenhum nela. Era assim que as
   //     duas do Complai sobreviviam a todos os recálculos.
-  const rubricasDoMotor = new Set(rubricasGeridasPeloMotor(grupo)
+  const rubricasDoMotor = new Set(rubricasGeridasPeloMotor(grupo, plano)
     .map(r => semAcento(r).replace(/[_\s]+/g, " ")));
   const noMotor = (p) => {
     if (cats.includes(String(p.categoria || "").toLowerCase())) return true;
@@ -1204,7 +1333,7 @@ export function planearAplicacao({
       .map(p => [String(p.id), p]));
 
   const todas = linhas.map(l => ({
-    id: `obra_${empresa}_${l.plano_tipo}_${l.data}`,
+    id: idDaLinha(empresa, l),
     tipo: l.tipo || "saida",
     descricao: l.descricao,
     empresa,

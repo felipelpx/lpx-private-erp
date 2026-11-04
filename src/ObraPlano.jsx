@@ -10,6 +10,8 @@ import { useMovimentosPeriodo, useFracoes, useVendas, useRecebiveis } from "./ho
 import { vgvPorReceber } from "./vendas.js";
 import { categoriasDa } from "./categoriasEmpresa.js";
 import { CATEGORIAS } from "./categorias.js";
+import { opcoesDeRubrica, ehProjetoHDG } from "./rubricas.js";
+import { blocoDaLinhaHDG } from "./rubricasHDG.js";
 import { hojeISO, arred2 } from "./iva.js";
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -83,6 +85,10 @@ const campoFecho = {
 export default function ModalPlanoObra({
   empresa, grupo = "LPX", nomeEmpresa, plano: planoGravado,
   faturas = [], pagamentos = [], contaIds = [], currentUser,
+  // As despesas recorrentes da empresa. Só servem para AVISAR: uma avença da
+  // obra com o mesmo nome de uma recorrente ativa conta duas vezes no fluxo,
+  // e nada na base de dados impede isso.
+  recorrentes = [],
   onGuardar, onAplicar, onFechar, hoje = hojeISO(),
 }) {
   const [f, setF] = useState(() => ({ ...PLANO_VAZIO, ...(planoGravado || {}), empresa }));
@@ -132,6 +138,56 @@ export default function ModalPlanoObra({
     porFecho(fechos.map((d, k) => (k === i ? { ...d, [campo]: valor } : d)));
   const juntarFecho = () => porFecho([...fechos, { descricao: "", valor: "", categoria: "" }]);
   const apagarFecho = (i) => porFecho(fechos.filter((_, k) => k !== i));
+
+  // ── As outras avenças da obra ────────────────────────────────────────────
+  // A fiscalização e o CSO têm campo próprio porque existem em todas as
+  // obras. A taxa de gestão, o seguro, o TOC — essas variam de projeto para
+  // projeto e vivem nesta lista. Correm nos mesmos meses da obra e esticam
+  // com o prazo: é essa a diferença para uma despesa recorrente, que tem data
+  // de fim própria e não sabe nada da obra.
+  //
+  // A rubrica escolhe-se com a MESMA régua dos ecrãs de fluxo: nos projetos
+  // HDG a linha da FO, nas empresas LPX o plano de contas. Num projeto HDG a
+  // linha escolhida é a SUBcategoria, e o bloco deduz-se dela.
+  const ehHDG = ehProjetoHDG(empresa);
+  const rubricasDisponiveis = useMemo(() => opcoesDeRubrica(empresa) || [], [empresa]);
+  const avencas = Array.isArray(f.avencas) ? f.avencas : [];
+  const porAvenca = (lista) => setF(x => ({ ...x, avencas: lista }));
+  const mudaAvenca = (i, campo, valor) => porAvenca(avencas.map((a, k) => {
+    if (k !== i) return a;
+    if (campo !== "rubrica") return { ...a, [campo]: valor };
+    // Um só select para as duas taxonomias, guardado na forma que o motor usa.
+    return ehHDG
+      ? { ...a, categoria: blocoDaLinhaHDG(valor) || "Soft_Costs", subcategoria: valor }
+      : { ...a, categoria: valor, subcategoria: "" };
+  }));
+  const rubricaDaAvenca = (a) => (ehHDG ? (a?.subcategoria || "") : (a?.categoria || ""));
+  const juntarAvenca = () => porAvenca([...avencas,
+    { descricao: "", valor: "", categoria: "", subcategoria: "", financia: false }]);
+  const apagarAvenca = (i) => porAvenca(avencas.filter((_, k) => k !== i));
+  const totalAvencas = avencas.reduce((s, a) => s + Math.abs(num(a?.valor)), 0);
+
+  // ── A mesma despesa nos dois sítios ──────────────────────────────────────
+  // A taxa de gestão já existe como despesa RECORRENTE em alguns projetos.
+  // Pô-la também aqui conta-a duas vezes no fluxo e no forecast, e nada no
+  // sistema impede isso: são duas tabelas diferentes, cada uma a fazer o seu
+  // trabalho. O que se pode fazer é reparar e dizer.
+  const chaveTexto = (t) => String(t || "").trim().normalize("NFD")
+    .replace(/[̀-ͯ]/g, "").replace(/\s+/g, " ").toLowerCase();
+  const choquesComRecorrentes = useMemo(() => {
+    const ativas = (recorrentes || []).filter(r =>
+      r?.empresa === empresa && r?.ativa !== false && r?.tipo !== "entrada");
+    if (!ativas.length) return [];
+    return avencas.flatMap((a, i) => {
+      if (!(Math.abs(num(a?.valor)) > 0.005)) return [];
+      const descA = chaveTexto(a?.descricao);
+      const rubA = chaveTexto(rubricaDaAvenca(a));
+      const igual = ativas.find(r =>
+        (descA && chaveTexto(r.descricao) === descA) ||
+        (rubA && (chaveTexto(r.subcategoria) === rubA || chaveTexto(r.categoria) === rubA)));
+      return igual ? [{ i, avenca: a, recorrente: igual }] : [];
+    });
+  }, [avencas, recorrentes, empresa, ehHDG]);
 
   // O que falta receber na escritura, sugerido ao utilizador: o total da
   // tabela de vendas, menos o que já foi recebido, menos o que já está
@@ -224,8 +280,15 @@ export default function ModalPlanoObra({
     setAGravar(true);
     try {
       const r = await onGuardar({ ...f, empresa, id: empresa, updated_by: currentUser?.nome || "" });
-      if (r?.error) alert("Não foi possível guardar:\n\n" + (r.error.message || r.error));
-      else onFechar?.();
+      if (r?.error) { alert("Não foi possível guardar:\n\n" + (r.error.message || r.error)); return; }
+      if (r?.ignoradas?.length) {
+        // Dizer em vez de esconder: o plano ficou gravado, mas estas colunas
+        // ainda não existem na base e o que lá se escreveu perdeu-se.
+        alert("Plano guardado, mas sem " + r.ignoradas.join(", ")
+            + ".\n\nEssas colunas ainda não existem na base de dados."
+            + " Corre obra-9-avencas.sql no Supabase.");
+      }
+      onFechar?.();
     } finally { setAGravar(false); }
   };
 
@@ -527,9 +590,70 @@ export default function ModalPlanoObra({
                 pct={num(f.funding_pct)} o="o" nome="CSO" />
               <Numero rotulo="Taxa de IVA destes serviços" sufixo="%" valor={f.taxa_iva_servicos}
                 onMudar={muda("taxa_iva_servicos")} />
-              {(num(f.fiscalizacao_mensal) > 0 || num(f.cso_mensal) > 0) && (
+
+              {/* ── As outras avenças ──────────────────────────────────────
+                  Taxa de gestão, seguro de obra, TOC. Cada uma com a sua
+                  rubrica e a sua bandeira: há bancos que financiam umas e
+                  não outras. */}
+              <div style={{ borderTop: "1px solid #E7DED2", paddingTop: 10, marginTop: 2 }}>
+                <Rotulo dica="Taxa de gestão, seguro de obra, TOC — o que mais correr enquanto a obra durar. Esticar o prazo custa mais meses destas, como da fiscalização.">
+                  Outras avenças da obra
+                </Rotulo>
+                {avencas.map((a, i) => (
+                  <div key={i} style={{ border: "1px solid #EFE8DE", borderRadius: 8,
+                                        padding: "8px 9px", marginBottom: 7 }}>
+                    <div style={{ display: "grid", gridTemplateColumns: "1fr 96px 24px",
+                                  gap: 6, alignItems: "center" }}>
+                      <input value={a.descricao || ""} placeholder="Taxa de gestão"
+                        onChange={e => mudaAvenca(i, "descricao", e.target.value)}
+                        style={campoFecho} />
+                      <input value={a.valor ?? ""} placeholder="0" type="number" step="0.01"
+                        onChange={e => mudaAvenca(i, "valor", e.target.value)}
+                        style={{ ...campoFecho, textAlign: "right" }}
+                        title="Por mês, sem IVA" />
+                      <button onClick={() => apagarAvenca(i)} title="Apagar esta avença"
+                        style={{ background: "none", border: "none", color: "#B2B6B9",
+                                 cursor: "pointer", fontSize: 15, padding: 0 }}>×</button>
+                    </div>
+                    <select value={rubricaDaAvenca(a)}
+                      onChange={e => mudaAvenca(i, "rubrica", e.target.value)}
+                      style={{ ...campoFecho, marginTop: 6 }}>
+                      <option value="">Rubrica — escolher</option>
+                      {rubricasDisponiveis.map(c => <option key={c} value={c}>{c}</option>)}
+                    </select>
+                    <BandeiraFunding ligada={a.financia === true}
+                      onMudar={(v) => mudaAvenca(i, "financia", v)}
+                      valor={num(a.valor)} taxaIva={num(f.taxa_iva_servicos)}
+                      pct={num(f.funding_pct)} o="a"
+                      nome={String(a.descricao || "").trim() || "avença"} />
+                  </div>
+                ))}
+                <button onClick={juntarAvenca}
+                  style={{ background: "transparent", border: "1px dashed #D8CCBB", borderRadius: 7,
+                           padding: "6px 12px", fontSize: 11.5, color: "#7E8388", cursor: "pointer",
+                           width: "100%" }}>
+                  + Juntar avença
+                </button>
+              </div>
+
+              {/* A mesma despesa em dois sítios conta duas vezes. */}
+              {choquesComRecorrentes.length > 0 && (
+                <div style={{ background: "#FBF6EC", border: "1px solid #E3CE9F", borderRadius: 8,
+                              padding: "9px 11px", fontSize: 11, color: "#7A5A22",
+                              lineHeight: 1.6 }}>
+                  <strong>Isto vai contar duas vezes.</strong>{" "}
+                  {choquesComRecorrentes.map(c =>
+                    `«${c.avenca.descricao || "avença"}» já existe como despesa recorrente`
+                    + (c.recorrente.data_fim ? ` até ${fmtData(c.recorrente.data_fim)}` : " sem fim previsto")
+                  ).join("; ")}.
+                  {" "}Pára a recorrente no painel de recorrentes — a avença da obra
+                  estica com o prazo, a recorrente não.
+                </div>
+              )}
+
+              {(num(f.fiscalizacao_mensal) > 0 || num(f.cso_mensal) > 0 || totalAvencas > 0) && (
                 <div style={{ fontSize: 11, color: "#7E8388", fontFamily: "var(--fonte-numero)" }}>
-                  Sai por mês: {fmtEUR((num(f.fiscalizacao_mensal) + num(f.cso_mensal))
+                  Sai por mês: {fmtEUR((num(f.fiscalizacao_mensal) + num(f.cso_mensal) + totalAvencas)
                     * (1 + num(f.taxa_iva_servicos) / 100))} com IVA
                 </div>
               )}

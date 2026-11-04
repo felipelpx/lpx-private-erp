@@ -765,8 +765,18 @@ export default function FluxoFuturo({ faturas: faturasTodas, faturasLoading, pag
         m.entradas += base.valor;
         m.items.push({ ...base, tipo: "entrada" });
       } else {
-        m.saidas += base.valor;
-        m.items.push({ ...base, tipo: "saida" });
+        const saida = { ...base, tipo: "saida" };
+        m.saidas += saida.valor;
+        m.items.push(saida);
+        // Há despesas recorrentes que o banco financia — a taxa de gestão de
+        // um projeto em obra, por exemplo. Como em qualquer outra saída
+        // financiada, a entrada do banco vem atrás, no mesmo mês, e é ela que
+        // neutraliza a despesa em caixa. A regra é a mesma para todas as
+        // ocorrências: é a regra que está marcada, não cada mês.
+        comFunding(m, r, saida, {
+          origem: "Recorrente", recorrenteId: r.id, recorrente: r,
+          vencimento: oc.data,
+        });
       }
     });
   });
@@ -1425,6 +1435,7 @@ export default function FluxoFuturo({ faturas: faturasTodas, faturasLoading, pag
           empresa={empresa} grupo={grupoDaEmpresa} nomeEmpresa={nomeDaEmpresa}
           plano={planoDaEmpresa} faturas={faturas} pagamentos={pagamentosExtras}
           contaIds={contasDaEmpresa}
+          recorrentes={recorrentes}
           currentUser={currentUser}
           onGuardar={guardarPlano}
           onAplicar={aplicarPlanoObra}

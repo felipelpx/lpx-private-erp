@@ -22,6 +22,11 @@ const VAZIA = {
   id: null, empresa: "", tipo: "saida", descricao: "", categoria: "", subcategoria: "",
   valor: "", data_inicio: hojeISO(), data_fim: "", periodicidade: "mensal",
   ativa: true, obs: "",
+  // O banco pode financiar uma despesa recorrente — a taxa de gestão de um
+  // projeto em obra, por exemplo. A marca vive na REGRA e vale para todas as
+  // ocorrências: em caixa a despesa fica neutralizada na percentagem
+  // contratada, e o que pesa no projeto é só o resto.
+  funding: false, funding_pct: 100,
 };
 
 const campo = {
@@ -121,12 +126,22 @@ export default function ModalRecorrentes({
       valor: num(f.valor), data_inicio: f.data_inicio,
       data_fim: f.data_fim || null, periodicidade: f.periodicidade,
       ativa: f.ativa !== false, obs: f.obs || "",
+      funding: f.funding === true,
+      funding_pct: f.funding === true
+        ? Math.min(100, Math.max(0, num(f.funding_pct ?? 100))) : 100,
       criado_por: currentUser?.nome || currentUser?.email || "",
     };
     const r = await onGuardar?.(linha);
     setAGravar(false);
     if (r?.error) { setErro(r.error.message || "Não foi possível gravar."); return; }
+    if (r?.semEfeito) { setErro("A base de dados não gravou nenhuma linha."); return; }
     limpar();
+    // Depois de limpar, que também apaga o erro: dizer o que ficou por gravar,
+    // em vez de deixar o utilizador pensar que a marca pegou.
+    if (r?.ignoradas?.length) {
+      setErro(`Regra gravada, mas sem ${r.ignoradas.join(", ")}: a coluna ainda não`
+            + " existe na base de dados. Corre a migração recorrentes-2-funding.sql.");
+    }
   };
 
   const editar = (r) => setF({
@@ -134,6 +149,8 @@ export default function ModalRecorrentes({
     valor: String(r.valor ?? ""),
     data_fim: r.data_fim || "",
     subcategoria: r.subcategoria || "",
+    funding: r.funding === true,
+    funding_pct: r.funding_pct ?? 100,
   });
 
   // Parar é pôr a data de fim em hoje: o que já aconteceu fica na história.
@@ -226,6 +243,46 @@ export default function ModalRecorrentes({
                 {PERIODICIDADES.map(p => <option key={p.v} value={p.v}>{p.r}</option>)}
               </select>
             </div>
+
+            {/* ── O banco financia esta despesa ──────────────────────────── */}
+            {f.tipo !== "entrada" && (
+              <div style={{ background: COR.papel, border: `1px solid ${COR.linha}`,
+                            borderRadius: 8, padding: "10px 12px" }}>
+                <label style={{ display: "flex", gap: 8, alignItems: "flex-start",
+                                cursor: "pointer", fontSize: 12, color: COR.texto }}>
+                  <input type="checkbox" checked={f.funding === true}
+                    onChange={e => muda("funding")(e.target.checked)}
+                    style={{ marginTop: 2, accentColor: COR.navy }} />
+                  <span>O banco financia esta despesa</span>
+                </label>
+                {f.funding === true && (
+                  <div style={{ marginTop: 8, display: "flex", gap: 10, alignItems: "center" }}>
+                    <div style={{ flex: "0 0 92px" }}>
+                      <input type="number" step="1" min="0" max="100"
+                        value={f.funding_pct ?? 100}
+                        onChange={e => muda("funding_pct")(e.target.value)}
+                        style={{ ...campo, textAlign: "right" }} />
+                    </div>
+                    <span style={{ fontSize: 11.5, color: COR.textoSuave, lineHeight: 1.5 }}>
+                      % libertados pelo banco. Cada ocorrência traz atrás de si a
+                      entrada do banco, no mesmo mês — em caixa fica só a parte
+                      não financiada.
+                    </span>
+                  </div>
+                )}
+                {f.funding === true && num(f.valor) > 0 && (
+                  <div style={{ marginTop: 7, fontSize: 11, color: COR.textoSuave,
+                                fontFamily: "var(--fonte-numero)" }}>
+                    {fmtEUR(Math.abs(num(f.valor)) *
+                            Math.min(100, Math.max(0, num(f.funding_pct ?? 100))) / 100)}
+                    {" de entrada por ocorrência · fica "}
+                    {fmtEUR(Math.abs(num(f.valor)) *
+                            (1 - Math.min(100, Math.max(0, num(f.funding_pct ?? 100))) / 100))}
+                    {" a cargo do projeto"}
+                  </div>
+                )}
+              </div>
+            )}
 
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
               <div>
@@ -346,6 +403,17 @@ export default function ModalRecorrentes({
                         {rotuloPeriodicidade(r.periodicidade)} · desde {fmtData(r.data_inicio)}
                         {r.data_fim ? ` até ${fmtData(r.data_fim)}` : " · sem fim previsto"}
                       </div>
+                      {r.funding === true && (
+                        <div style={{ fontSize: 10.5, marginTop: 4, color: COR.textoSuave,
+                                      fontFamily: "var(--fonte-numero)" }}
+                             title="O banco liberta esta percentagem no mesmo mês. Em caixa fica só a parte não financiada.">
+                          🏦 Banco financia {Math.min(100, Math.max(0, num(r.funding_pct ?? 100)))}%
+                          {" · "}
+                          {fmtEUR(Math.abs(num(r.valor)) *
+                                  (1 - Math.min(100, Math.max(0, num(r.funding_pct ?? 100))) / 100))}
+                          {" a cargo do projeto por ocorrência"}
+                        </div>
+                      )}
                       <div style={{ fontSize: 11, marginTop: 3,
                                     color: terminada ? COR.textoTenue : COR.ouroEscuro }}>
                         {terminada
