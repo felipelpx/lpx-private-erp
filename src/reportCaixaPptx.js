@@ -235,14 +235,25 @@ function slideMes(r, sub) {
   const larguras = [4.73, 2.4, 2.4, 2.4];       // soma 11,93
   const linhas = [];
 
-  // O caixa com que o mês ABRE é o caixa de hoje. Fica em cima da grelha,
-  // porque é dele que tudo parte.
+  // ── De onde o mês parte, em duas linhas ────────────────────────────────
+  // O CAIXA DE HOJE é o que está mesmo no banco. Por baixo, o que já está
+  // vencido por pagar — que não aparece nas colunas do mês (vive no balde
+  // das vencidas) e por isso tem de abater aqui, senão o caixa do fim sai
+  // otimista por esse valor. Antes era um número só, e "abre com −9.235 €"
+  // parecia um erro a quem sabe que o banco tem dinheiro lá dentro.
   linhas.push({ altura: 0.30, celulas: [
-    { t: "Caixa no início do mês (hoje)", b: true, sz: 9, cor: C.tinta, fonte: K, fill: "F3F0EA" },
+    { t: "Caixa de hoje (no banco)", b: true, sz: 9, cor: C.tinta, fonte: K, fill: "F3F0EA" },
     { t: "", fill: "F3F0EA" }, { t: "", fill: "F3F0EA" },
-    { t: eur(mz.caixaAbertura), b: true, sz: 9, align: "r",
-      cor: sinal(mz.caixaAbertura), fonte: K, fill: "F3F0EA" },
+    { t: eur(r.saldoAtual), b: true, sz: 9, align: "r",
+      cor: sinal(r.saldoAtual), fonte: K, fill: "F3F0EA" },
   ]});
+  if (Math.abs(n2(r.vencido)) > 0.005) {
+    linhas.push({ altura: 0.26, celulas: [
+      { t: "Já vencido por pagar, de meses anteriores", sz: 8.5, cor: C.vermelho, fonte: K },
+      { t: "", sz: 8.5 }, { t: "", sz: 8.5 },
+      { t: eur(-n2(r.vencido)), b: true, sz: 8.5, align: "r", cor: C.vermelho, fonte: K },
+    ]});
+  }
 
   linhas.push({ altura: 0.28, celulas: [
     { t: "Despesa", b: true, sz: 9, cor: C.tinta, fonte: K, fill: C.cabTab },
@@ -252,7 +263,7 @@ function slideMes(r, sub) {
   ]});
 
   const h = 0.235;
-  const fixas = 2 /*caixa inicial + cabeçalho*/ + 3 /*secções*/ + 2 /*líquido + caixa fim*/;
+  const fixas = 3 /*caixa, vencido e cabeçalho*/ + 3 /*secções*/ + 2 /*líquido + caixa fim*/;
   const cabem = Math.max(6, Math.floor((6.50 - 1.62) / h) - fixas);
   const seccoes = rubricasQueCabem(mz.seccoes, cabem);
 
@@ -461,11 +472,20 @@ function slideFuturo(r, sub) {
   const y = Math.min(topo + alturaTab + 0.14, 6.46);
 
   // Uma linha a fechar: de onde parte o caixa, quando vira, e onde acaba.
+  // De onde parte, repartido — como no slide 2, e pela mesma razão: o número
+  // sozinho não se explica.
   const partes = [
-    { t: "Abre com ", sz: 9, cor: C.suave, fonte: K },
-    { t: eur(m.caixaAbertura), sz: 9, b: true, cor: sinal(m.caixaAbertura), fonte: K },
-    { t: "  ·  ", sz: 9, cor: C.suave, fonte: K },
+    { t: "Parte do caixa de hoje ", sz: 9, cor: C.suave, fonte: K },
+    { t: eur(r.saldoAtual), sz: 9, b: true, cor: sinal(r.saldoAtual), fonte: K },
   ];
+  if (Math.abs(n2(r.vencido)) > 0.005) {
+    partes.push({ t: " menos ", sz: 9, cor: C.suave, fonte: K });
+    partes.push({ t: eur(r.vencido), sz: 9, b: true, cor: C.vermelho, fonte: K });
+    partes.push({ t: " já vencido = ", sz: 9, cor: C.suave, fonte: K });
+    partes.push({ t: eur(m.caixaAbertura), sz: 9, b: true,
+                  cor: sinal(m.caixaAbertura), fonte: K });
+  }
+  partes.push({ t: "  ·  ", sz: 9, cor: C.suave, fonte: K });
   if (fu.primeiroNegativo) {
     partes.push({ t: "caixa negativo a partir de ", sz: 9, cor: C.suave, fonte: K });
     partes.push({ t: `${fu.primeiroNegativo.rotulo} (${eur0(fu.primeiroNegativo.caixa)})`,

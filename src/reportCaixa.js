@@ -413,8 +413,17 @@ export function construirReportCaixa({
   const semana = semanaQuePassou({ saldoAtual, saldoAnterior, movimentos, de, ate: hoje });
   const porPagar = faturasPorPagar({ faturas, empresa });
 
-  // O caixa de onde o futuro parte: o de hoje menos o que já está vencido —
-  // o mesmo ponto de partida da linha "Caixa acumulado" da matriz.
+  // ── De onde parte o caixa ────────────────────────────────────────────────
+  // O ponto de partida da projeção é o caixa de hoje MENOS o que já está
+  // vencido por pagar: essas despesas não estão nos meses à frente (vivem no
+  // balde das vencidas), por isso, se não se abatessem aqui, o caixa saía
+  // otimista pelo valor delas. É o mesmo ponto de partida da linha "Caixa
+  // acumulado" da matriz do ecrã.
+  //
+  // Mas os SLIDES não mostram só esse número: mostram o caixa de hoje e o
+  // vencido em linhas separadas, porque "abre com −9.235 €" sem explicação
+  // parece um erro quando o banco tem dinheiro lá dentro. A soma das duas
+  // linhas é que é este `saldoInicial`.
   const saldoInicial = arred2(num(saldoAtual) - num(vencido));
 
   const mesAtual = (meses || []).find(m => m.key === mesKey(hoje)) || (meses || [])[0] || null;
