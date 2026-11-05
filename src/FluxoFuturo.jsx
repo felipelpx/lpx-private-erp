@@ -3,7 +3,7 @@ import { useVendas, useSaldosAtuais, useRecebiveis, useObraPlanos,
          useDespesasRecorrentes, useFracoes } from "./hooks.js";
 import ModalPlanoObra, { BotaoPlanoObra } from "./ObraPlano.jsx";
 import { ANCORAS, dataAncorada, rotuloAncora, diaDe,
-         rubricasGeridasPeloMotor, rubricaNoFluxo } from "./obra.js";
+         rubricasGeridasPeloMotor, rubricaNoFluxo, classificacaoDe } from "./obra.js";
 import ModalRecorrentes, { BotaoRecorrentes } from "./Recorrentes.jsx";
 import { ocorrenciasDe } from "./recorrentes.js";
 import { linhasDeFluxo as linhasDeVendasBase, soReceita,
@@ -850,11 +850,30 @@ export default function FluxoFuturo({ faturas: faturasTodas, faturasLoading, pag
   const rubricaDoItem = useCallback((it) => {
     const emp = it?.pagamento?.empresa || it?.fatura?.empresa
              || it?.recorrente?.empresa || (empresa !== "all" ? empresa : "");
+    const g = EMPRESAS_TODAS.find(e => e.id === emp)?.grupo === "HDG" ? "HDG" : "LPX";
+
+    // ── A entrada do banco é do BANCO, não da despesa que a originou ──────
+    // A linha de funding leva atrás a fatura (ou a previsão) de origem, para
+    // o detalhe da célula poder mostrar de onde veio. Só que a classificação
+    // lia a `subcategoria` desse documento — e nos projetos HDG a
+    // subcategoria é que manda. Resultado: a libertação do banco de uma
+    // fatura de obra aparecia dentro de «Gastos com Obras», e como essa
+    // rubrica não é funding, ia parar às RECEITAS. Uma entrada do banco
+    // contada como receita do projeto.
+    //
+    // A rubrica dela é a MESMA que o plano de obra usa para o funding dele
+    // (classificacaoDe) — nas empresas LPX o «Funding», nos projetos HDG o
+    // «Inflow - Obra». Uma definição só, como no Real × Orçado.
+    if (it?._funding) {
+      const c = classificacaoDe("funding", g);
+      const r = rubricaDe(emp, c.categoria, c.subcategoria || "") || c.categoria;
+      return rubricaNoFluxo(g, r, "");
+    }
+
     const sub = it?.pagamento?.subcategoria || it?.fatura?.subcategoria || "";
     const r = rubricaDe(emp, it?.cat, sub) || it?.cat || "";
     // O IVA da obra é obra: lê-se dentro do balde dela, com o nome do
     // trimestre a distingui-lo. Ver rubricaNoFluxo em src/obra.js.
-    const g = EMPRESAS_TODAS.find(e => e.id === emp)?.grupo === "HDG" ? "HDG" : "LPX";
     return rubricaNoFluxo(g, r, it?.desc || "");
   }, [empresa]);
 
