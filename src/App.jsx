@@ -1627,7 +1627,7 @@ export default function App() {
           {tab==="realizado" && <FluxoRealizado currentUser={currentUser} EMPRESAS={empresasVisiveis}/>}
           {tab==="receber"   && <ContasReceber currentUser={currentUser} empresasVisiveis={empresasVisiveis}/>}
           {tab==="pagar"     && <ContasPagar canEdit={canEdit && !isInvestidor} EMPRESAS={empresasVisiveis} faturas={faturas} setFaturas={handleSetFaturas} addFatura={addFatura} updateFatura={updateFatura} deleteFatura={deleteFatura}/>}
-          {tab==="pagamentos"&& <PagamentosView faturas={faturas.filter(f=>empresasVisiveis.some(e=>e.id===f.empresa)||!f.empresa)} pagamentosExtras={pagamentosExtras.filter(p=>empresasVisiveis.some(e=>e.id===p.empresa)||!p.empresa)} currentUser={currentUser} profiles={profiles}/>}
+          {tab==="pagamentos"&& <PagamentosView faturas={faturas.filter(f=>empresasVisiveis.some(e=>e.id===f.empresa)||!f.empresa)} pagamentosExtras={pagamentosExtras.filter(p=>empresasVisiveis.some(e=>e.id===p.empresa)||!p.empresa)} faturasTodas={faturas} pagamentosTodos={pagamentosExtras} currentUser={currentUser} profiles={profiles}/>}
           {tab==="iva"       && <IVAView currentUser={currentUser} empresasVisiveis={empresasVisiveis}/>}
           {tab==="questoes"  && <Questoes currentUser={currentUser} questionamentos={questionamentos} loading={questoesLoading} error={questoesErro} updateQuestionamento={updateQuestionamento} deleteQuestionamento={deleteQuestionamento} marcarLida={marcarLida} empresasVisiveis={empresasVisiveis}/>}
           {tab==="users"     && <Utilizadores currentUser={currentUser}/>}

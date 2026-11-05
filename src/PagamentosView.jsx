@@ -17,6 +17,16 @@ const fmtDateTime = (s) => {
   return fmtDataHora(d);
 };
 
+// Texto que vai para dentro do HTML do mapa impresso.
+//
+// Aqui entra texto escrito por pessoas — a observação de uma fatura, o nome
+// de um fornecedor. Trocar só o "<" deixava passar o "&", e um fornecedor
+// escrito "Silva & Filhos" saía do PDF com entidades meias feitas. Trata-se
+// dos cinco de uma vez.
+const escapar = (t) => String(t ?? "")
+  .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+  .replace(/"/g, "&quot;").replace(/'/g, "&#39;");
+
 const STATUS_INFO = {
   pendente_nivel_1: { label: "Pendente N1", color: "#C19A4A", bg: "#F6ECD6" },
   pendente_nivel_2: { label: "Pendente N2", color: "#2C4A63", bg: "#E0E9F0" },
@@ -24,7 +34,13 @@ const STATUS_INFO = {
   recusado:         { label: "Recusado",     color: "#A93226", bg: "#F6DED9" },
 };
 
-export default function PagamentosView({ faturas, pagamentosExtras, currentUser, profiles = [] }) {
+// `faturas` e `pagamentosExtras` vêm filtrados pelo grupo escolhido no topo
+// da app (LPX / HDG) — é o que deve alimentar a escolha do que se vai pagar.
+// `faturasTodas` e `pagamentosTodos` vêm sem filtro nenhum, e servem só para
+// um mapa já gravado conseguir reler as suas próprias linhas: um mapa tem
+// linhas dos dois grupos e não pode perder metade por causa de um filtro.
+export default function PagamentosView({ faturas, pagamentosExtras,
+  faturasTodas, pagamentosTodos, currentUser, profiles = [] }) {
   const { mapas, loading: mapasLoading, addMapa, updateMapa, deleteMapa } = useMapasPagamento();
   const [view, setView] = useState("lista");  // 'lista' | 'novo' | 'detalhe'
   const [activeMapaId, setActiveMapaId] = useState(null);
@@ -80,6 +96,8 @@ export default function PagamentosView({ faturas, pagamentosExtras, currentUser,
       profileById={profileById}
       faturas={faturas}
       pagamentosExtras={pagamentosExtras}
+      faturasTodas={faturasTodas}
+      pagamentosTodos={pagamentosTodos}
       onClose={() => { setActiveMapaId(null); setView("lista"); }}
       onUpdate={updateMapa}
       onDelete={async (id) => {
@@ -301,6 +319,13 @@ function NovoMapa({ faturas, currentUser, onCancel, onCreated }) {
       categoria: c.categoria,
       valor: c.valor,
       vencimento: c.vencimento || null,
+      // A descrição do gasto fica GRAVADA no mapa, não só apontada.
+      // O mapa é o documento que autoriza o pagamento: se a fatura for
+      // apagada ou arquivada daqui a seis meses, o mapa tem de continuar a
+      // dizer o que foi pago. Precisa da coluna `obs` em
+      // mapas_pagamento_itens (ver supabase/mapa-obs.sql); sem ela a
+      // escrita ignora o campo e o ecrã continua a ler da fatura viva.
+      obs: c.obs || "",
     }));
     const mapa = {
       descricao,
@@ -533,7 +558,8 @@ function PreviewFatura({ previewItem, onFechar }) {
 }
 
 // ─── Componente: detalhe de um mapa ──────────────────────────────────────────
-function DetalheMapa({ mapaId, mapas, currentUser, profileById, faturas = [], pagamentosExtras = [], onClose, onUpdate, onDelete }) {
+function DetalheMapa({ mapaId, mapas, currentUser, profileById, faturas = [], pagamentosExtras = [],
+  faturasTodas = null, pagamentosTodos = null, onClose, onUpdate, onDelete }) {
   const mapa = (mapas || []).find(m => m.id === mapaId);
   const { itens, loading: itensLoading } = useMapaItens(mapaId);
   const [previewItem, setPreviewItem] = useState(null);  // {item, fatura|pagamento}
@@ -561,16 +587,39 @@ function DetalheMapa({ mapaId, mapas, currentUser, profileById, faturas = [], pa
   const nomeUser = (id) => profileById[id]?.email || profileById[id]?.nome || id || "—";
 
   // Índices para lookup O(1) por id (origem_id vem do item)
+  //
+  // ATENÇÃO à lista que se usa aqui: tem de ser a de TODAS as faturas, não a
+  // que o ecrã recebe filtrada. O filtro LPX/HDG do topo da app aplica-se aos
+  // `faturas` — e um mapa aprovado tem linhas dos dois grupos. Com o filtro
+  // em HDG, as linhas da LPX continuavam a aparecer no mapa (vêm gravadas na
+  // própria tabela do mapa) mas perdiam a fatura de origem: ficavam sem a
+  // descrição e sem o botão de ver o documento, com um "—" no lugar.
+  //
+  // Um mapa de pagamento é um documento que autoriza pagamentos. O que ele
+  // mostra não pode depender de como está um filtro noutro sítio do ecrã.
+  const todasAsFaturas = faturasTodas || faturas;
+  const todosOsPagamentos = pagamentosTodos || pagamentosExtras;
   const faturasById = useMemo(() => {
     const m = {};
-    (faturas || []).forEach(f => { if (f?.id) m[String(f.id)] = f; });
+    (todasAsFaturas || []).forEach(f => { if (f?.id) m[String(f.id)] = f; });
     return m;
-  }, [faturas]);
+  }, [todasAsFaturas]);
   const pagamentosById = useMemo(() => {
     const m = {};
-    (pagamentosExtras || []).forEach(p => { if (p?.id) m[String(p.id)] = p; });
+    (todosOsPagamentos || []).forEach(p => { if (p?.id) m[String(p.id)] = p; });
     return m;
-  }, [pagamentosExtras]);
+  }, [todosOsPagamentos]);
+
+  // O que identifica o gasto, numa linha. Um sítio só, para o ecrã e o PDF
+  // dizerem o mesmo.
+  //
+  // Primeiro o que está gravado no próprio item do mapa (`obs`): é o que
+  // torna o mapa independente — uma fatura apagada ou arquivada mais tarde
+  // deixa de ter como ser lida, e o documento que foi ao banco não pode
+  // ficar sem a descrição por causa disso. Depois a fatura viva, para os
+  // mapas antigos, gravados antes de a coluna existir.
+  const descricaoDoItem = (it, src) =>
+    String(it?.obs || src?.obs || src?.observacoes || "").trim();
 
   const abrirPreview = (item) => {
     const idKey = String(item.origem_id || "");
@@ -771,13 +820,24 @@ function DetalheMapa({ mapaId, mapas, currentUser, profileById, faturas = [], pa
         <tbody>
       `;
       grupo.items.forEach(it => {
+        // A descrição do gasto, pela MESMA régua do ecrã. O PDF é o que vai
+        // ao banco e a quem aprova: uma linha que diz "Complai · FT 2026A1/110"
+        // e mais nada obriga a ir abrir a fatura para saber o que se autoriza.
+        const idKey = String(it.origem_id || "");
+        const src = it.tipo_origem === "fatura" ? faturasById[idKey]
+                  : it.tipo_origem === "pagamento_extra" ? pagamentosById[idKey]
+                  : null;
+        const obs = escapar(descricaoDoItem(it, src));
         tabelaEmpresas += `
           <tr style="border-bottom:1px solid #EFE8DE;">
-            <td style="padding:7px 14px 7px 28px;color:#7E8388;font-size:10px;font-family:monospace;">${it.tipo_origem}</td>
-            <td style="padding:7px 14px;font-family:monospace;font-size:11px;">${fmtDate(it.vencimento)}</td>
-            <td style="padding:7px 14px;font-size:11px;">${(it.fornecedor ? `<span style="color:#7E8388">${it.fornecedor} · </span>` : "")}${(it.descricao || "").replace(/</g, "&lt;")}</td>
-            <td style="padding:7px 14px;font-size:10px;color:#7A5A22;">${it.categoria || "—"}</td>
-            <td style="padding:7px 14px;text-align:right;font-family:monospace;font-weight:600;font-size:11px;color:#A93226;">${fmtFull(it.valor)}</td>
+            <td style="padding:7px 14px 7px 28px;color:#7E8388;font-size:10px;font-family:monospace;vertical-align:top;">${it.tipo_origem}</td>
+            <td style="padding:7px 14px;font-family:monospace;font-size:11px;vertical-align:top;">${fmtDate(it.vencimento)}</td>
+            <td style="padding:7px 14px;font-size:11px;vertical-align:top;">
+              <div>${(it.fornecedor ? `<span style="color:#7E8388">${escapar(it.fornecedor)} · </span>` : "")}${escapar(it.descricao)}</div>
+              ${obs ? `<div style="font-size:10px;color:#7E8388;margin-top:3px;font-style:italic;line-height:1.4;">${obs}</div>` : ""}
+            </td>
+            <td style="padding:7px 14px;font-size:10px;color:#7A5A22;vertical-align:top;">${escapar(it.categoria) || "—"}</td>
+            <td style="padding:7px 14px;text-align:right;font-family:monospace;font-weight:600;font-size:11px;color:#A93226;vertical-align:top;">${fmtFull(it.valor)}</td>
           </tr>
         `;
       });
@@ -806,7 +866,7 @@ function DetalheMapa({ mapaId, mapas, currentUser, profileById, faturas = [], pa
           <div style="font-size:10px;color:#A93226;text-transform:uppercase;letter-spacing:0.5px;font-family:monospace;margin-bottom:6px;">Recusado</div>
           <div style="color:#A93226;font-weight:700;font-size:14px;">✕ ${nomeUser(mapa.recusado_por)}</div>
           <div style="color:#5C6166;font-size:11px;">${fmtDateTime(mapa.recusado_em)}</div>
-          ${mapa.motivo_recusa ? `<div style="color:#6E241C;font-size:12px;margin-top:8px;font-style:italic;">"${mapa.motivo_recusa.replace(/</g, "&lt;")}"</div>` : ""}
+          ${mapa.motivo_recusa ? `<div style="color:#6E241C;font-size:12px;margin-top:8px;font-style:italic;">"${escapar(mapa.motivo_recusa)}"</div>` : ""}
         </div>
       ` : ""}
     `;
@@ -853,7 +913,7 @@ function DetalheMapa({ mapaId, mapas, currentUser, profileById, faturas = [], pa
     </div>
   </div>
 
-  <h1>${(mapa.descricao || "Mapa de Pagamento").replace(/</g, "&lt;")}</h1>
+  <h1>${escapar(mapa.descricao || "Mapa de Pagamento")}</h1>
 
   <div class="info-grid">
     <div>
@@ -1110,7 +1170,7 @@ function DetalheMapa({ mapaId, mapas, currentUser, profileById, faturas = [], pa
                     const src = it.tipo_origem === "fatura" ? faturasById[idKey]
                               : it.tipo_origem === "pagamento_extra" ? pagamentosById[idKey]
                               : null;
-                    const obs = src?.obs || src?.observacoes || "";
+                    const obs = descricaoDoItem(it, src);
                     const temAnexo = !!(src?.anexo_b64 && src?.anexo_nome);
                     const itemSelecionado = selectedItens && selectedItens.has(it.id);
                     rows.push(

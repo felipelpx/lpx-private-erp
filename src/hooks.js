@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback } from 'react'
 import { supabase } from './supabase'
-import { escreverTolerante, semAuxiliares, aplicarNaLista } from './escrita.js'
+import { escreverTolerante, semAuxiliares, aplicarNaLista, colunaEmFalta } from './escrita.js'
 
 // ─── HELPER: generic realtime table hook ─────────────────────────────────────
 function useRealtimeTable(table, queryFn) {
@@ -404,7 +404,24 @@ export function useMapasPagamento() {
     if (!mapaId) return { data: null, error: { message: "Cabeçalho criado mas sem id (RLS?)" } }
     // 2. Insere itens com o mapa_id
     const itensComMapaId = (itens || []).map(it => ({ ...it, mapa_id: mapaId }))
-    const { data: itensInseridos, error: e2 } = await supabase.from('mapas_pagamento_itens').insert(itensComMapaId).select()
+    // Escrita tolerante: o item leva a `obs` (a descrição do gasto, gravada
+    // com o mapa para ele não depender da fatura continuar viva), e essa
+    // coluna só existe depois de se correr supabase/mapa-obs.sql. Sem
+    // tolerância, o PostgREST recusa o INSERT INTEIRO por causa de uma
+    // coluna que não conhece — e deixava de se poder criar mapas de todo.
+    let linhas = itensComMapaId
+    let { data: itensInseridos, error: e2 } =
+      await supabase.from('mapas_pagamento_itens').insert(linhas).select()
+    // Se a base recusar por causa de uma coluna que não conhece, tira-se essa
+    // coluna e tenta-se outra vez — até três vezes, que chega para as colunas
+    // novas em cima da mesa. O mesmo detetor que o resto da app usa.
+    for (let i = 0; e2 && i < 3; i++) {
+      const col = colunaEmFalta(e2)
+      if (!col) break
+      linhas = linhas.map(({ [col]: _fora, ...resto }) => resto)
+      const r = await supabase.from('mapas_pagamento_itens').insert(linhas).select()
+      itensInseridos = r.data; e2 = r.error
+    }
     if (e2) { console.error('addMapa itens:', e2); return { data: created[0], error: e2 } }
     await reload()
     return { data: { mapa: created[0], itens: itensInseridos || [] }, error: null }
