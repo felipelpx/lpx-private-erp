@@ -17,6 +17,7 @@ import { temFunding, pctFunding, linhaFunding, ERRO_SEM_COLUNAS, faltamColunas, 
 import { construirMatriz } from "./matriz.js";
 import { opcoesDeRubrica, rubricaDe } from "./rubricas.js";
 import MatrizFluxo, { BotaoFunding, AcoesDoItem } from "./MatrizFluxo.jsx";
+import BotaoReportCaixa from "./ReportCaixaBotao.jsx";
 
 const fmt = (v) => fmtEuro(v, 0);
 // Valor exato com 2 casas decimais (para parcelas individuais)
@@ -1067,6 +1068,22 @@ export default function FluxoFuturo({ faturas: faturasTodas, faturasLoading, pag
           )}
           <BotaoRecorrentes empresa={empresa} recorrentes={recorrentes}
             onAbrir={() => setRecorrentesAberto(true)} />
+          {/* O report de caixa em PowerPoint. Leva os MESMOS meses e o MESMO
+              saldo que a matriz mostra — se fosse buscar o fluxo por outro
+              caminho, o report e o ecrã diziam coisas diferentes na mesma
+              reunião. */}
+          <BotaoReportCaixa
+            nomeEmpresa={empresa === "all" ? "Todos os Projetos" : nomeDaEmpresa}
+            // Em "Todos os Projetos" o report é da tesouraria do grupo, e
+            // precisa das contas todas: `contasDaEmpresa` devolve vazio nesse
+            // caso de propósito (é por empresa), e o botão ficava desligado.
+            contaIds={empresa === "all" ? allContaIds : contasDaEmpresa}
+            meses={mesesComSaldo} saldoAtual={saldoAtual}
+            vencido={vencidas.saidas - vencidas.entradas}
+            // A mesma régua de rubricas da matriz do ecrã: nos projetos HDG
+            // as linhas da FO, nas empresas LPX o plano de contas.
+            rubricaDoItem={rubricaDoItem}
+            hoje={hojeISO} nMeses={6} />
           {/* Real (com fatura) vs Previsto (estimativa lançada à mão) */}
           <div style={{ display: "flex", gap: 2, background: "#E7DED2", borderRadius: 8, padding: 2, marginLeft: 4 }}>
             {[["todos", "Tudo"], ["real", "Custo real"], ["previsto", "Forecast"]].map(([v, lbl]) => (

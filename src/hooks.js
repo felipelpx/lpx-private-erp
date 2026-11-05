@@ -335,6 +335,42 @@ export function useCaixaUnico() {
 // ─── PLANOS DE OBRA ──────────────────────────────────────────────────────────
 // Um plano por projeto com obra. Os inputs do utilizador vivem aqui; as
 // previsões que saem deles vão para pagamentos_extras, marcadas.
+// ─── O caixa de uma semana, lido à conta-gotas ──────────────────────────────
+// O report de caixa precisa do saldo de há N dias e dos movimentos do meio.
+// Não é um hook: são duas consultas feitas SÓ quando se carrega no botão. Em
+// hook, o Fluxo Futuro passava a fazer mais duas idas à base sempre que
+// abrisse, para uma coisa que se usa uma vez por semana.
+export async function lerCaixaSemana(contaIds = [], de, ate) {
+  const ids = (contaIds || []).filter(Boolean)
+  if (!ids.length || !de || !ate) return { saldoAnterior: 0, movimentos: [], erro: null }
+
+  // O saldo com que a semana abriu: o último saldo de cada conta ATÉ à data.
+  // Lê-se do extrato em vez de se deduzir por subtração — assim, se as duas
+  // pontas não fecharem, isso aparece no report em vez de se esconder.
+  let saldoAnterior = 0
+  const erros = []
+  await Promise.all(ids.map(async (cid) => {
+    const { data, error } = await supabase
+      .from('movimentos').select('saldo')
+      .eq('conta_id', cid).lte('data', de)
+      .order('data', { ascending: false })
+      .order('seq', { ascending: false, nullsFirst: false })
+      .limit(1)
+    if (error) erros.push(error.message)
+    else if (data?.[0]) saldoAnterior += parseFloat(data[0].saldo) || 0
+  }))
+
+  const { data: movs, error: e2 } = await supabase
+    .from('movimentos')
+    .select('data, movimento, detalhes, valor, categoria, subcategoria, conta_id, banco')
+    .in('conta_id', ids).gt('data', de).lte('data', ate)
+    .order('data', { ascending: true })
+  if (e2) erros.push(e2.message)
+
+  return { saldoAnterior, movimentos: movs || [],
+           erro: erros.length ? erros.join(" · ") : null }
+}
+
 export function useObraPlanos() {
   const { data, loading, error } = useRealtimeTable('obra_planos',
     () => supabase.from('obra_planos').select('*').order('empresa'))
