@@ -186,17 +186,25 @@ function slideSemana(r, sub) {
     ]});
     f.push(tabela(xR, yT, [2.9, 0.7, 2.22], l));
 
-    // As maiores, com fornecedor e vencimento — é por aqui que se decide.
-    const yM = yT + 0.26 + pp.estados.slice(0, 3).length * 0.24 + 0.27 + 0.16;
-    const quantas = Math.max(0, Math.min(4, Math.floor((6.78 - yM - 0.26) / 0.24)));
+    // As maiores, com fornecedor, descrição e vencimento — é por aqui que se
+    // decide. A descrição vai por baixo do fornecedor, em corpo mais pequeno:
+    // sem ela, duas faturas da Autoridade Tributária no mesmo vencimento são
+    // dois números iguais e a lista não serve para decidir o que se paga.
+    // A linha fica mais alta — 0,31" é o que as duas linhas medem mesmo, com
+    // 8,5 pt em cima e 7,2 pt por baixo; mais do que isso era espaço perdido
+    // e menos uma fatura na lista.
+    const ALT = 0.31;
+    const yM = yT + 0.26 + pp.estados.slice(0, 3).length * 0.24 + 0.27 + 0.12;
+    const quantas = Math.max(0, Math.min(4, Math.floor((6.78 - yM - 0.26) / ALT)));
     if (quantas > 0) {
       const l2 = [{ altura: 0.26, celulas: [
         { t: "Maiores em aberto", b: true, sz: 8.5, cor: C.tinta, fonte: K, fill: C.cabTab },
         { t: "Vence", b: true, sz: 8.5, cor: C.tinta, fonte: K, align: "r", fill: C.cabTab },
         { t: "Valor", b: true, sz: 8.5, cor: C.tinta, fonte: K, align: "r", fill: C.cabTab },
       ]}];
-      pp.maiores.slice(0, quantas).forEach((x, i) => l2.push({ altura: 0.24, celulas: [
+      pp.maiores.slice(0, quantas).forEach((x, i) => l2.push({ altura: ALT, celulas: [
         { t: (x.bloqueada ? "B· " : x.atrasada ? "!  " : "") + x.fornecedor.slice(0, 29),
+          t2: x.descricao || "(sem descrição)", cor2: x.descricao ? "7E8388" : "A8ADB1",
           sz: 8.5, cor: C.texto, fonte: K, fill: i % 2 ? C.zebra : null },
         { t: x.vencimento ? `${x.vencimento.slice(8, 10)}/${x.vencimento.slice(5, 7)}` : "—",
           sz: 8.5, cor: x.atrasada || x.bloqueada ? C.vermelho : C.suave, fonte: K,
@@ -205,7 +213,7 @@ function slideSemana(r, sub) {
           fill: i % 2 ? C.zebra : null },
       ]}));
       f.push(tabela(xR, yM, [2.9, 0.7, 2.22], l2));
-      f.push(texto(xR, Math.min(yM + 0.26 + quantas * 0.24 + 0.04, 6.74), colR, 0.24,
+      f.push(texto(xR, Math.min(yM + 0.26 + quantas * ALT + 0.04, 6.74), colR, 0.24,
              par([{ t: "!  atrasada      B·  pagamento bloqueado", sz: 7.5, cor: C.suave, fonte: K }])));
     }
   } else {

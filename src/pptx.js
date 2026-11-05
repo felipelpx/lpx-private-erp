@@ -192,8 +192,15 @@ export function tabela(x, y, larguras, linhas) {
       const fill = c.fill
         ? `<a:solidFill><a:srgbClr val="${c.fill.replace("#", "")}"/></a:solidFill>`
         : `<a:noFill/>`;
+      // Uma célula pode levar uma segunda linha (`t2`): serve para pôr o nome
+      // em cima e a descrição por baixo, mais pequena e mais clara, sem gastar
+      // uma coluna inteira numa tabela que já está apertada.
       const p = par([{ t: c.t, cor: c.cor, sz: c.sz ?? 9, b: c.b, fonte: c.fonte }],
-                    { align: c.align || "l" });
+                    { align: c.align || "l" })
+        + (c.t2
+            ? par([{ t: c.t2, cor: c.cor2 || "8A8F93", sz: c.sz2 ?? 7.2, fonte: c.fonte }],
+                  { align: c.align || "l", entreLinhas: 0.92 })
+            : "");
       // As bordas verticais saem TODAS: o deck de referência não as tem, e
       // sem as desligar à mão o PowerPoint e o LibreOffice desenham as do
       // estilo por omissão, que transformam a tabela numa grelha de Excel.

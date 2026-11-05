@@ -329,6 +329,31 @@ export function conclusoes({ semana = null, mes = null, futuro = null,
 }
 
 /**
+ * O que identifica o gasto de uma fatura, numa linha.
+ *
+ * Primeiro a observação do Contas a Pagar (é a que diz o que se comprou),
+ * depois a descrição do serviço, as notas, o n.º da fatura e, em último
+ * recurso, a rubrica. Devolve "" se o único candidato for o nome do fornecedor,
+ * que já está na coluna ao lado — repeti-lo só ocupa espaço.
+ */
+export function descricaoDaFatura(f) {
+  if (!f) return "";
+  const forn = String(f.fornecedor || "").trim().toLowerCase();
+  // `obs` é a coluna que o Contas a Pagar mostra como descrição (é lá que o
+  // importador escreve a descrição do serviço da fatura). As outras ficam
+  // como rede, porque nem todas as faturas entraram por esse caminho.
+  const candidatos = [f.obs, f.observacoes, f.descricao_servico, f.descricao,
+                      f.notas, f.fatura, f.numero_fatura, f.subcategoria, f.categoria];
+  for (const c of candidatos) {
+    const t = String(c ?? "").replace(/\s+/g, " ").trim();
+    if (!t) continue;
+    if (forn && t.toLowerCase() === forn) continue;
+    return t.slice(0, 54);
+  }
+  return "";
+}
+
+/**
  * As faturas por pagar — pendentes, atrasadas e bloqueadas.
  *
  * Não é o mesmo que o "vencido" do caixa: aquele junta quatro origens e
@@ -362,6 +387,10 @@ export function faturasPorPagar({ faturas = [], empresa = null } = {}) {
     .slice(0, 6)
     .map(f => ({
       fornecedor: String(f.fornecedor || f.fatura || "(sem fornecedor)").slice(0, 34),
+      // O que é que este gasto é. Sem isto, duas faturas da Autoridade
+      // Tributária no mesmo dia são indistinguíveis e a lista não serve para
+      // decidir nada.
+      descricao: descricaoDaFatura(f),
       rubrica: f.subcategoria || f.categoria || "",
       vencimento: String(f.vencimento || "").slice(0, 10),
       valor: abs(f.valor),
