@@ -15,6 +15,7 @@ import { fmtEUR as fmtEuro } from "./formato.js";
 import { labelEmpresa, EMPRESAS as EMPRESAS_TODAS, GRUPOS, GRUPOS_INFO } from "./empresas.js";
 import { temFunding, pctFunding, linhaFunding, ERRO_SEM_COLUNAS, faltamColunas, CATEGORIA_FUNDING } from "./funding.js";
 import { construirMatriz } from "./matriz.js";
+import { construirMesesDoFluxo, criarRubricaDoItem } from "./fluxoMeses.js";
 import { opcoesDeRubrica, rubricaDe } from "./rubricas.js";
 import MatrizFluxo, { BotaoFunding, AcoesDoItem } from "./MatrizFluxo.jsx";
 import BotaoReportCaixa from "./ReportCaixaBotao.jsx";
@@ -530,285 +531,25 @@ export default function FluxoFuturo({ faturas: faturasTodas, faturasLoading, pag
     ? EMPRESAS_CAIXA.filter(e => e.id !== "all").reduce((s, e) => s + e.saldo, 0)
     : empObj.saldo;
 
-  // Build monthly cashflow for next 36 months
+  // ── A grelha de meses ────────────────────────────────────────────────────
+  // Construída em src/fluxoMeses.js, que é o MESMO construtor que o Investor
+  // Relations usa. Era aqui que viviam estas ~270 linhas; o IR tinha a sua
+  // própria versão, mais curta, e os dois ecrãs mostravam fluxos diferentes
+  // ao mesmo investidor. Agora é um sítio só.
   const hoje = new Date();
-  const meses = Array.from({ length: 36 }, (_, i) => {
-    const d = new Date(hoje.getFullYear(), hoje.getMonth() + i, 1);
-    return {
-      key: `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`,
-      label: d.toLocaleString("pt-PT", { month: "short", year: "numeric" }),
-      ano: d.getFullYear(),
-      mes: d.getMonth() + 1,
-      entradas: 0,
-      saidas: 0,
-      items: [],
-    };
-  });
-
-  // Uma saída financiada pelo banco traz atrás de si a entrada do banco, no
-  // mesmo mês: é isso que a neutraliza no caixa do projeto.
-  const comFunding = (bucket, fonte, saida, extra = {}) => {
-    const linha = linhaFunding(fonte, saida);
-    if (!linha) return;
-    bucket.entradas += linha.valor;
-    bucket.items.push({ ...linha, ...extra });
-  };
-
-  const getMesKey = (dateStr) => {
-    if (!dateStr) return null;
-    return dateStr.substring(0, 7);
-  };
-
-  // Bucket especial para faturas com data_vencimento anterior ao mês atual (vencidas/atrasadas).
-  // Mostram-se no topo do fluxo como uma linha separada e impactam o caixa em "Atrasadas".
   const hojeISO = hoje.toISOString().slice(0, 10);
+  // O mês corrente. É por ele que a matriz decide mostrar a coluna deste mês
+  // mesmo quando está vazia — sem isto, um mês sem lançamentos desaparecia.
   const mesAtualKey = `${hoje.getFullYear()}-${String(hoje.getMonth() + 1).padStart(2, "0")}`;
-  const vencidas = { entradas: 0, saidas: 0, items: [] };
-
-  // Add contas a pagar (saídas)
-  faturas.forEach(f => {
-    // A data que conta no fluxo é a previsão de pagamento, quando existe: é
-    // quando o dinheiro sai mesmo. Sem previsão, usa-se o vencimento.
-    const dataFluxo = f.previsao_pagamento || f.vencimento;
-    if (!dataFluxo) return;
-    if (empresa !== "all" && f.empresa !== empresa) return;
-    if (faturaPaga(f)) return;
-    const key = getMesKey(dataFluxo);
-    // Se a fatura já está marcada como Vencida, ou se a data passou (independentemente do mês) → bucket "vencidas"
-    if (faturaAtrasada(f)) {
-      const saida = {
-        tipo: "saida",
-        desc: f.fornecedor || f.fatura,
-        valor: f.valor,
-        cat: f.categoria,
-        origem: "Vencida",
-        natureza: "real",
-        vencimento: dataFluxo,
-        fatura: f,
-      };
-      vencidas.saidas += parseFloat(f.valor) || 0;
-      vencidas.items.push(saida);
-      comFunding(vencidas, f, saida, { vencimento: dataFluxo, fatura: f });
-      return;
-    }
-    const m = meses.find(m => m.key === key);
-    if (m) {
-      const saida = { tipo: "saida", desc: f.fornecedor || f.fatura, valor: f.valor, cat: f.categoria, origem: "Contas a Pagar", natureza: "real", fatura: f };
-      m.saidas += parseFloat(f.valor) || 0;
-      m.items.push(saida);
-      comFunding(m, f, saida, { fatura: f });
-    }
-  });
-
-  // Add vendas: sinal, reforços, a escritura e a comissão do mediador.
-  // A aritmética toda vive em src/vendas.js — aqui só se despejam as linhas
-  // que ela devolve, para o Fluxo Futuro, o Investor Relations e o Real ×
-  // Orçado não contarem histórias diferentes.
-  // Quando o plano de obra já lançou a venda da escritura ("Venda —
-  // escritura", que vale o que falta receber da tabela de vendas), as entradas
-  // de venda desta empresa já estão no fluxo por essa via: lançá-las outra vez
-  // aqui dava o dobro. A comissão do mediador não vem no plano, essa fica.
-  const vendaJaNoPlano = new Set((pagamentosExtras || [])
-    .filter(p => p?.plano_tipo === "venda"
-              && !["Paga", "Pago", "Convertida"].includes(p?.status))
-    .map(p => p?.empresa).filter(Boolean));
-
-  // A data da escritura segundo o plano, por empresa. A comissão do mediador
-  // passa a sair nessa data em vez da `previsão de escritura` da ficha da
-  // venda: reprogramar a obra mexia na entrada e deixava a comissão para
-  // trás, e sem previsão na ficha ela nem sequer era lançada.
-  const escrituraDoPlanoPorEmpresa = new Map((pagamentosExtras || [])
-    .filter(p => p?.plano_tipo === "venda"
-              && !["Paga", "Pago", "Convertida"].includes(p?.status)
-              && p?.empresa && p?.data_inicio)
-    .map(p => [p.empresa, String(p.data_inicio).slice(0, 10)]));
-  const escrituraDoPlano = (v) =>
-    escrituraDoPlanoPorEmpresa.get(PROJETO_EMPRESA_MAP[v?.projeto]) || null;
-
-  linhasDeVendasBase({ vendas, fracoes, escrituraDoPlano }).forEach(l => {
-    const v = (vendas || []).find(x => x.id === l.vendaId);
-    const empId = PROJETO_EMPRESA_MAP[v?.projeto];
-    if (empresa !== "all" && empId !== empresa) return;
-    if (l.tipo === "entrada" && vendaJaNoPlano.has(empId)) return;
-    const base = { desc: l.descricao, valor: l.valor, cat: l.categoria,
-                   origem: l.origem, natureza: "real", vendaId: l.vendaId,
-                   venda: v, parcela: l.parcela };
-    if (l.data < hojeISO) {
-      if (l.tipo === "entrada") vencidas.entradas += l.valor;
-      else vencidas.saidas += l.valor;
-      vencidas.items.push({ ...base, tipo: l.tipo, vencimento: l.data });
-      return;
-    }
-    const m = meses.find(x => x.key === getMesKey(l.data));
-    if (!m) return;
-    if (l.tipo === "entrada") m.entradas += l.valor;
-    else m.saidas += l.valor;
-    m.items.push({ ...base, tipo: l.tipo });
-  });
-
-  // Add recebíveis (faturas emitidas a clientes e entradas previstas)
-  // Só o que ainda está por receber: o que já entrou está no extrato.
-  soReceita(recebiveis).forEach(r => {
-    if (empresa !== "all" && r.empresa !== empresa) return;
-    if (["Recebido", "Cancelado", "Anulada"].includes(r.status)) return;
-    const data = r.data_prevista || r.data_fatura;
-    if (!data) return;
-    const valor = Math.abs(parseFloat(r.valor) || 0);
-    if (!valor) return;
-    const ehFatura = !!(r.numero_fatura && r.data_fatura);
-    const base = {
-      desc: ehFatura
-        ? `${r.numero_fatura} — ${r.cliente || r.descricao || "cliente"}`
-        : (r.descricao || r.cliente || "Entrada prevista"),
-      valor,
-      cat: ehFatura ? "Faturação" : "Vendas",
-      origem: ehFatura ? "Fatura emitida" : "Contas a Receber",
-      natureza: ehFatura ? "real" : "previsto",
-      recebivel: r,
-    };
-    if (data < hojeISO) {
-      vencidas.entradas += valor;
-      vencidas.items.push({ ...base, tipo: "entrada", vencimento: data });
-      return;
-    }
-    const m = meses.find(m => m.key === getMesKey(data));
-    if (m) { m.entradas += valor; m.items.push({ ...base, tipo: "entrada" }); }
-  });
-
-  // Add pagamentos extras manuais
-  (pagamentosExtras || []).forEach(p => {
-    if (empresa !== "all" && p.empresa !== empresa) return;
-    // Pagamentos já marcados como pagos não entram no fluxo (já saíram da conta real)
-    if (p.status === "Paga" || p.status === "Pago") return;
-    // Convertido em custo real: a fatura já entrou pelo Contas a Pagar, por isso
-    // a previsão sai do fluxo para não duplicar o valor.
-    if (p.status === "Convertida") return;
-    const nParcelas = parseInt(p.parcelas) || 1;
-    const startDate = new Date(p.data_inicio);
-    for (let i = 0; i < nParcelas; i++) {
-      const d = new Date(startDate);
-      if (p.periodicidade === "mensal") d.setMonth(d.getMonth() + i);
-      else if (p.periodicidade === "trimestral") d.setMonth(d.getMonth() + i * 3);
-      else if (p.periodicidade === "anual") d.setFullYear(d.getFullYear() + i);
-      const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
-      const dataParcelaISO = `${key}-${String(d.getDate()).padStart(2, "0")}`;
-      const valor = parseFloat(p.valor) / nParcelas;
-      const base = {
-        desc: p.descricao + (nParcelas > 1 ? ` (${i+1}/${nParcelas})` : ""),
-        valor,
-        cat: p.categoria,
-        origem: "Manual",
-        natureza: "previsto",
-        pagamentoId: p.id,
-        pagamento: p,
-      };
-
-      // ── Vencida é o que ficou em MESES ANTERIORES ────────────────────────
-      // Isto comparava com o dia de hoje, e uma previsão é planeamento
-      // MENSAL: o plano de obra escreve-a sempre no dia 1 do mês. A partir do
-      // dia 2, a obra do próprio mês passava a "vencida" e saía da grelha —
-      // na Favorite Closet, 142 654,87 € de obra de novembro desapareciam da
-      // matriz no dia 2 de novembro, e o quadro mostrava 427 964,61 € onde o
-      // plano dizia 570 619,48 €. Todos os meses, em todas as empresas.
-      //
-      // As FATURAS continuam a ser medidas ao dia (ver faturaAtrasada acima):
-      // essas têm vencimento a sério e uma que passou do prazo está mesmo em
-      // atraso. Uma previsão do mês corrente não está atrasada — é deste mês.
-      if (getMesKey(dataParcelaISO) < mesAtualKey) {
-        if (p.tipo === "entrada") {
-          vencidas.entradas += valor;
-          vencidas.items.push({ ...base, tipo: "entrada", vencimento: dataParcelaISO });
-        } else {
-          const saida = { ...base, tipo: "saida", vencimento: dataParcelaISO };
-          vencidas.saidas += valor;
-          vencidas.items.push(saida);
-          comFunding(vencidas, p, saida, { vencimento: dataParcelaISO, pagamento: p, pagamentoId: p.id });
-        }
-        continue;
-      }
-
-      const m = meses.find(m => m.key === key);
-      if (m) {
-        if (p.tipo === "entrada") {
-          m.entradas += valor;
-          m.items.push({ ...base, tipo: "entrada" });
-        } else {
-          const saida = { ...base, tipo: "saida" };
-          m.saidas += valor;
-          m.items.push(saida);
-          comFunding(m, p, saida, { pagamento: p, pagamentoId: p.id });
-        }
-      }
-    }
-  });
-
-  // ── Despesas recorrentes ─────────────────────────────────────────────────
-  // A regra não tem linhas gravadas: expande-se aqui, para a janela do fluxo.
-  // Cada ocorrência entra como uma previsão normal, com a marca de onde veio,
-  // para o detalhe do mês poder dizer "recorrente" e levar ao painel.
-  const fimDoFluxo = meses.length
-    ? `${meses[meses.length - 1].key}-28`
-    : hojeISO;
-  (recorrentes || []).forEach(r => {
-    if (empresa !== "all" && r.empresa !== empresa) return;
-    if (r.ativa === false) return;
-    ocorrenciasDe(r, { de: hojeISO, ate: fimDoFluxo }).forEach(oc => {
-      const m = meses.find(x => x.key === oc.data.slice(0, 7));
-      if (!m) return;
-      const base = {
-        desc: r.descricao,
-        valor: Math.abs(oc.valor),
-        cat: r.categoria || "",
-        subcategoria: r.subcategoria || "",
-        origem: "Recorrente",
-        natureza: "previsto",
-        recorrenteId: r.id,
-        recorrente: r,
-        vencimento: oc.data,
-      };
-      if (r.tipo === "entrada") {
-        m.entradas += base.valor;
-        m.items.push({ ...base, tipo: "entrada" });
-      } else {
-        const saida = { ...base, tipo: "saida" };
-        m.saidas += saida.valor;
-        m.items.push(saida);
-        // Há despesas recorrentes que o banco financia — a taxa de gestão de
-        // um projeto em obra, por exemplo. Como em qualquer outra saída
-        // financiada, a entrada do banco vem atrás, no mesmo mês, e é ela que
-        // neutraliza a despesa em caixa. A regra é a mesma para todas as
-        // ocorrências: é a regra que está marcada, não cada mês.
-        comFunding(m, r, saida, {
-          origem: "Recorrente", recorrenteId: r.id, recorrente: r,
-          vencimento: oc.data,
-        });
-      }
-    });
-  });
-
-  // ── Filtro Real / Previsto ────────────────────────────────────────────────
-  // Os totais são recalculados a partir dos itens que sobrevivem ao filtro,
-  // para que o gráfico e o saldo acumulado reflictam a mesma seleção.
-  if (natureza !== "todos") {
-    const passa = (it) => (it.natureza || "previsto") === natureza;
-    const recalcula = (b) => {
-      b.items = b.items.filter(passa);
-      b.entradas = b.items.filter(i => i.tipo === "entrada").reduce((t, i) => t + (parseFloat(i.valor) || 0), 0);
-      b.saidas = b.items.filter(i => i.tipo === "saida").reduce((t, i) => t + (parseFloat(i.valor) || 0), 0);
-    };
-    meses.forEach(recalcula);
-    recalcula(vencidas);
-  }
-
-  // Calculate running balance — começa com o saldo atual, mas se houver vencidas
-  // (pagamentos atrasados ainda por liquidar), o caixa "real" já está comprometido.
-  // Mostramos isso descontando à entrada do mês 1.
-  let saldoAcumulado = saldoAtual - (vencidas.saidas - vencidas.entradas);
-  const mesesComSaldo = meses.map(m => {
-    const liquido = m.entradas - m.saidas;
-    saldoAcumulado += liquido;
-    return { ...m, liquido, saldo_fim: saldoAcumulado };
-  });
+  const { meses, vencidas, mesesComSaldo } = useMemo(
+    () => construirMesesDoFluxo({
+      faturas, pagamentosExtras, vendas, fracoes, recebiveis, recorrentes,
+      pertence: (e) => empresa === "all" || e === empresa,
+      projetoEmpresa: PROJETO_EMPRESA_MAP,
+      natureza, saldoAtual, hoje,
+    }),
+    [faturas, pagamentosExtras, vendas, fracoes, recebiveis, recorrentes,
+     empresa, natureza, saldoAtual]);
 
   // Saldo "real disponível" depois de pagar vencidas
   const saldoLiquido = saldoAtual - (vencidas.saidas - vencidas.entradas);
@@ -844,39 +585,13 @@ export default function FluxoFuturo({ faturas: faturasTodas, faturasLoading, pag
 
   // A matriz usa os mesmos meses da vista mensal — os mesmos lançamentos, a
   // mesma aritmética; só a arrumação é outra. Ver src/matriz.js.
-  // A linha a que cada lançamento pertence. Nas empresas LPX é a categoria com
-  // que foi classificado; nos projetos HDG é a despesa da FO — ver
-  // src/rubricasHDG.js. Como em "Todos os Projetos" convivem os dois mundos,
-  // a empresa vem do próprio lançamento.
-  const rubricaDoItem = useCallback((it) => {
-    const emp = it?.pagamento?.empresa || it?.fatura?.empresa
-             || it?.recorrente?.empresa || (empresa !== "all" ? empresa : "");
-    const g = EMPRESAS_TODAS.find(e => e.id === emp)?.grupo === "HDG" ? "HDG" : "LPX";
-
-    // ── A entrada do banco é do BANCO, não da despesa que a originou ──────
-    // A linha de funding leva atrás a fatura (ou a previsão) de origem, para
-    // o detalhe da célula poder mostrar de onde veio. Só que a classificação
-    // lia a `subcategoria` desse documento — e nos projetos HDG a
-    // subcategoria é que manda. Resultado: a libertação do banco de uma
-    // fatura de obra aparecia dentro de «Gastos com Obras», e como essa
-    // rubrica não é funding, ia parar às RECEITAS. Uma entrada do banco
-    // contada como receita do projeto.
-    //
-    // A rubrica dela é a MESMA que o plano de obra usa para o funding dele
-    // (classificacaoDe) — nas empresas LPX o «Funding», nos projetos HDG o
-    // «Inflow - Obra». Uma definição só, como no Real × Orçado.
-    if (it?._funding) {
-      const c = classificacaoDe("funding", g);
-      const r = rubricaDe(emp, c.categoria, c.subcategoria || "") || c.categoria;
-      return rubricaNoFluxo(g, r, "");
-    }
-
-    const sub = it?.pagamento?.subcategoria || it?.fatura?.subcategoria || "";
-    const r = rubricaDe(emp, it?.cat, sub) || it?.cat || "";
-    // O IVA da obra é obra: lê-se dentro do balde dela, com o nome do
-    // trimestre a distingui-lo. Ver rubricaNoFluxo em src/obra.js.
-    return rubricaNoFluxo(g, r, it?.desc || "");
-  }, [empresa]);
+  // A linha a que cada lançamento pertence — ver criarRubricaDoItem em
+  // src/fluxoMeses.js. É a MESMA régua que o Investor Relations usa, para a
+  // entrada do banco não cair em RECEITAS num ecrã e em FUNDING no outro.
+  const rubricaDoItem = useCallback(
+    criarRubricaDoItem({ empresa, empresas: EMPRESAS_TODAS,
+                         classificacaoDe, rubricaDe, rubricaNoFluxo }),
+    [empresa]);
 
   const matriz = useMemo(() => construirMatriz({
     meses: mesesComSaldo, maxMeses: mesesMatriz,

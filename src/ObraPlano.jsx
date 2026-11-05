@@ -3,7 +3,7 @@ import { fmtEUR, fmtData } from "./formato.js";
 import {
   planearObra, planearAplicacao, gastoEmObra, sugerirAvenca, planoDesatualizado,
   compararPrazos, categoriasDoMotor, classificacaoDe, temObra, rotuloMes,
-  obraRealizada, fundingLibertado, obraNoFluxo, conferirBudget,
+  obraRealizada, fundingLibertado, rubricasDeDivida, obraNoFluxo, conferirBudget,
   PLANO_VAZIO, TIPOS, ROTULO_TIPO,
 } from "./obra.js";
 import { useMovimentosPeriodo, useFracoes, useVendas, useRecebiveis } from "./hooks.js";
@@ -117,11 +117,12 @@ export default function ModalPlanoObra({
       empresa, categorias: [catObra], grupo, taxaIva: f.taxa_iva_obra }),
     [movimentos, faturas, empresa, catObra, grupo, f.taxa_iva_obra]);
 
+  // A dívida de hoje: todo o financiamento libertado menos o já devolvido.
+  // As rubricas vêm do motor (ver rubricasDeDivida em src/obra.js) — num
+  // projeto HDG isso inclui o "Inflow - Terreno", que antes ficava de fora, e
+  // abate o "Outlow - Repagamento", que antes não abatia.
   const bancoJaLibertou = useMemo(
-    () => fundingLibertado(movimentos, {
-      categorias: [classificacaoDe("funding", grupo).categoria, "Funding banco"],
-      subcategorias: grupo === "HDG" ? [classificacaoDe("funding", grupo).subcategoria] : [],
-    }), [movimentos, grupo]);
+    () => fundingLibertado(movimentos, rubricasDeDivida(grupo)), [movimentos, grupo]);
 
   // O que consome o budget é o que já foi INCORRIDO, pago ou não: uma fatura
   // por pagar já está no fluxo, prevê-la outra vez contaria duas vezes.
@@ -671,16 +672,22 @@ export default function ModalPlanoObra({
                 <Numero rotulo="Euribor" sufixo="%" valor={f.euribor} onMudar={muda("euribor")} />
                 <Numero rotulo="Spread" sufixo="%" valor={f.spread} onMudar={muda("spread")} />
               </div>
-              <Numero rotulo="Dívida já libertada hoje" valor={f.divida_inicial}
+              <Numero rotulo="Dívida ao banco hoje" valor={f.divida_inicial}
                 onMudar={muda("divida_inicial")}
-                dica="O que o banco já libertou. É sobre isto que começam a contar os juros."
+                dica="Tudo o que o banco libertou — obra e terreno — menos o que já lhe foi devolvido. É sobre isto que contam os juros."
                 sugestao={bancoJaLibertou.total > 0
                   ? { valor: bancoJaLibertou.total, meses: bancoJaLibertou.n, rotulo: "do extrato" } : null}
                 onSugestao={muda("divida_inicial")} />
-              {bancoJaLibertou.total > 0 && (
+              {(bancoJaLibertou.n > 0 || bancoJaLibertou.nAbate > 0) && (
                 <div style={{ fontSize: 10.5, color: "#9DA2A6", lineHeight: 1.5, marginTop: -4 }}>
-                  {bancoJaLibertou.n} {bancoJaLibertou.n === 1 ? "libertação encontrada" : "libertações encontradas"} no
-                  extrato{bancoJaLibertou.ultimo ? `, a última a ${fmtData(bancoJaLibertou.ultimo)}` : ""}.
+                  {/* A conta tem de estar escrita. Um bridge loan pago deixa
+                      o bruto ao dobro da dívida real, e sem esta linha o
+                      número do extrato parece simplesmente errado. */}
+                  {bancoJaLibertou.n} {bancoJaLibertou.n === 1 ? "libertação" : "libertações"} de {fmtEUR(bancoJaLibertou.bruto)}
+                  {bancoJaLibertou.nAbate > 0
+                    ? ` menos ${bancoJaLibertou.nAbate} ${bancoJaLibertou.nAbate === 1 ? "repagamento" : "repagamentos"} de ${fmtEUR(bancoJaLibertou.abatido)} = ${fmtEUR(bancoJaLibertou.total)} em dívida`
+                    : " no extrato"}
+                  {bancoJaLibertou.ultimo ? `, o último a ${fmtData(bancoJaLibertou.ultimo)}` : ""}.
                 </div>
               )}
               <div style={{ fontSize: 11, color: "#7E8388", fontFamily: "var(--fonte-numero)" }}>

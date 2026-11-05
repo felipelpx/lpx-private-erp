@@ -1,9 +1,10 @@
 import React, { useState, useMemo } from "react";
 import { EMPRESAS, agruparPorGrupo, GRUPOS_INFO } from "./empresas.js";
-import { useMovimentosPeriodo, useFracoes, useVendas, useSaldosNaData, usePagamentosExtras, useFaturas, useOrcamento, useRecebiveis, useObraPlanos } from "./hooks.js";
+import { useMovimentosPeriodo, useFracoes, useVendas, useSaldosNaData, usePagamentosExtras, useFaturas, useOrcamento, useRecebiveis, useObraPlanos, useDespesasRecorrentes } from "./hooks.js";
 import { CRONOGRAMAS, ESTADO_MARCO, TIR_PROJETO } from "./cronogramas.js";
 import { cronogramaVivo } from "./cronograma.js";
 import { construirMatriz } from "./matriz.js";
+import { construirMesesDoFluxo, criarRubricaDoItem, mapaProjetoEmpresa } from "./fluxoMeses.js";
 import MatrizFluxo from "./MatrizFluxo.jsx";
 import { obraRealizada, classificacaoDe, rubricaNoFluxo } from "./obra.js";
 import RealOrcadoTabela from "./RealOrcadoTabela.jsx";
@@ -958,115 +959,52 @@ export default function IRView({ currentUser, empresasVisiveis }) {
     .reduce((s, f) => s + (Number(f.preco_tabela) || 0), 0);
 
   // ─── Fluxo futuro previsto ────────────────────────────────────────────────
-  // Junta as previsões lançadas à mão (pagamentos_extras, excluindo as já
-  // convertidas ou pagas) com as faturas ainda por liquidar. A data que conta
-  // é a previsão de pagamento; sem ela, o vencimento.
-  const futuro = useMemo(() => {
-    const hojeISO = new Date().toISOString().slice(0, 10);
-    const porMes = {};
-    // Além dos totais, guarda-se cada lançamento: é deles que sai a matriz
-    // despesas × meses, a mesma que a equipa vê no Fluxo Futuro.
-    const junta = (data, valor, tipo, escritura = false, linha = null) => {
-      const k = String(data || "").slice(0, 7);
-      if (!k || k.length !== 7) return;
-      if (!Number(valor)) return;   // despesa sem funding não abre mês nenhum
-      if (!porMes[k]) porMes[k] = { entradas: 0, saidas: 0, itens: 0, items: [] };
-      const m = porMes[k];
-      if (tipo === "entrada") m.entradas += Math.abs(valor);
-      else m.saidas -= Math.abs(valor);
-      m.itens++;
-      // `escritura` fica no lançamento: a venda e a amortização são um
-      // acontecimento único e enorme, e há-de haver quem queira lê-los à parte.
-      if (linha) m.items.push({ ...linha, tipo, valor: Math.abs(valor), escritura });
-    };
-
-    // O que conta como escritura: a venda e a amortização da dívida, venham
-    // elas do plano de obra, de uma previsão lançada à mão ou dos recebíveis.
-    const ehEscritura = (x) => {
-      if (x?.plano_tipo === "venda" || x?.plano_tipo === "amortizacao") return true;
-      const k = chaveRubrica(x?.categoria);
-      return k === "vendas" || /^amortizacao/.test(k) ||
-             /repagamento|amortizacao/.test(chaveRubrica(x?.subcategoria));
-    };
-
-    // Despesas financiadas pelo banco trazem a entrada do banco no mesmo mês —
-    // a mesma regra do Fluxo Futuro (ver src/funding.js), para a tabela e o
-    // gráfico não contarem histórias diferentes.
-    (pagamentosExtras || [])
-      .filter(p => idsAtivos.includes(p.empresa))
-      .filter(p => !["Convertida", "Paga", "Pago"].includes(p.status))
-      .forEach(p => {
-        const ehEntrada = p.tipo === "entrada";
-        const esc = ehEscritura(p);
-        junta(p.data_inicio, Number(p.valor) || 0, ehEntrada ? "entrada" : "saida", esc,
-              { desc: p.descricao, cat: p.categoria, origem: "Previsão" });
-        if (!ehEntrada) junta(p.data_inicio, valorFunding(p, p.valor), "entrada", esc,
-              { desc: `Funding banco — ${p.descricao}`, cat: CATEGORIA_FUNDING, origem: "Banco" });
-      });
-
-    (faturas || [])
-      .filter(f => idsAtivos.includes(f.empresa))
-      .filter(f => !faturaPaga(f))
-      .forEach(f => {
-        const data = f.previsao_pagamento || f.vencimento;
-        const esc = ehEscritura(f);
-        junta(data, Number(f.valor) || 0, "saida", esc,
-              { desc: f.fornecedor || f.fatura, cat: f.categoria, origem: "Fatura" });
-        junta(data, valorFunding(f, f.valor), "entrada", esc,
-              { desc: `Funding banco — ${f.fornecedor || f.fatura}`, cat: CATEGORIA_FUNDING, origem: "Banco" });
-      });
-
-    // Entradas: carteira de Contas a Receber (só o que ainda está previsto)
-    soReceita(recebiveis)
-      .filter(r => idsAtivos.includes(r.empresa))
-      .filter(r => (r.status || "Previsto") === "Previsto")
-      .forEach(r => junta(r.data_prevista, Number(r.valor) || 0, "entrada", true,
-        { desc: r.descricao || r.cliente || "Recebível", cat: r.categoria || "Vendas",
-          origem: "Contas a Receber" }));
-
-    // As vendas: sinal, reforços, escritura e a comissão do mediador — tudo
-    // pelo mesmo motor do Fluxo Futuro (src/vendas.js). Só a escritura e a
-    // comissão contam como "escritura" para o segundo gráfico; um sinal
-    // recebido a meio da obra é operação.
-    linhasDeVendas({ vendas, fracoes }).forEach(l => {
-      const v = (vendas || []).find(x => x.id === l.vendaId);
-      if (!empresasAtivas.some(e => e.nome === v?.projeto || e.projeto === v?.projeto)) return;
-      junta(l.data, l.valor, l.tipo, l.origem !== "Sinal / reforço",
-            { desc: l.descricao, cat: l.categoria, origem: l.origem });
-    });
-
-    return Object.keys(porMes).sort().map(k => {
-      const [a, mm] = k.split("-");
-      return { key: k, rotulo: `${mm}/${a.slice(2)}`, label: `${mm}/${a.slice(2)}`,
-               ...porMes[k], passado: k < hojeISO.slice(0, 7) };
-    });
-  }, [pagamentosExtras, faturas, vendas, recebiveis, idsAtivos, empresasAtivas]);
-
-  // A mesma matriz do Fluxo Futuro, com os mesmos lançamentos — só que aqui
-  // não se mexe em nada (ver src/MatrizFluxo.jsx). Só os meses por vir: o que
-  // já passou está no fluxo de caixa realizado, logo acima.
-  const [mesesMatriz, setMesesMatriz] = useState(6);
-  const mesesPorVir = useMemo(() => futuro.filter(m => !m.passado), [futuro]);
-  // O saldo de hoje vem ANTES da matriz porque esta precisa dele: é dele que
-  // parte a linha do caixa acumulado.
+  // Vinha daqui uma cópia própria da lógica do Fluxo Futuro — mais curta, e
+  // por isso diferente: não lia as despesas recorrentes nem o funding delas,
+  // lançava uma previsão de 6 parcelas toda no primeiro mês, não tinha balde
+  // de vencidas e não impedia a venda de ser contada duas vezes quando o
+  // plano de obra já a tinha lançado. O investidor via um fluxo que a equipa
+  // nunca tinha visto.
+  //
+  // Agora é o MESMO construtor do ecrã da equipa (src/fluxoMeses.js). A única
+  // diferença legítima entre os dois é quem pode ver o quê: aqui o filtro são
+  // as empresas a que este investidor tem acesso.
+  const { recorrentes } = useDespesasRecorrentes();
+  const projetoEmpresa = useMemo(() => mapaProjetoEmpresa(EMPRESAS), []);
+  // O dinheiro que está na conta hoje. Vem antes do fluxo porque é dele que
+  // o fluxo parte.
   const saldoHoje = useMemo(
     () => empresasAtivas.reduce((s, e) => s + e.contas.reduce((t, c) => t + (Number(c.saldo) || 0), 0), 0),
     [empresasAtivas]
   );
 
+  const fluxo = useMemo(() => construirMesesDoFluxo({
+    faturas, pagamentosExtras, vendas, fracoes, recebiveis, recorrentes,
+    pertence: (e) => idsAtivos.includes(e),
+    projetoEmpresa,
+    saldoAtual: saldoHoje,
+  }), [faturas, pagamentosExtras, vendas, fracoes, recebiveis, recorrentes,
+       idsAtivos, projetoEmpresa, saldoHoje]);
+
+  // A mesma matriz do Fluxo Futuro, com os mesmos lançamentos — só que aqui
+  // não se mexe em nada (ver src/MatrizFluxo.jsx).
+  const [mesesMatriz, setMesesMatriz] = useState(6);
+
   const matrizFuturo = useMemo(() => construirMatriz({
-    meses: mesesPorVir, maxMeses: mesesMatriz,
-    // A mesma régua do Fluxo Futuro: nos projetos HDG, as linhas da FO.
-    rubricaDoItem: (it) => rubricaNoFluxo(
-      EMPRESAS.find(e => e.id === empSel)?.grupo === "HDG" ? "HDG" : "LPX",
-      rubricaDe(empSel, it?.cat, it?.subcategoria) || it?.cat || "", it?.desc || ""),
-    // Aqui só há meses por vir, por isso o acumulado parte mesmo do dinheiro
-    // que está na conta hoje. É a linha que um investidor procura primeiro:
-    // em que mês é que isto precisa de mais dinheiro.
-    saldoInicial: saldoHoje,
-  }), [mesesPorVir, mesesMatriz, empSel, saldoHoje]);
-  const totalPrevEntradas = futuro.reduce((s, m) => s + m.entradas, 0);
-  const totalPrevSaidas = futuro.reduce((s, m) => s + m.saidas, 0);
+    meses: fluxo.mesesComSaldo, maxMeses: mesesMatriz,
+    // A MESMA régua do Fluxo Futuro, do mesmo sítio: é ela que manda a
+    // entrada do banco para FUNDING em vez de a deixar cair em RECEITAS.
+    rubricaDoItem: criarRubricaDoItem({
+      empresa: empSel, empresas: EMPRESAS,
+      classificacaoDe, rubricaDe, rubricaNoFluxo }),
+    // O caixa de partida é o de hoje MENOS o que já está vencido por pagar —
+    // o mesmo ponto de partida do ecrã da equipa. Abrir no saldo cheio dava
+    // ao investidor um caixa melhor do que o que a equipa vê.
+    saldoInicial: fluxo.saldoLiquido,
+  }), [fluxo, mesesMatriz, empSel]);
+
+  const totalPrevEntradas = fluxo.meses.reduce((s, m) => s + m.entradas, 0);
+  const totalPrevSaidas = fluxo.meses.reduce((s, m) => s + m.saidas, 0);
 
   // ─── Real × Orçado ────────────────────────────────────────────────────────
   // Exatamente a mesma tabela do separador próprio, com os mesmos dados: dois
@@ -1212,7 +1150,7 @@ export default function IRView({ currentUser, empresasVisiveis }) {
 
       {seccao === "futuro" && (
         <Card titulo="Fluxo futuro"
-              subtitulo={`${matrizFuturo.nLinhas} ${matrizFuturo.nLinhas === 1 ? "despesa" : "despesas"} · entradas ${fmtEUR0(totalPrevEntradas)} · saídas ${fmtEUR0(Math.abs(totalPrevSaidas))} · saldo de partida ${fmtEUR0(saldoHoje)}`}>
+              subtitulo={`${matrizFuturo.nLinhas} ${matrizFuturo.nLinhas === 1 ? "despesa" : "despesas"} · entradas ${fmtEUR0(totalPrevEntradas)} · saídas ${fmtEUR0(Math.abs(totalPrevSaidas))} · saldo de partida ${fmtEUR0(fluxo.saldoLiquido)}${fluxo.vencidas.saidas - fluxo.vencidas.entradas > 0.005 ? ` (caixa ${fmtEUR0(saldoHoje)} menos ${fmtEUR0(fluxo.vencidas.saidas - fluxo.vencidas.entradas)} já vencidos)` : ""}`}>
           {/* Exatamente a grelha que a equipa vê no Fluxo Futuro do ERP, com os
               mesmos lançamentos — aqui sem um único botão de edição. */}
           <MatrizFluxo matriz={matrizFuturo} isAdmin={false} acoes={{}}

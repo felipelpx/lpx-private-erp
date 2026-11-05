@@ -1750,6 +1750,10 @@ export default function ExtratosView({ EMPRESAS, extrato, caixaUnico, setCaixaUn
   const [activeEmp, setActiveEmp] = useState(null);
   const [activeConta, setActiveConta] = useState(null);
   const [showApresentacao, setShowApresentacao] = useState(false);
+  // Quem pode gerar a apresentação de caixa. Fica numa constante para o botão
+  // e o modal lerem a MESMA regra: esconder o botão e deixar o modal aberto
+  // por outra via seria segurança a fingir.
+  const podeApresentar = currentUser?.role === "admin" || currentUser?.role === "gestor";
   // Modal de "Match" — sugestões de faturas/pagamentos com valor próximo ao movimento
   const [matchMov, setMatchMov] = useState(null);
 
@@ -2073,11 +2077,17 @@ export default function ExtratosView({ EMPRESAS, extrato, caixaUnico, setCaixaUn
           <div style={{ fontSize: 12, color: "#9DA2A6", marginTop: 2 }}>Últimos 12 meses · Contas ativas (à esquerda de "Não Usuais")</div>
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-          <button onClick={() => setShowApresentacao(true)}
-            title="Gerar apresentação PPTX com variação de caixa e movimentos"
-            style={{ background: "#091C2A", border: "none", color: "#BAA685", padding: "8px 14px", borderRadius: 7, fontSize: 11, cursor: "pointer", fontWeight: 700, letterSpacing: 0.3 }}>
-            📊 Gerar Apresentação
-          </button>
+          {/* A apresentação é uma ferramenta de quem gere, não de quem recebe
+              o report: traz os movimentos todos das empresas selecionadas,
+              incluindo as que o investidor não tem de ver. Mesma régua do
+              resto da app — admin e gestor. */}
+          {podeApresentar && (
+            <button onClick={() => setShowApresentacao(true)}
+              title="Gerar apresentação PPTX com variação de caixa e movimentos"
+              style={{ background: "#091C2A", border: "none", color: "#BAA685", padding: "8px 14px", borderRadius: 7, fontSize: 11, cursor: "pointer", fontWeight: 700, letterSpacing: 0.3 }}>
+              📊 Gerar Apresentação
+            </button>
+          )}
           <button onClick={() => { reloadSaldos?.(); reload?.(); }}
             title="Atualizar saldos e movimentos"
             style={{ background: "#EDF1F5", border: "none", color: "#2C4A63", padding: "6px 12px", borderRadius: 7, fontSize: 11, cursor: "pointer", fontWeight: 600 }}>
@@ -2090,7 +2100,7 @@ export default function ExtratosView({ EMPRESAS, extrato, caixaUnico, setCaixaUn
       </div>
 
       {/* Modal Gerar Apresentação */}
-      {showApresentacao && (
+      {showApresentacao && podeApresentar && (
         <GerarApresentacaoModal
           empresasEnriquecidas={empresasEnriquecidas}
           onClose={() => setShowApresentacao(false)}

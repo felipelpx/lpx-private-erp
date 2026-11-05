@@ -388,18 +388,75 @@ export function obraRealizada(movimentos, faturas,
   };
 }
 
-// O funding que o banco já libertou, lido do extrato: entradas classificadas
-// na rubrica de financiamento do projeto. É a dívida de hoje, sem a escrever
-// à mão.
-export function fundingLibertado(movimentos, { categorias = [], subcategorias = [] } = {}) {
-  const ms = (movimentos || [])
-    .filter(m => m && (Number(m.valor) || 0) > 0)
+// A dívida ao banco hoje, lida do extrato.
+//
+// Não é "o funding da obra": é TODO o financiamento que o banco libertou,
+// menos o que já foi devolvido. Num projeto HDG o banco liberta em duas
+// rubricas — "Inflow - Obra" e "Inflow - Terreno" — e um bridge loan do
+// terreno costuma ser pago quando entra o crédito definitivo. Ler só a obra
+// dava dívida a menos; ler as duas sem abater o repagamento dava a mais, e
+// contava duas vezes o mesmo dinheiro.
+//
+// Exemplo real (Cinq Etoiles): +535.000 de bridge loan, +535.000 do crédito
+// definitivo, −535.000 a pagar o bridge. Em dívida estão 535.000, não
+// 1.070.000 nem zero.
+//
+// Os juros e as comissões NÃO abatem: são custo do financiamento, não
+// devolução de capital. Quem os abatesse via a dívida a desaparecer sozinha.
+export function fundingLibertado(movimentos, {
+  categorias = [], subcategorias = [],
+  categoriasAbate = [], subcategoriasAbate = [],
+} = {}) {
+  const ms = (movimentos || []).filter(Boolean);
+  const valor = (m) => Number(m?.valor) || 0;
+
+  const entradas = ms
+    .filter(m => valor(m) > 0)
     .filter(m => bate(m.categoria, categorias))
     .filter(m => subcategorias.length === 0 || !m.subcategoria || bate(m.subcategoria, subcategorias));
+
+  // Os abatimentos vivem muitas vezes noutra categoria (nas empresas LPX a
+  // amortização é uma categoria à parte), por isso têm a sua própria régua.
+  // Sem lista de abate, não se abate nada — quem chama é que decide.
+  const cats = categoriasAbate.length ? categoriasAbate : [];
+  const abates = (cats.length === 0 && subcategoriasAbate.length === 0) ? [] : ms
+    .filter(m => cats.length === 0 ? bate(m.categoria, categorias) : bate(m.categoria, cats))
+    .filter(m => subcategoriasAbate.length === 0 || bate(m.subcategoria, subcategoriasAbate));
+
+  // O repagamento está no extrato como saída (valor negativo), mas há quem o
+  // lance positivo. O sinal não decide nada aqui — a rubrica é que decide.
+  const bruto   = arred2(entradas.reduce((s, m) => s + valor(m), 0));
+  const abatido = arred2(abates.reduce((s, m) => s + Math.abs(valor(m)), 0));
+
   return {
-    total: arred2(ms.reduce((s, m) => s + (Number(m.valor) || 0), 0)),
-    n: ms.length,
-    ultimo: ms.map(m => String(m.data || "").slice(0, 10)).sort().pop() || null,
+    total: arred2(bruto - abatido),
+    bruto, abatido,
+    n: entradas.length,
+    nAbate: abates.length,
+    ultimo: [...entradas, ...abates]
+      .map(m => String(m.data || "").slice(0, 10)).filter(Boolean).sort().pop() || null,
+  };
+}
+
+// As rubricas por onde o banco liberta e por onde é reembolsado, para cada
+// taxonomia. Fica aqui, ao lado do motor, para o ecrã não ter de as saber de
+// cor — e para a lista crescer num sítio só quando aparecer outra.
+//
+// "Outlow" (sem o f) não é gralha minha: é como a rubrica está escrita no
+// plano de contas da HDG. As duas grafias entram, para o dia em que for
+// corrigida não partir o cálculo.
+export function rubricasDeDivida(grupo) {
+  if (grupo === "HDG") return {
+    categorias: ["Financiamento"],
+    subcategorias: ["Inflow - Obra", "Inflow - Terreno"],
+    categoriasAbate: ["Financiamento"],
+    subcategoriasAbate: ["Outlow - Repagamento", "Outflow - Repagamento"],
+  };
+  return {
+    categorias: ["Funding", "Funding banco", "Financiamento"],
+    subcategorias: [],
+    categoriasAbate: ["Amortização", "Amortizacao"],
+    subcategoriasAbate: [],
   };
 }
 
