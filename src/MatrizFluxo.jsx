@@ -176,6 +176,9 @@ export default function MatrizFluxo({ matriz, isAdmin, acoes, nMeses, onNMeses, 
   // o desenho, não dezasseis linhas de detalhe. E cada grupo é independente:
   // abrir um nunca fecha outro, por isso guarda-se um conjunto, não "o aberto".
   const [abertos, setAbertos] = useState(() => new Set());
+  // O detalhe do que está vencido, debaixo da linha do caixa. Fechado por
+  // omissão: só interessa a quem está a perguntar de onde vem o número.
+  const [verVencidas, setVerVencidas] = useState(false);
   // Na secção do funding convivem os dois sentidos, e duas rubricas com o
   // mesmo nome podem ser grupos diferentes — a chave leva o sentido.
   const chaveGrupo = (sec, g) => `${sec.tipo}|${g.tipo || sec.tipo}|${g.categoria}`;
@@ -497,9 +500,20 @@ export default function MatrizFluxo({ matriz, isAdmin, acoes, nMeses, onNMeses, 
                                + "faturas vencidas são maiores do que o saldo. Esta repartição diz qual."}>
                           (abre com {fmtK(matriz.caixaAbertura)} = {fmtK(caixaDetalhe.atual)} na conta
                           {vencido >= 0 ? " − " : " + "}{fmtK(Math.abs(vencido))}{" "}
-                          <span style={{ color: "#A93226" }}>
+                          {/* O vencido NÃO é só o Contas a Pagar: junta faturas
+                              atrasadas, previsões de meses anteriores, comissões
+                              de venda e recebíveis por cobrar — e já desconta o
+                              funding do banco das faturas financiadas. Quem só
+                              conhece o Contas a Pagar não consegue chegar a este
+                              número de cabeça, por isso ele abre-se. */}
+                          <button type="button" onClick={() => setVerVencidas(v => !v)}
+                            title="Ver de que é feito"
+                            style={{ background: "none", border: "none", padding: 0,
+                                     font: "inherit", color: "#A93226", cursor: "pointer",
+                                     textDecoration: "underline dotted" }}>
                             {vencido >= 0 ? "já vencido por pagar" : "já vencido por receber"}
-                          </span>)
+                            {" "}{verVencidas ? "▴" : "▾"}
+                          </button>)
                         </span>
                       );
                     }
@@ -532,6 +546,26 @@ export default function MatrizFluxo({ matriz, isAdmin, acoes, nMeses, onNMeses, 
                              borderLeft: "1px solid #dde3f0",
                              color: matriz.caixaFim >= 0 ? "#1F7A54" : "#A93226" }}>
                   {fmtK(matriz.caixaFim)}
+                </td>
+              </tr>
+            )}
+
+            {/* ── De que é feito o "já vencido" ─────────────────────────────
+                Quatro origens, e só uma delas está no Contas a Pagar:
+
+                  · faturas do Contas a Pagar que passaram do vencimento
+                  · previsões do Fluxo Futuro de MESES ANTERIORES
+                  · comissões de venda e sinais com data já passada
+                  · recebíveis por cobrar (estes ABATEM, são entradas)
+
+                E o funding do banco já vem descontado das faturas
+                financiadas. Por isso a conta não fecha com o total do Contas
+                a Pagar, e por isso tem de se poder abrir. */}
+            {matriz.temCaixa && verVencidas && Array.isArray(caixaDetalhe?.itens) && (
+              <tr>
+                <td colSpan={colunas.length + 2} style={{ padding: 0, background: "#FFFBF5",
+                                                          borderTop: "1px solid #E3CE9F" }}>
+                  <DetalheVencidas itens={caixaDetalhe.itens} total={caixaDetalhe.vencido} />
                 </td>
               </tr>
             )}
@@ -593,6 +627,108 @@ export default function MatrizFluxo({ matriz, isAdmin, acoes, nMeses, onNMeses, 
           </div>
         </>
       )}
+    </div>
+  );
+}
+
+
+// ─── De que é feito o "já vencido por pagar" ─────────────────────────────────
+// Agrupado pela ORIGEM, porque é essa a pergunta de quem estranha o número:
+// "isto não é o meu Contas a Pagar, então o que é?". As entradas vêm com o
+// sinal trocado — um recebível por cobrar ABATE ao que está vencido.
+function DetalheVencidas({ itens = [], total = 0 }) {
+  const lista = (Array.isArray(itens) ? itens : []).filter(Boolean);
+  const num = (v) => { const n = Number(v); return Number.isFinite(n) ? n : 0; };
+  const arred2 = (v) => Math.round((num(v) + Number.EPSILON) * 100) / 100;
+
+  const porOrigem = new Map();
+  lista.forEach(it => {
+    const o = String(it?.origem || "(sem origem)");
+    if (!porOrigem.has(o)) porOrigem.set(o, { origem: o, n: 0, liquido: 0, itens: [] });
+    const g = porOrigem.get(o);
+    const v = Math.abs(num(it?.valor));
+    g.n++;
+    g.liquido = arred2(g.liquido + (it?.tipo === "entrada" ? -v : v));
+    g.itens.push(it);
+  });
+  const grupos = [...porOrigem.values()].sort((a, b) => Math.abs(b.liquido) - Math.abs(a.liquido));
+  const soma = arred2(grupos.reduce((s, g) => s + g.liquido, 0));
+  // Se a soma das partes não der o total, há uma origem que escapou — e isso
+  // diz-se, em vez de se mostrar um detalhe que não fecha.
+  const fecha = Math.abs(soma - arred2(total)) < 0.011;
+
+  return (
+    <div style={{ padding: "11px 14px" }}>
+      <div style={{ fontSize: 11, color: "#7A5A22", marginBottom: 8, lineHeight: 1.6 }}>
+        O que está vencido não é só o Contas a Pagar: junta as faturas que passaram
+        do vencimento, as previsões de <strong>meses anteriores</strong>, as comissões
+        e sinais com data já passada, e <strong>abate</strong> os recebíveis por cobrar.
+        Nas faturas financiadas, o funding do banco já vem descontado.
+      </div>
+      <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 11.5 }}>
+        <tbody>
+          {grupos.map(g => (
+            <tr key={g.origem} style={{ borderTop: "1px solid #F0E6D6" }}>
+              <td style={{ padding: "5px 6px", color: "#23292D", fontWeight: 600 }}>
+                {g.origem}
+                <span style={{ color: "#9DA2A6", fontWeight: 400, marginLeft: 6 }}>
+                  ({g.n})
+                </span>
+              </td>
+              <td style={{ padding: "5px 6px", textAlign: "right",
+                           fontFamily: "var(--fonte-numero)", fontWeight: 700,
+                           color: g.liquido >= 0 ? "#A93226" : "#1F7A54" }}>
+                {g.liquido >= 0 ? "" : "+"}{fmtK(Math.abs(g.liquido))}
+              </td>
+            </tr>
+          ))}
+          <tr style={{ borderTop: "2px solid #E3CE9F" }}>
+            <td style={{ padding: "6px", fontWeight: 800, color: "#23292D" }}>Vencido, líquido</td>
+            <td style={{ padding: "6px", textAlign: "right", fontWeight: 800,
+                         fontFamily: "var(--fonte-numero)", color: "#A93226" }}>
+              {fmtK(soma)}
+            </td>
+          </tr>
+          {!fecha && (
+            <tr>
+              <td colSpan={2} style={{ padding: "6px", fontSize: 10.5, color: "#A93226" }}>
+                A soma das origens ({fmtK(soma)}) não bate com o vencido usado no
+                caixa ({fmtK(total)}). Diz-me — há uma origem que não está aqui.
+              </td>
+            </tr>
+          )}
+        </tbody>
+      </table>
+
+      <details style={{ marginTop: 9 }}>
+        <summary style={{ cursor: "pointer", fontSize: 11, color: "#7E8388" }}>
+          Ver as {lista.length} linhas, uma a uma
+        </summary>
+        <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 11, marginTop: 6 }}>
+          <tbody>
+            {[...lista]
+              .sort((a, b) => String(a?.vencimento || "").localeCompare(String(b?.vencimento || "")))
+              .map((it, i) => (
+                <tr key={i} style={{ borderTop: "1px solid #F3EDE3" }}>
+                  <td style={{ padding: "4px 6px", color: "#9DA2A6", whiteSpace: "nowrap",
+                               fontFamily: "var(--fonte-numero)" }}>
+                    {String(it?.vencimento || "—").slice(0, 10)}
+                  </td>
+                  <td style={{ padding: "4px 6px", color: "#9DA2A6", whiteSpace: "nowrap" }}>
+                    {it?.origem || "—"}
+                  </td>
+                  <td style={{ padding: "4px 6px", color: "#23292D" }}>{it?.desc || "—"}</td>
+                  <td style={{ padding: "4px 6px", color: "#9DA2A6" }}>{it?.cat || ""}</td>
+                  <td style={{ padding: "4px 6px", textAlign: "right",
+                               fontFamily: "var(--fonte-numero)", fontWeight: 600,
+                               color: it?.tipo === "entrada" ? "#1F7A54" : "#A93226" }}>
+                    {it?.tipo === "entrada" ? "+" : "−"}{fmtK(Math.abs(Number(it?.valor) || 0))}
+                  </td>
+                </tr>
+              ))}
+          </tbody>
+        </table>
+      </details>
     </div>
   );
 }

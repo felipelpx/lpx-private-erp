@@ -1314,7 +1314,10 @@ export default function FluxoFuturo({ faturas: faturasTodas, faturasLoading, pag
             // uma conta a descoberto ou faturas vencidas por pagar — e são
             // coisas muito diferentes, por isso o ecrã separa-as.
             caixaDetalhe={{ atual: saldoAtual,
-                            vencido: vencidas.saidas - vencidas.entradas }}
+                            vencido: vencidas.saidas - vencidas.entradas,
+                            // As linhas, para o ecrã poder mostrar de que é
+                            // feito o número em vez de o deixar por explicar.
+                            itens: vencidas.items }}
             nMeses={mesesMatriz} onNMeses={setMesesMatriz} comVazios={mostrarVazios}
             onNovaDespesa={() => setShowForm(true)} />
         </div>
