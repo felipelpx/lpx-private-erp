@@ -10,8 +10,9 @@
 // este ficheiro fizesse uma conta, passaria a haver duas versões dela.
 // ─────────────────────────────────────────────────────────────────────────────
 
-import { construirPptx, texto, caixa, regua, tabela, par } from "./pptx.js";
-import { rotuloMesCurto } from "./reportCaixa.js";
+import { construirPptx, texto, caixa, regua, tabela, par, imagem } from "./pptx.js";
+import { logoPngBytes, LOGO_LARGURA, LOGO_ALTURA } from "./logoPng.js";
+import { rotuloMesCurto, repartirPorNatureza } from "./reportCaixa.js";
 
 // ─── O sistema do deck ──────────────────────────────────────────────────────
 const C = {
@@ -64,8 +65,15 @@ function moldura(titulo, subtitulo, numero) {
     texto(11.43, 7.00, 1.2, 0.3,
           par([{ t: `${String(numero).padStart(2, "0")}.`, sz: 9, cor: C.suave, fonte: K }],
               { align: "r" })),
+    // O logótipo, no canto superior direito — onde o 7M_Report o tem.
+    imagem(X1 - LOGO_CX, 0.40, LOGO_CX, LOGO_CY),
   ];
 }
+
+// 1,95 polegadas de largura, com a proporção do PNG. Pô-lo com uma proporção
+// à sorte esticava o leão, que é a única coisa pior do que não ter logótipo.
+const LOGO_CX = 1.95;
+const LOGO_CY = Math.round(LOGO_CX * (LOGO_ALTURA / LOGO_LARGURA) * 1000) / 1000;
 
 /** Um cartão com rótulo em cima e número grande por baixo. */
 function cartao(x, y, cx, cy, rotulo, valor, { cor = C.tinta, nota = null, szValor = 24 } = {}) {
@@ -92,113 +100,244 @@ const linhaTab = (ts, { zebra = false, forte = false, altura = 0.30 } = {}) => (
   })),
 });
 
-// ═══ SLIDE 1 — a semana que passou ═══════════════════════════════════════════
+// ═══ SLIDE 1 — a semana que passou ══════════════════════════════════════════
 function slideSemana(r, sub) {
   const s = r.semana;
+  const pp = r.porPagar || { n: 0, total: 0, estados: [], maiores: [] };
   const f = [...moldura("Caixa — Últimos 7 Dias", sub, 1)];
 
   const cx = 3.84, gap = 0.21;
-  f.push(cartao(X0, 1.70, cx, 1.55, `Caixa a ${s.de.slice(8, 10)}/${s.de.slice(5, 7)}`,
-                eur(s.saldoAnterior), { nota: "saldo lido do extrato" }));
-  f.push(cartao(X0 + cx + gap, 1.70, cx, 1.55, "Saiu nestes 7 dias",
-                eur(s.saidas), { cor: C.vermelho,
+  f.push(cartao(X0, 1.66, cx, 1.40, `Caixa a ${s.de.slice(8, 10)}/${s.de.slice(5, 7)}`,
+                eur(s.saldoAnterior), { nota: "saldo lido do extrato", szValor: 21 }));
+  f.push(cartao(X0 + cx + gap, 1.66, cx, 1.40, "Saiu nestes 7 dias",
+                eur(s.saidas), { cor: C.vermelho, szValor: 21,
                 nota: s.entradas > 0.005 ? `entraram ${eur(s.entradas)}` : "sem entradas no período" }));
-  f.push(cartao(X0 + 2 * (cx + gap), 1.70, cx, 1.55, "Caixa hoje",
-                eur(s.saldoAtual), { cor: sinal(s.saldoAtual),
+  f.push(cartao(X0 + 2 * (cx + gap), 1.66, cx, 1.40, "Caixa hoje",
+                eur(s.saldoAtual), { cor: sinal(s.saldoAtual), szValor: 21,
                 nota: `variação de ${eur(s.variacao)}` }));
 
-  // Quando o extrato não fecha, diz-se — e diz-se quanto falta.
-  let y = 3.45;
+  let y = 3.22;
   if (!s.fecha) {
-    f.push(caixa(X0, y, LARGURA, 0.46, { fill: "FBF6EC", linha: C.alerta, raio: 0.05,
+    f.push(caixa(X0, y, LARGURA, 0.40, { fill: "FBF6EC", linha: C.alerta, raio: 0.04,
       paras: par([
-        { t: "Atenção: ", sz: 10, b: true, cor: C.vermelho, fonte: K },
+        { t: "Atenção: ", sz: 9.5, b: true, cor: C.vermelho, fonte: K },
         { t: `a variação do saldo não bate com os movimentos importados — faltam `
            + `${eur(s.porExplicar)} por explicar. Provavelmente há extrato por importar.`,
-          sz: 10, cor: "7A5A22", fonte: K },
+          sz: 9.5, cor: "7A5A22", fonte: K },
       ]), opts: { anchor: "ctr", margem: 0.14 } }));
-    y += 0.62;
+    y += 0.52;
   }
 
-  f.push(texto(X0, y, 6.0, 0.3,
-         par([{ t: "Maiores saídas da semana", sz: 13, b: true, cor: C.tinta, fonte: G }])));
-  y += 0.42;
+  // ── Duas colunas: o que saiu, e o que está à espera de sair ─────────────
+  const colL = 5.82, colR = LARGURA - colL - 0.29;
+  const xR = X0 + colL + 0.29;
 
+  f.push(texto(X0, y, colL, 0.3,
+         par([{ t: "Maiores saídas da semana", sz: 12.5, b: true, cor: C.tinta, fonte: G }])));
+  f.push(texto(xR, y, colR, 0.3,
+         par([{ t: "Faturas por pagar", sz: 12.5, b: true, cor: C.tinta, fonte: G }])));
+  const yT = y + 0.38;
+
+  // Esquerda: o extrato da semana.
   if (s.maiores.length) {
-    const linhas = [cabTab([["Data"], ["Movimento"], ["Rubrica"], ["Valor", "r"]])];
-    s.maiores.forEach((m, i) => linhas.push(linhaTab([
-      { t: `${m.data.slice(8, 10)}/${m.data.slice(5, 7)}`, cor: C.suave },
-      { t: m.desc },
-      { t: m.rubrica, cor: C.suave },
-      { t: eur(m.valor), align: "r", b: true, cor: C.vermelho },
-    ], { zebra: i % 2 === 1 })));
-    linhas.push(linhaTab([
-      { t: "" },
-      { t: `${s.nMovimentos} movimento${s.nMovimentos === 1 ? "" : "s"} no período` },
-      { t: "total das saídas", align: "r", cor: C.suave },
-      { t: eur(s.saidas), align: "r" },
-    ], { forte: true, altura: 0.33 }));
-    f.push(tabela(X0, y, [1.1, 5.9, 2.73, 2.2], linhas));
+    const l = [{ altura: 0.26, celulas: [
+      { t: "Data", b: true, sz: 8.5, cor: C.tinta, fonte: K, fill: C.cabTab },
+      { t: "Movimento", b: true, sz: 8.5, cor: C.tinta, fonte: K, fill: C.cabTab },
+      { t: "Valor", b: true, sz: 8.5, cor: C.tinta, fonte: K, align: "r", fill: C.cabTab },
+    ]}];
+    s.maiores.slice(0, 5).forEach((m, i) => l.push({ altura: 0.24, celulas: [
+      { t: `${m.data.slice(8, 10)}/${m.data.slice(5, 7)}`, sz: 8.5, cor: C.suave, fonte: K,
+        fill: i % 2 ? C.zebra : null },
+      { t: m.desc.slice(0, 38), sz: 8.5, cor: C.texto, fonte: K, fill: i % 2 ? C.zebra : null },
+      { t: eur(m.valor), sz: 8.5, b: true, cor: C.vermelho, fonte: K, align: "r",
+        fill: i % 2 ? C.zebra : null },
+    ]}));
+    l.push({ altura: 0.27, celulas: [
+      { t: `${s.nMovimentos} mov.`, b: true, sz: 8.5, cor: C.tinta, fonte: K },
+      { t: "total das saídas", sz: 8.5, cor: C.suave, fonte: K, align: "r" },
+      { t: eur(s.saidas), b: true, sz: 8.5, cor: C.tinta, fonte: K, align: "r" },
+    ]});
+    f.push(tabela(X0, yT, [0.76, 3.3, 1.76], l));
   } else {
-    f.push(texto(X0, y, LARGURA, 0.4,
-           par([{ t: "Sem saídas registadas no período.", sz: 11, cor: C.suave, fonte: K }])));
+    f.push(texto(X0, yT, colL, 0.4,
+           par([{ t: "Sem saídas registadas no período.", sz: 10, cor: C.suave, fonte: K }])));
+  }
+
+  // Direita: o Contas a Pagar em aberto, por estado e depois as maiores.
+  if (pp.n > 0) {
+    const COR_ESTADO = (e) => /bloquead/i.test(e) ? C.vermelho
+                            : /atrasad/i.test(e) ? "A8762F" : C.texto;
+    const l = [{ altura: 0.26, celulas: [
+      { t: "Estado", b: true, sz: 8.5, cor: C.tinta, fonte: K, fill: C.cabTab },
+      { t: "N.º", b: true, sz: 8.5, cor: C.tinta, fonte: K, align: "r", fill: C.cabTab },
+      { t: "Valor", b: true, sz: 8.5, cor: C.tinta, fonte: K, align: "r", fill: C.cabTab },
+    ]}];
+    pp.estados.slice(0, 3).forEach((e, i) => l.push({ altura: 0.24, celulas: [
+      { t: e.estado, sz: 8.5, b: /bloquead|atrasad/i.test(e.estado), cor: COR_ESTADO(e.estado),
+        fonte: K, fill: i % 2 ? C.zebra : null },
+      { t: String(e.n), sz: 8.5, cor: C.suave, fonte: K, align: "r", fill: i % 2 ? C.zebra : null },
+      { t: eur(e.valor), sz: 8.5, b: true, cor: COR_ESTADO(e.estado), fonte: K, align: "r",
+        fill: i % 2 ? C.zebra : null },
+    ]}));
+    l.push({ altura: 0.27, celulas: [
+      { t: "Total por pagar", b: true, sz: 8.5, cor: C.tinta, fonte: K },
+      { t: String(pp.n), b: true, sz: 8.5, cor: C.tinta, fonte: K, align: "r" },
+      { t: eur(pp.total), b: true, sz: 8.5, cor: C.tinta, fonte: K, align: "r" },
+    ]});
+    f.push(tabela(xR, yT, [2.9, 0.7, 2.22], l));
+
+    // As maiores, com fornecedor e vencimento — é por aqui que se decide.
+    const yM = yT + 0.26 + pp.estados.slice(0, 3).length * 0.24 + 0.27 + 0.16;
+    const quantas = Math.max(0, Math.min(4, Math.floor((6.78 - yM - 0.26) / 0.24)));
+    if (quantas > 0) {
+      const l2 = [{ altura: 0.26, celulas: [
+        { t: "Maiores em aberto", b: true, sz: 8.5, cor: C.tinta, fonte: K, fill: C.cabTab },
+        { t: "Vence", b: true, sz: 8.5, cor: C.tinta, fonte: K, align: "r", fill: C.cabTab },
+        { t: "Valor", b: true, sz: 8.5, cor: C.tinta, fonte: K, align: "r", fill: C.cabTab },
+      ]}];
+      pp.maiores.slice(0, quantas).forEach((x, i) => l2.push({ altura: 0.24, celulas: [
+        { t: (x.bloqueada ? "B· " : x.atrasada ? "!  " : "") + x.fornecedor.slice(0, 29),
+          sz: 8.5, cor: C.texto, fonte: K, fill: i % 2 ? C.zebra : null },
+        { t: x.vencimento ? `${x.vencimento.slice(8, 10)}/${x.vencimento.slice(5, 7)}` : "—",
+          sz: 8.5, cor: x.atrasada || x.bloqueada ? C.vermelho : C.suave, fonte: K,
+          align: "r", fill: i % 2 ? C.zebra : null },
+        { t: eur(x.valor), sz: 8.5, b: true, cor: C.vermelho, fonte: K, align: "r",
+          fill: i % 2 ? C.zebra : null },
+      ]}));
+      f.push(tabela(xR, yM, [2.9, 0.7, 2.22], l2));
+      f.push(texto(xR, Math.min(yM + 0.26 + quantas * 0.24 + 0.04, 6.74), colR, 0.24,
+             par([{ t: "!  atrasada      B·  pagamento bloqueado", sz: 7.5, cor: C.suave, fonte: K }])));
+    }
+  } else {
+    f.push(texto(xR, yT, colR, 0.4,
+           par([{ t: "Nada por pagar no Contas a Pagar.", sz: 10, cor: C.suave, fonte: K }])));
   }
   return f;
 }
 
-// ═══ SLIDE 2 — como fecha o mês ══════════════════════════════════════════════
+// ═══ SLIDE 2 — o mês, na grelha do Fluxo Futuro ══════════════════════════════
+// As mesmas rubricas e as mesmas secções do slide seguinte, mas de um mês só,
+// com as colunas que interessam a quem decide: o que JÁ ESTÁ FATURADO, o que
+// ainda é PREVISÃO, e o total. Em cima o caixa de hoje, em baixo o caixa com
+// que o mês fecha.
 function slideMes(r, sub) {
-  const m = r.mes;
-  const f = [...moldura(`Caixa — ${capitalizar(m.rotulo)}`, sub, 2)];
+  const mm = r.mes;
+  const mz = r.matrizMes;
+  const f = [...moldura(`Fluxo Futuro — ${capitalizar(mm.rotulo)}`, sub, 2)];
 
-  const cx = 3.84, gap = 0.21;
-  f.push(cartao(X0, 1.70, cx, 1.55, "Já faturado por sair", eur(m.faturado.saidas),
-                { cor: C.vermelho, nota: `${m.faturado.n} lançamento${m.faturado.n === 1 ? "" : "s"} · compromisso firme` }));
-  f.push(cartao(X0 + cx + gap, 1.70, cx, 1.55, "Ainda previsto", eur(m.previsto.saidas),
-                { cor: "7A5A22", nota: `${m.previsto.n} lançamento${m.previsto.n === 1 ? "" : "s"} · estimativa` }));
-  f.push(cartao(X0 + 2 * (cx + gap), 1.70, cx, 1.55, "Caixa no fim do mês",
-                eur(m.saldoFim), { cor: sinal(m.saldoFim),
-                nota: `abre com ${eur(m.saldoAbertura)}` }));
+  if (!mz || !mz.chaves.length) {
+    f.push(texto(X0, 2.4, LARGURA, 0.6,
+           par([{ t: "Sem lançamentos no mês corrente.", sz: 13, cor: C.suave, fonte: K }])));
+    return f;
+  }
 
-  const linhas = [
-    cabTab([[""], ["Entradas", "r"], ["Saídas", "r"], ["Líquido", "r"], ["Lançamentos", "r"]]),
-    linhaTab([
-      { t: "Já faturado / contratado", b: true },
-      { t: eur(m.faturado.entradas), align: "r", cor: C.verde },
-      { t: eur(m.faturado.saidas), align: "r", cor: C.vermelho },
-      { t: eur(m.faturado.liquido), align: "r", b: true, cor: sinal(m.faturado.liquido) },
-      { t: String(m.faturado.n), align: "r", cor: C.suave },
-    ]),
-    linhaTab([
-      { t: "Previsto", b: true },
-      { t: eur(m.previsto.entradas), align: "r", cor: C.verde },
-      { t: eur(m.previsto.saidas), align: "r", cor: C.vermelho },
-      { t: eur(m.previsto.liquido), align: "r", b: true, cor: sinal(m.previsto.liquido) },
-      { t: String(m.previsto.n), align: "r", cor: C.suave },
-    ], { zebra: true }),
-    linhaTab([
-      { t: "Total do mês" },
-      { t: eur(m.total.entradas), align: "r" },
-      { t: eur(m.total.saidas), align: "r" },
-      { t: eur(m.total.liquido), align: "r", cor: sinal(m.total.liquido) },
-      { t: String(m.total.n), align: "r" },
-    ], { forte: true, altura: 0.32 }),
-  ];
-  f.push(tabela(X0, 3.45, [4.13, 2.0, 2.0, 2.0, 1.8], linhas));
+  const chave = mz.chaves[0];
+  const larguras = [4.73, 2.4, 2.4, 2.4];       // soma 11,93
+  const linhas = [];
 
-  f.push(texto(X0, 4.80, 7.0, 0.3,
-         par([{ t: "Maiores saídas do mês", sz: 13, b: true, cor: C.tinta, fonte: G }])));
+  // O caixa com que o mês ABRE é o caixa de hoje. Fica em cima da grelha,
+  // porque é dele que tudo parte.
+  linhas.push({ altura: 0.30, celulas: [
+    { t: "Caixa no início do mês (hoje)", b: true, sz: 9, cor: C.tinta, fonte: K, fill: "F3F0EA" },
+    { t: "", fill: "F3F0EA" }, { t: "", fill: "F3F0EA" },
+    { t: eur(mz.caixaAbertura), b: true, sz: 9, align: "r",
+      cor: sinal(mz.caixaAbertura), fonte: K, fill: "F3F0EA" },
+  ]});
 
-  if (m.maiores.length) {
-    const l2 = [cabTab([["Despesa"], ["Rubrica"], ["Estado"], ["Valor", "r"]])];
-    m.maiores.slice(0, 4).forEach((x, i) => l2.push(linhaTab([
-      { t: x.desc },
-      { t: x.rubrica, cor: C.suave },
-      { t: x.faturado ? "faturado" : "previsto",
-        cor: x.faturado ? C.tinta : C.suave, b: x.faturado },
-      { t: eur(x.valor), align: "r", b: true, cor: C.vermelho },
-    ], { zebra: i % 2 === 1 })));
-    f.push(tabela(X0, 5.20, [5.13, 2.9, 1.7, 2.2], l2));
+  linhas.push({ altura: 0.28, celulas: [
+    { t: "Despesa", b: true, sz: 9, cor: C.tinta, fonte: K, fill: C.cabTab },
+    { t: "Já faturado", b: true, sz: 9, cor: C.tinta, fonte: K, align: "r", fill: C.cabTab },
+    { t: "Previsto", b: true, sz: 9, cor: C.tinta, fonte: K, align: "r", fill: C.cabTab },
+    { t: "Total do mês", b: true, sz: 9, cor: C.tinta, fonte: K, align: "r", fill: C.cabTab },
+  ]});
+
+  const h = 0.235;
+  const fixas = 2 /*caixa inicial + cabeçalho*/ + 3 /*secções*/ + 2 /*líquido + caixa fim*/;
+  const cabem = Math.max(6, Math.floor((6.50 - 1.62) / h) - fixas);
+  const seccoes = rubricasQueCabem(mz.seccoes, cabem);
+
+  const cel = (t, { align = "r", cor = C.texto, b = false, fill = null, sz = 8.5 } = {}) =>
+    ({ t, align, cor, b, fill, sz, fonte: K });
+  const val = (v, cor) => cel(Math.abs(n2(v)) > 0.005 ? eur(v) : "—",
+                              { cor: Math.abs(n2(v)) > 0.005 ? cor : C.suave });
+
+  let totF = 0, totP = 0;
+
+  seccoes.forEach(sec => {
+    if (!sec.mostra.length && !sec.juntas.length) return;
+    const titulo = sec.tipo === "funding" ? "FUNDING — BANCO" : sec.titulo.toUpperCase();
+    const cor = sec.tipo === "entrada" ? C.verde : sec.tipo === "saida" ? C.vermelho : C.tinta;
+
+    const soma = (lista) => lista.reduce((acc, g) => {
+      const x = repartirPorNatureza(g, chave, sec.assinado);
+      return { faturado: acc.faturado + x.faturado, previsto: acc.previsto + x.previsto };
+    }, { faturado: 0, previsto: 0 });
+    const sSec = soma([...sec.mostra, ...sec.juntas]);
+    // O LÍQUIDO leva o sinal da secção: os custos saem, por isso abatem. A do
+    // funding já vem assinada de dentro (o desembolso soma, a amortização
+    // abate), por isso aqui não se lhe toca. Sem isto, a linha do líquido
+    // somava os custos como se fossem receita e dava sempre positivo.
+    const sgn = sec.tipo === "saida" ? -1 : 1;
+    totF += sgn * sSec.faturado; totP += sgn * sSec.previsto;
+
+    linhas.push({ altura: 0.26, celulas: [
+      cel(titulo, { align: "l", cor, b: true, sz: 9, fill: C.zebra }),
+      { ...val(sSec.faturado, cor), b: true, fill: C.zebra },
+      { ...val(sSec.previsto, cor), b: true, fill: C.zebra },
+      cel(eur(sec.valores[chave]), { cor, b: true, fill: C.zebra }),
+    ]});
+
+    sec.mostra.forEach(g => {
+      const x = repartirPorNatureza(g, chave, sec.assinado);
+      linhas.push({ altura: h, celulas: [
+        cel(g.categoria, { align: "l" }),
+        val(x.faturado, cor), val(x.previsto, cor),
+        cel(eur(g.valores[chave]), { cor, b: true }),
+      ]});
+    });
+
+    if (sec.juntas.length) {
+      const x = soma(sec.juntas);
+      linhas.push({ altura: h, celulas: [
+        cel(`Outras ${sec.juntas.length} rubricas`, { align: "l", cor: C.suave }),
+        val(x.faturado, C.suave), val(x.previsto, C.suave),
+        cel(eur(sec.juntas.reduce((a, g) => a + n2(g.valores[chave]), 0)), { cor: C.suave }),
+      ]});
+    }
+  });
+
+  linhas.push({ altura: 0.27, celulas: [
+    cel("Líquido do mês", { align: "l", cor: C.tinta, b: true, sz: 9, fill: C.cabTab }),
+    cel(eur(totF), { cor: sinal(totF), b: true, fill: C.cabTab }),
+    cel(eur(totP), { cor: sinal(totP), b: true, fill: C.cabTab }),
+    cel(eur(mz.liquido[chave]), { cor: sinal(mz.liquido[chave]), b: true, fill: C.cabTab }),
+  ]});
+  linhas.push({ altura: 0.32, celulas: [
+    cel("Caixa no fim do mês", { align: "l", cor: C.tinta, b: true, sz: 9.5, fill: "F3F0EA" }),
+    cel("", { fill: "F3F0EA" }), cel("", { fill: "F3F0EA" }),
+    cel(eur(mz.caixa?.[chave]), { cor: sinal(mz.caixa?.[chave]), b: true, sz: 9.5, fill: "F3F0EA" }),
+  ]});
+
+  f.push(tabela(X0, 1.62, larguras, linhas));
+
+  const alturaTab = linhas.reduce((a, l) => a + l.altura, 0);
+  const y = Math.min(1.62 + alturaTab + 0.16, 6.46);
+
+  const firme = Math.round(mm.pesoFaturado);
+  f.push(caixa(X0, y, LARGURA, 0.34, { fill: C.cartao, linha: C.cartaoLn, raio: 0.04,
+    paras: par([
+      { t: `${firme}% das saídas do mês já estão faturadas`, sz: 9, b: true, cor: C.tinta, fonte: K },
+      { t: firme >= 70
+          ? "  ·  a margem para adiar é pequena, quase tudo já está contratado."
+          : "  ·  há margem para reprogramar, boa parte ainda é estimativa.",
+        sz: 9, cor: C.suave, fonte: K },
+    ]), opts: { anchor: "ctr", margem: 0.14 } }));
+
+  const juntas = seccoes.reduce((a, x) => a + x.juntas.length, 0);
+  if (juntas > 0) {
+    f.push(texto(X0, y + 0.38, LARGURA, 0.26, par([{
+      t: `${juntas} rubricas mais pequenas foram agrupadas para caberem na página.`,
+      sz: 8, cor: C.suave, fonte: K }])));
   }
   return f;
 }
@@ -440,6 +579,7 @@ export function gerarReportCaixaPptx(r) {
     dados: construirPptx(slides, {
       titulo: `Report de Caixa — ${r.nomeEmpresa || ""}`.trim(),
       autor: "LPX Private",
+      media: [{ ext: "png", dados: logoPngBytes() }],
     }),
     nome: `Report_Caixa_${nomeLimpo}_${String(r.hoje).slice(0, 10)}.pptx`,
   };

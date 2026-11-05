@@ -216,6 +216,19 @@ export function tabela(x, y, larguras, linhas) {
     </a:graphicData></a:graphic></p:graphicFrame>`;
 }
 
+/**
+ * Uma imagem. O `rel` é o id da relação do slide — ver `media` em
+ * construirPptx, que é quem mete o ficheiro dentro do .pptx e cria a relação.
+ */
+export function imagem(x, y, cx, cy, rel = "rId2") {
+  const id = proximoId();
+  return `<p:pic><p:nvPicPr><p:cNvPr id="${id}" name="Img${id}"/>
+      <p:cNvPicPr><a:picLocks noChangeAspect="1"/></p:cNvPicPr><p:nvPr/></p:nvPicPr>
+    <p:blipFill><a:blip r:embed="${rel}"/><a:stretch><a:fillRect/></a:stretch></p:blipFill>
+    <p:spPr><a:xfrm><a:off x="${pol(x)}" y="${pol(y)}"/><a:ext cx="${pol(cx)}" cy="${pol(cy)}"/></a:xfrm>
+      <a:prstGeom prst="rect"><a:avLst/></a:prstGeom></p:spPr></p:pic>`;
+}
+
 // ─── O ficheiro ─────────────────────────────────────────────────────────────
 const CABECALHO = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n';
 const NS = 'xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" '
@@ -277,16 +290,29 @@ const LAYOUT = CABECALHO + `<p:sldLayout ${NS} type="blank" preserve="1">${vazio
  * @param meta    { titulo, autor }
  * @returns Uint8Array
  */
-export function construirPptx(slides, { titulo = "Report", autor = "LPX Private" } = {}) {
+export function construirPptx(slides, { titulo = "Report", autor = "LPX Private",
+                                        media = [] } = {}) {
   _id = 1;
   const n = slides.length;
   const idx = Array.from({ length: n }, (_, i) => i + 1);
+  // As imagens partilhadas por todos os slides (o logótipo). Cada slide fica
+  // com uma relação para cada uma, a começar no rId2 — o rId1 é o layout.
+  const imgs = (media || []).map((m, i) => ({
+    ext: (m.ext || "png").toLowerCase(),
+    dados: m.dados,
+    nome: `image${i + 1}.${(m.ext || "png").toLowerCase()}`,
+    rel: `rId${i + 2}`,
+  }));
+  const extensoes = [...new Set(imgs.map(i => i.ext))];
+  const TIPO_MEDIA = { png: "image/png", jpg: "image/jpeg", jpeg: "image/jpeg",
+                       gif: "image/gif", svg: "image/svg+xml" };
 
   const ficheiros = [
     { nome: "[Content_Types].xml", dados: CABECALHO
       + `<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
         <Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
         <Default Extension="xml" ContentType="application/xml"/>
+        ${extensoes.map(e => `<Default Extension="${e}" ContentType="${TIPO_MEDIA[e] || "application/octet-stream"}"/>`).join("")}
         <Override PartName="/ppt/presentation.xml" ContentType="application/vnd.openxmlformats-officedocument.presentationml.presentation.main+xml"/>
         <Override PartName="/ppt/slideMasters/slideMaster1.xml" ContentType="application/vnd.openxmlformats-officedocument.presentationml.slideMaster+xml"/>
         <Override PartName="/ppt/slideLayouts/slideLayout1.xml" ContentType="application/vnd.openxmlformats-officedocument.presentationml.slideLayout+xml"/>
@@ -345,11 +371,14 @@ export function construirPptx(slides, { titulo = "Report", autor = "LPX Private"
     { nome: "ppt/theme/theme1.xml", dados: TEMA },
   ];
 
+  imgs.forEach(im => ficheiros.push({ nome: `ppt/media/${im.nome}`, dados: im.dados }));
+
   slides.forEach((formas, i) => {
     ficheiros.push({ nome: `ppt/slides/slide${i + 1}.xml`, dados: slideXml(formas) });
     ficheiros.push({ nome: `ppt/slides/_rels/slide${i + 1}.xml.rels`, dados: CABECALHO
       + `<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
         <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slideLayout" Target="../slideLayouts/slideLayout1.xml"/>
+        ${imgs.map(im => `<Relationship Id="${im.rel}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="../media/${im.nome}"/>`).join("")}
       </Relationships>` });
   });
 

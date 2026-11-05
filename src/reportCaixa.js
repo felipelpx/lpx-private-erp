@@ -16,6 +16,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { construirMatriz } from "./matriz.js";
+import { statusFatura, faturaPaga } from "./status.js";
 
 const num = (v) => { const n = Number(v); return Number.isFinite(n) ? n : 0; };
 const arred2 = (v) => Math.round((num(v) + Number.EPSILON) * 100) / 100;
@@ -213,7 +214,7 @@ export function proximosMeses({ meses = [], saldoInicial = 0, n = 6 } = {}) {
  * report sem conclusões nenhumas.
  */
 export function conclusoes({ semana = null, mes = null, futuro = null,
-                             vencido = 0, saldoAtual = 0 } = {}) {
+                             vencido = 0, saldoAtual = 0, porPagar = null } = {}) {
   const out = [];
   // À portuguesa, com PONTO nos milhares — a mesma composição dos slides. O
   // Intl do browser usa um espaço estreito que, impresso, parece um erro.
@@ -255,6 +256,17 @@ export function conclusoes({ semana = null, mes = null, futuro = null,
       texto: `Há ${eur(abs(vencido))} com data de vencimento já passada${peso}. `
            + `Vale a pena separar o que é dívida mesmo do que são previsões antigas `
            + `por limpar: as segundas inflam o número sem corresponderem a compromisso nenhum.`,
+    });
+  }
+
+  // 2b. Faturas bloqueadas — alguém tem de as desbloquear ou recusar
+  if (porPagar && porPagar.bloqueado > 0.005) {
+    out.push({
+      grau: "atencao",
+      titulo: `${eur(porPagar.bloqueado)} em faturas com pagamento bloqueado`,
+      texto: `Estão retidas à espera de decisão. Enquanto não forem libertadas ou `
+           + `recusadas, não entram no planeamento de tesouraria — e continuam a contar `
+           + `como dívida ao fornecedor.`,
     });
   }
 
@@ -316,11 +328,82 @@ export function conclusoes({ semana = null, mes = null, futuro = null,
   return out;
 }
 
+/**
+ * As faturas por pagar — pendentes, atrasadas e bloqueadas.
+ *
+ * Não é o mesmo que o "vencido" do caixa: aquele junta quatro origens e
+ * desconta o funding do banco. Isto é só o Contas a Pagar, que é o que se
+ * tem à frente quando se decide o que pagar esta semana.
+ */
+export function faturasPorPagar({ faturas = [], empresa = null } = {}) {
+  const abertas = (faturas || []).filter(f => {
+    if (!f) return false;
+    if (empresa && f.empresa !== empresa) return false;
+    return !faturaPaga(f);
+  });
+
+  const porEstado = new Map();
+  abertas.forEach(f => {
+    const st = statusFatura(f) || "Pendente";
+    if (!porEstado.has(st)) porEstado.set(st, { estado: st, n: 0, valor: 0 });
+    const g = porEstado.get(st);
+    g.n++; g.valor = arred2(g.valor + abs(f.valor));
+  });
+
+  // Os estados por ordem de urgência, não por ordem alfabética.
+  const ORDEM = ["Pagamento bloqueado", "Pendente atrasado", "Pendente em dia"];
+  const estados = [...porEstado.values()].sort((a, b) => {
+    const ia = ORDEM.indexOf(a.estado), ib = ORDEM.indexOf(b.estado);
+    return (ia < 0 ? 99 : ia) - (ib < 0 ? 99 : ib) || b.valor - a.valor;
+  });
+
+  const maiores = abertas
+    .sort((a, b) => abs(b.valor) - abs(a.valor))
+    .slice(0, 6)
+    .map(f => ({
+      fornecedor: String(f.fornecedor || f.fatura || "(sem fornecedor)").slice(0, 34),
+      rubrica: f.subcategoria || f.categoria || "",
+      vencimento: String(f.vencimento || "").slice(0, 10),
+      valor: abs(f.valor),
+      estado: statusFatura(f) || "Pendente",
+      atrasada: /atrasad/i.test(statusFatura(f) || ""),
+      bloqueada: /bloquead/i.test(statusFatura(f) || ""),
+    }));
+
+  const soma = (teste) => arred2(abertas.filter(teste).reduce((s, f) => s + abs(f.valor), 0));
+  return {
+    n: abertas.length,
+    total: arred2(abertas.reduce((s, f) => s + abs(f.valor), 0)),
+    atrasado: soma(f => /atrasad/i.test(statusFatura(f) || "")),
+    bloqueado: soma(f => /bloquead/i.test(statusFatura(f) || "")),
+    emDia: soma(f => /em dia/i.test(statusFatura(f) || "")),
+    estados, maiores,
+  };
+}
+
+/**
+ * Um grupo da matriz, repartido entre o que já está faturado e o que é
+ * previsão. A marca é a mesma de sempre (`natureza`), e o sinal é o da
+ * secção: na do funding, uma saída (a amortização) conta negativa.
+ */
+export function repartirPorNatureza(grupo, chave, assinado = false) {
+  const sinal = assinado && grupo?.tipo === "saida" ? -1 : 1;
+  let faturado = 0, previsto = 0, nF = 0, nP = 0;
+  (grupo?.linhas || []).forEach(l => {
+    ((l.itens || {})[chave] || []).forEach(it => {
+      const v = sinal * Math.abs(num(it?.valor));
+      if (ehFaturado(it)) { faturado += v; nF++; } else { previsto += v; nP++; }
+    });
+  });
+  return { faturado: arred2(faturado), previsto: arred2(previsto),
+           total: arred2(faturado + previsto), nF, nP };
+}
+
 /** Tudo junto, que é o que o botão do ecrã chama. */
 export function construirReportCaixa({
   nomeEmpresa = "", hoje = new Date().toISOString().slice(0, 10),
   saldoAtual = 0, saldoAnterior = 0, movimentos = [],
-  meses = [], vencido = 0, dias = 7, nMeses = 6,
+  meses = [], vencido = 0, dias = 7, nMeses = 6, faturas = [], empresa = null,
   // Em que rubrica cai cada lançamento. É a MESMA função que o Fluxo Futuro
   // usa para desenhar a matriz — por isso o slide sai com as mesmas linhas
   // que estão no ecrã, e não com uma arrumação paralela.
@@ -328,6 +411,7 @@ export function construirReportCaixa({
 } = {}) {
   const de = hoje7DiasAntes(hoje, dias);
   const semana = semanaQuePassou({ saldoAtual, saldoAnterior, movimentos, de, ate: hoje });
+  const porPagar = faturasPorPagar({ faturas, empresa });
 
   // O caixa de onde o futuro parte: o de hoje menos o que já está vencido —
   // o mesmo ponto de partida da linha "Caixa acumulado" da matriz.
@@ -340,16 +424,22 @@ export function construirReportCaixa({
   // A matriz do Fluxo Futuro, com a janela do report. O slide dos próximos
   // meses é esta grelha: despesas em linha, meses em coluna, as três secções
   // (receitas, custos, funding) e o caixa acumulado em baixo.
-  const matriz = construirMatriz({
-    meses, maxMeses: nMeses, saldoInicial,
-    ...(typeof rubricaDoItem === "function" ? { rubricaDoItem } : {}),
-  });
+  const comRubrica = typeof rubricaDoItem === "function" ? { rubricaDoItem } : {};
+  const matriz = construirMatriz({ meses, maxMeses: nMeses, saldoInicial, ...comRubrica });
+
+  // A mesma grelha, mas só do MÊS CORRENTE: é o slide 2. Faz-se à parte
+  // porque a matriz de cima deixa cair os meses sem lançamentos, e o mês
+  // corrente tem de aparecer mesmo que esteja vazio — é o mês em que se está.
+  const matrizMes = mesAtual
+    ? construirMatriz({ meses: [mesAtual], maxMeses: 1, saldoInicial,
+                        comVazios: true, ...comRubrica })
+    : null;
 
   return {
     nomeEmpresa, hoje, dias, nMeses,
     saldoAtual: arred2(saldoAtual), vencido: arred2(vencido), saldoInicial,
-    semana, mes, futuro, matriz,
-    conclusoes: conclusoes({ semana, mes, futuro, vencido, saldoAtual }),
+    semana, porPagar, mes, futuro, matriz, matrizMes,
+    conclusoes: conclusoes({ semana, mes, futuro, vencido, saldoAtual, porPagar }),
   };
 }
 

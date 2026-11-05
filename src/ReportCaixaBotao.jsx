@@ -18,6 +18,10 @@ export default function BotaoReportCaixa({
   nomeEmpresa, contaIds = [], meses = [], saldoAtual = 0, vencido = 0,
   hoje = new Date().toISOString().slice(0, 10), dias = 7, nMeses = 6,
   rubricaDoItem = null,
+  // As faturas do Contas a Pagar e o id da empresa: o slide 1 mostra o que
+  // está por pagar, e isso é o Contas a Pagar — não o "vencido" do caixa,
+  // que junta quatro origens e desconta o funding.
+  faturas = [], empresa = null,
 }) {
   const [aGerar, setAGerar] = useState(false);
 
@@ -40,6 +44,7 @@ export default function BotaoReportCaixa({
       const r = construirReportCaixa({
         nomeEmpresa, hoje, dias, nMeses,
         saldoAtual, saldoAnterior, movimentos, meses, vencido, rubricaDoItem,
+        faturas, empresa,
       });
 
       const { dados, nome } = gerarReportCaixaPptx(r);

@@ -12,7 +12,7 @@ import { CATEGORIAS } from "./categorias.js";
 import { categoriasDa, comOValorAtual } from "./categoriasEmpresa.js";
 import { faturaPaga, faturaAtrasada, statusFatura } from "./status.js";
 import { fmtEUR as fmtEuro } from "./formato.js";
-import { labelEmpresa, EMPRESAS as EMPRESAS_TODAS } from "./empresas.js";
+import { labelEmpresa, EMPRESAS as EMPRESAS_TODAS, GRUPOS, GRUPOS_INFO } from "./empresas.js";
 import { temFunding, pctFunding, linhaFunding, ERRO_SEM_COLUNAS, faltamColunas, CATEGORIA_FUNDING } from "./funding.js";
 import { construirMatriz } from "./matriz.js";
 import { opcoesDeRubrica, rubricaDe } from "./rubricas.js";
@@ -1038,13 +1038,38 @@ export default function FluxoFuturo({ faturas: faturasTodas, faturasLoading, pag
 
       {/* Controls */}
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 10 }}>
-        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-          {EMPRESAS_CAIXA.map(e => (
-            <button key={e.id} onClick={() => setEmpresa(e.id)}
-              style={{ background: empresa === e.id ? "#091C2A" : "#fff", color: empresa === e.id ? "#fff" : "#5C6166", border: `1px solid ${empresa === e.id ? "#091C2A" : "#EFE8DE"}`, padding: "7px 14px", borderRadius: 8, fontSize: 12, cursor: "pointer", fontWeight: empresa === e.id ? 700 : 400 }}>
-              {e.nome}
-            </button>
-          ))}
+        {/* ── O projeto ────────────────────────────────────────────────────
+            Eram dez botões em duas filas, antes de se chegar aos filtros que
+            interessam. Uma lista, como no Caixa Único: vê-se qual está
+            escolhido sem ter de procurar o botão aceso, e os outros nove não
+            ocupam o ecrã. Vão com o saldo ao lado, que é a razão de se andar
+            a saltar entre projetos. */}
+        <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+          <label style={{ fontSize: 11, color: "#9DA2A6", fontFamily: "var(--fonte-numero)",
+                          textTransform: "uppercase", letterSpacing: "0.06em" }}>
+            Projeto
+          </label>
+          <select value={empresa} onChange={e => setEmpresa(e.target.value)}
+            title="O projeto que o fluxo mostra"
+            style={{ background: "#fff", border: "1px solid #D8CCBB", borderRadius: 8,
+                     padding: "7px 12px", fontSize: 12.5, fontWeight: 700, color: "#091C2A",
+                     outline: "none", minWidth: 280, fontFamily: "inherit", cursor: "pointer" }}>
+            {EMPRESAS_CAIXA.filter(e => e.id === "all").map(e => (
+              <option key={e.id} value={e.id}>{e.nome} — {fmt(e.saldo)}</option>
+            ))}
+            {GRUPOS.filter(g => EMPRESAS_CAIXA.some(e => e.id !== "all"
+                && EMPRESAS_TODAS.find(x => x.id === e.id)?.grupo === g)).map(g => (
+              <optgroup key={g} label={GRUPOS_INFO[g]?.nome || g}>
+                {EMPRESAS_CAIXA.filter(e => e.id !== "all"
+                    && EMPRESAS_TODAS.find(x => x.id === e.id)?.grupo === g)
+                  .map(e => <option key={e.id} value={e.id}>{e.nome} — {fmt(e.saldo)}</option>)}
+              </optgroup>
+            ))}
+            {/* As que não estão em grupo nenhum não podem desaparecer da lista. */}
+            {EMPRESAS_CAIXA.filter(e => e.id !== "all"
+                && !GRUPOS.includes(EMPRESAS_TODAS.find(x => x.id === e.id)?.grupo))
+              .map(e => <option key={e.id} value={e.id}>{e.nome} — {fmt(e.saldo)}</option>)}
+          </select>
         </div>
         <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
           {[["matriz", "Matriz"], ["mensal", "Mensal"], ["anual", "Anual"]].map(([v, lbl]) => (
@@ -1083,6 +1108,7 @@ export default function FluxoFuturo({ faturas: faturasTodas, faturasLoading, pag
             // A mesma régua de rubricas da matriz do ecrã: nos projetos HDG
             // as linhas da FO, nas empresas LPX o plano de contas.
             rubricaDoItem={rubricaDoItem}
+            faturas={faturas} empresa={empresa === "all" ? null : empresa}
             hoje={hojeISO} nMeses={6} />
           {/* Real (com fatura) vs Previsto (estimativa lançada à mão) */}
           <div style={{ display: "flex", gap: 2, background: "#E7DED2", borderRadius: 8, padding: 2, marginLeft: 4 }}>
