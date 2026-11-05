@@ -1310,6 +1310,11 @@ export default function FluxoFuturo({ faturas: faturasTodas, faturasLoading, pag
           </div>
           <MatrizFluxo matriz={matriz} isAdmin={isAdmin} acoes={acoesDoItem}
             rubricasDoPlano={rubricasDoPlano}
+            // De que é feito o caixa de abertura. Um saldo negativo pode ser
+            // uma conta a descoberto ou faturas vencidas por pagar — e são
+            // coisas muito diferentes, por isso o ecrã separa-as.
+            caixaDetalhe={{ atual: saldoAtual,
+                            vencido: vencidas.saidas - vencidas.entradas }}
             nMeses={mesesMatriz} onNMeses={setMesesMatriz} comVazios={mostrarVazios}
             onNovaDespesa={() => setShowForm(true)} />
         </div>

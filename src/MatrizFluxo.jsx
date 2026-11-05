@@ -160,7 +160,15 @@ const AMARELO_LINHA = "#E8D9A8";
 const AMARELO_TEXTO = "#7A5A22";
 
 export default function MatrizFluxo({ matriz, isAdmin, acoes, nMeses, onNMeses, onNovaDespesa,
-                                      comVazios, rubricasDoPlano = null }) {
+                                      comVazios, rubricasDoPlano = null,
+                                      // De que é feito o caixa de abertura:
+                                      // { atual, vencido }. Sem isto, a linha
+                                      // mostra só o número — e um saldo
+                                      // negativo não diz se o projeto está a
+                                      // descoberto no banco ou se tem contas
+                                      // vencidas por pagar. São coisas muito
+                                      // diferentes e o ecrã tem de as separar.
+                                      caixaDetalhe = null }) {
   const doPlano = (cat) => !!rubricasDoPlano &&
     rubricasDoPlano.has(String(cat || "").trim().toLowerCase());
   const [celula, setCelula] = useState(null);   // { linha, mes, x, y }
@@ -470,9 +478,41 @@ export default function MatrizFluxo({ matriz, isAdmin, acoes, nMeses, onNMeses, 
                 <td style={{ ...celulaNum, ...colada("#F3F0EA"), textAlign: "left", fontWeight: 800,
                              color: "#23292D", padding: "10px 12px" }}>
                   Caixa acumulado
-                  <span style={{ color: "#9DA2A6", fontWeight: 400, marginLeft: 6, fontSize: 10.5 }}>
-                    (abre com {fmtK(matriz.caixaAbertura)})
-                  </span>
+                  {(() => {
+                    // Só se reparte quando a primeira coluna à vista É o
+                    // princípio do fluxo. Com a vista filtrada para começar
+                    // em janeiro, a abertura é o saldo acumulado dessa altura
+                    // — repartir isso no caixa de HOJE seria mentira.
+                    const noPrincipio = caixaDetalhe
+                      && Math.abs((Number(caixaDetalhe.atual) || 0)
+                                  - (Number(caixaDetalhe.vencido) || 0)
+                                  - (Number(matriz.caixaAbertura) || 0)) < 0.011;
+                    const vencido = Number(caixaDetalhe?.vencido) || 0;
+                    if (noPrincipio && Math.abs(vencido) > 0.005) {
+                      return (
+                        <span style={{ color: "#9DA2A6", fontWeight: 400, marginLeft: 6, fontSize: 10.5 }}
+                          title={"O caixa de abertura é o dinheiro que está na conta hoje MENOS o que "
+                               + "já está vencido e por pagar. Um valor negativo aqui pode querer dizer "
+                               + "duas coisas muito diferentes: ou a conta está a descoberto, ou as "
+                               + "faturas vencidas são maiores do que o saldo. Esta repartição diz qual."}>
+                          (abre com {fmtK(matriz.caixaAbertura)} = {fmtK(caixaDetalhe.atual)} na conta
+                          {vencido >= 0 ? " − " : " + "}{fmtK(Math.abs(vencido))}{" "}
+                          <span style={{ color: "#A93226" }}>
+                            {vencido >= 0 ? "já vencido por pagar" : "já vencido por receber"}
+                          </span>)
+                        </span>
+                      );
+                    }
+                    return (
+                      <span style={{ color: "#9DA2A6", fontWeight: 400, marginLeft: 6, fontSize: 10.5 }}
+                        title={noPrincipio
+                          ? "O dinheiro que está na conta hoje."
+                          : "O saldo acumulado até ao primeiro mês à vista. Não é o caixa de hoje: a vista está filtrada."}>
+                        (abre com {fmtK(matriz.caixaAbertura)}
+                        {!noPrincipio && caixaDetalhe ? ", saldo até aqui" : ""})
+                      </span>
+                    );
+                  })()}
                 </td>
                 {colunas.map(c => {
                   const v = matriz.caixa[c.key];
