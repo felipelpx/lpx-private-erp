@@ -17,6 +17,7 @@
 
 import { construirMatriz } from "./matriz.js";
 import { statusFatura, faturaPaga } from "./status.js";
+import { ehTransferenciaInterna } from "./rubricas.js";
 
 const num = (v) => { const n = Number(v); return Number.isFinite(n) ? n : 0; };
 const arred2 = (v) => Math.round((num(v) + Number.EPSILON) * 100) / 100;
@@ -58,6 +59,68 @@ const somar = (itens, tipo) => arred2((itens || [])
   .filter(it => it?.tipo === tipo)
   .reduce((s, it) => s + abs(it?.valor), 0));
 
+// ─── Dinheiro que só mudou de conta ─────────────────────────────────────────
+//
+// Uma transferência entre duas contas da MESMA empresa aparece no extrato
+// duas vezes: sai de um lado e entra no outro. Somada em bruto, inflava a
+// semana nas duas pontas — "saíram 5.970 €" quando 4.500 desses foram para
+// outra conta da própria empresa e lá estão.
+//
+// Duas regras que não se podem quebrar:
+//
+//   1. Só se tira o par COMPLETO. Tirar a saída e deixar a entrada punha o
+//      report a dizer que o caixa variou 4.500 € mais do que variou, e a
+//      linha do "por explicar" acendia-se sozinha.
+//   2. Só se tira o que está CLASSIFICADO como Intra-Group/Transferências e
+//      tem mesmo contra-movimento noutra conta. Emparelhar só por valor
+//      juntava duas despesas iguais do mesmo dia; e uma transferência para
+//      OUTRA empresa do grupo é uma saída a sério — o dinheiro saiu desta
+//      empresa — por isso essa fica, que é o que a falta de par denuncia.
+//
+// A janela de dias existe porque as duas pernas raramente caem no mesmo dia:
+// sai hoje do BCP, entra amanhã no Santander.
+export function emparelharIntraGrupo(movimentos = [], { janelaDias = 3 } = {}) {
+  const dias = (a, b) =>
+    Math.abs((new Date(a + "T00:00:00") - new Date(b + "T00:00:00")) / 86400000);
+  const dataDe = (m) => String(m?.data || "").slice(0, 10);
+  const contaDe = (m) => String(m?.conta_id ?? m?.banco ?? "");
+
+  const candidato = (m) =>
+    ehTransferenciaInterna(m?.subcategoria || "") ||
+    ehTransferenciaInterna(m?.categoria || "");
+
+  const entradas = movimentos
+    .map((m, i) => ({ m, i }))
+    .filter(({ m }) => candidato(m) && num(m.valor) > 0);
+  const usada = new Set();
+  const pares = [];
+  const emparelhados = new Set();
+
+  // As maiores primeiro: se houver ambiguidade, resolve-se onde mais pesa.
+  movimentos
+    .map((m, i) => ({ m, i }))
+    .filter(({ m }) => candidato(m) && num(m.valor) < 0)
+    .sort((a, b) => abs(b.m.valor) - abs(a.m.valor))
+    .forEach(({ m: saida, i: iSaida }) => {
+      const par = entradas.find(({ m: e, i }) =>
+        !usada.has(i) &&
+        contaDe(e) !== contaDe(saida) &&          // tem de ser OUTRA conta
+        Math.abs(abs(e.valor) - abs(saida.valor)) < 0.011 &&
+        dias(dataDe(e), dataDe(saida)) <= janelaDias);
+      if (!par) return;
+      usada.add(par.i);
+      emparelhados.add(iSaida); emparelhados.add(par.i);
+      pares.push({ valor: abs(saida.valor), saida, entrada: par.m });
+    });
+
+  return {
+    movimentos: movimentos.filter((_, i) => !emparelhados.has(i)),
+    pares,
+    total: arred2(pares.reduce((s, p) => s + p.valor, 0)),
+    n: pares.length,
+  };
+}
+
 /**
  * SLIDE 1 — a semana que passou.
  *
@@ -71,13 +134,17 @@ const somar = (itens, tipo) => arred2((itens || [])
  */
 export function semanaQuePassou({ saldoAtual = 0, saldoAnterior = 0,
                                   movimentos = [], de = "", ate = "" } = {}) {
-  const dentro = (movimentos || []).filter(m => {
+  const noPeriodo = (movimentos || []).filter(m => {
     const d = String(m?.data || "").slice(0, 10);
     if (!/^\d{4}-\d{2}-\d{2}$/.test(d)) return false;
     if (de && d < de) return false;
     if (ate && d > ate) return false;
     return true;
   });
+
+  // Fora o dinheiro que só mudou de conta dentro da própria empresa.
+  const intra = emparelharIntraGrupo(noPeriodo);
+  const dentro = intra.movimentos;
 
   const entradas = arred2(dentro.filter(m => num(m.valor) > 0)
     .reduce((s, m) => s + num(m.valor), 0));
@@ -105,6 +172,9 @@ export function semanaQuePassou({ saldoAtual = 0, saldoAnterior = 0,
     fecha: Math.abs(porExplicar) < 0.011,
     nMovimentos: dentro.length,
     maiores,
+    // O que foi posto de lado, para o slide o poder dizer em vez de o número
+    // mudar sem explicação.
+    intraGrupo: { total: intra.total, n: intra.n, pares: intra.pares },
   };
 }
 

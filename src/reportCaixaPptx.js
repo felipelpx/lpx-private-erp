@@ -112,11 +112,24 @@ function slideSemana(r, sub) {
   f.push(cartao(X0 + cx + gap, 1.66, cx, 1.40, "Saiu nestes 7 dias",
                 eur(s.saidas), { cor: C.vermelho, szValor: 21,
                 nota: s.entradas > 0.005 ? `entraram ${eur(s.entradas)}` : "sem entradas no período" }));
+  // Se se puseram transferências de lado, o cartão tem de o dizer: um número
+  // mais baixo do que o extrato bruto, sem explicação, parece um erro.
   f.push(cartao(X0 + 2 * (cx + gap), 1.66, cx, 1.40, "Caixa hoje",
                 eur(s.saldoAtual), { cor: sinal(s.saldoAtual), szValor: 21,
                 nota: `variação de ${eur(s.variacao)}` }));
 
   let y = 3.22;
+  const intra = s.intraGrupo || { n: 0, total: 0 };
+  if (intra.n > 0) {
+    f.push(caixa(X0, y, LARGURA, 0.36, { fill: "F3F0EA", linha: C.linha, raio: 0.04,
+      paras: par([
+        { t: `${intra.n} ${intra.n === 1 ? "transferência" : "transferências"} entre contas da empresa `
+           + `(${eur(intra.total)}) ${intra.n === 1 ? "não conta" : "não contam"} como saída: `,
+          sz: 9, cor: C.suave, fonte: K },
+        { t: "o dinheiro mudou de conta, não saiu.", sz: 9, b: true, cor: C.suave, fonte: K },
+      ]), opts: { anchor: "ctr", margem: 0.14 } }));
+    y += 0.46;
+  }
   if (!s.fecha) {
     f.push(caixa(X0, y, LARGURA, 0.40, { fill: "FBF6EC", linha: C.alerta, raio: 0.04,
       paras: par([
@@ -265,9 +278,9 @@ function slideMes(r, sub) {
 
   linhas.push({ altura: 0.28, celulas: [
     { t: "Despesa", b: true, sz: 9, cor: C.tinta, fonte: K, fill: C.cabTab },
-    { t: "Já faturado", b: true, sz: 9, cor: C.tinta, fonte: K, align: "r", fill: C.cabTab },
-    { t: "Previsto", b: true, sz: 9, cor: C.tinta, fonte: K, align: "r", fill: C.cabTab },
-    { t: "Total do mês", b: true, sz: 9, cor: C.tinta, fonte: K, align: "r", fill: C.cabTab },
+    { t: "Já faturado (a)", b: true, sz: 9, cor: C.tinta, fonte: K, align: "r", fill: C.cabTab },
+    { t: "Previsto (b)", b: true, sz: 9, cor: C.tinta, fonte: K, align: "r", fill: C.cabTab },
+    { t: "Total do mês (a+b)", b: true, sz: 9, cor: C.tinta, fonte: K, align: "r", fill: C.cabTab },
   ]});
 
   const h = 0.235;
