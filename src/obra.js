@@ -498,11 +498,13 @@ const eur = (v) => new Intl.NumberFormat("pt-PT",
 export const PLANO_VAZIO = {
   empresa: "", ativo: true,
   data_inicio: "", data_fim: "",
-  // O mês a partir do qual se reparte o saldo residual, em "AAAA-MM".
-  // Vazio = a partir do mês corrente. Serve para quando o mês já tem a
-  // fatura da obra: reprograma-se do mês seguinte, para não ficar com dois
-  // pagamentos no mesmo mês.
-  mes_reprojecao: "",
+  // Os meses a partir dos quais se reparte o saldo residual, em "AAAA-MM".
+  // Vazio = a partir do mês corrente. Servem para quando o mês já tem a
+  // fatura: reprograma-se do seguinte, para não ficar com dois pagamentos.
+  // São dois porque o auto da obra e a avença do mesmo mês não chegam
+  // necessariamente ao mesmo tempo.
+  mes_reprojecao: "",            // obra, IVA da obra e o funding dos dois
+  mes_reprojecao_avencas: "",    // fiscalização, CSO, outras avenças e funding
   budget_obra: 0, taxa_iva_obra: 23,
   fiscalizacao_mensal: 0, cso_mensal: 0, taxa_iva_servicos: 23, comissao_avaliacao: 0,
   euribor: 0, spread: 0, funding_pct: 0, divida_inicial: 0,
@@ -568,41 +570,59 @@ export function planearObra(plano, { gastoObra = 0, hoje = hojeISO(), grupo = "L
   // ainda não começou: o passado já está no fluxo realizado e não se prevê
   // duas vezes.
   //
-  // Mas o mês corrente nem sempre está por fazer. Quando a fatura de novembro
-  // já chegou — ou já foi paga —, reprogramar a partir de novembro põe uma
+  // Mas o mês corrente nem sempre está por fazer. Quando o auto de novembro
+  // já chegou — ou já foi pago —, reprogramar a partir de novembro põe uma
   // previsão do motor por cima de uma obra que já tem documento: o mês fica
-  // com dois pagamentos e o forecast conta a mesma obra duas vezes. Nesses
-  // casos o saldo residual reparte-se a partir do mês SEGUINTE, e quem decide
-  // é quem está a reprogramar — o motor não tem como adivinhar se o auto
-  // deste mês já saiu.
+  // com dois pagamentos e o forecast conta a mesma obra duas vezes. Quem
+  // reprograma é que sabe se o auto já saiu; o motor não tem como adivinhar.
   //
-  // `mes_reprojecao` é esse mês, em "AAAA-MM". Vazio = o comportamento de
-  // sempre.
+  // E a obra e as avenças não andam juntas nisto. O auto do empreiteiro pode
+  // já ter entrado em novembro e a taxa de gestão do mesmo mês ainda não ter
+  // sido faturada — ou ao contrário. Daí serem DOIS campos, cada um com o seu
+  // calendário:
+  //
+  //   `mes_reprojecao`          → obra, IVA da obra e o funding dos dois
+  //   `mes_reprojecao_avencas`  → fiscalização, CSO, as outras avenças e o
+  //                               funding delas
+  //
+  // Os juros e a comissão de avaliação não têm campo próprio: andam sobre a
+  // DÍVIDA, que se move com as libertações das duas famílias. Por isso o
+  // percurso dos meses é a UNIÃO dos dois calendários — é a única forma de a
+  // dívida de cada mês estar certa.
   const natural = mesDe(p.data_inicio) > mesDe(hoje) ? mesDe(p.data_inicio) : mesDe(hoje);
-  const pedido = /^\d{4}-\d{2}$/.test(String(p.mes_reprojecao || "")) ? p.mes_reprojecao : null;
+  const mesPedido = (v) => /^\d{4}-\d{2}$/.test(String(v || "")) ? String(v) : null;
 
   // Para trás não se reprograma: linhas num mês já passado entram no fluxo
   // como vencidas, e obra planeada passava a dívida em atraso sem ninguém
-  // pedir. Para a frente do fim da obra também não — não haveria onde as pôr.
-  let primeiro = natural;
-  if (pedido) {
+  // pedir. Para a frente do fim da obra também não — não haveria onde as pôr,
+  // e isso diz-se em vez de devolver uma lista vazia sem explicação.
+  const limitar = (pedido, oQue) => {
+    if (!pedido) return natural;
     if (pedido < natural) {
-      // Duas razões diferentes para o mês pedido não servir, e o aviso tem de
-      // dizer a certa: ou já passou, ou a obra ainda nem começou.
       avisos.push(natural === mesDe(hoje)
-        ? `A reprojeção pedida (${rotuloMes(pedido)}) é anterior ao mês corrente; `
+        ? `A reprojeção ${oQue} (${rotuloMes(pedido)}) é anterior ao mês corrente; `
           + `usou-se ${rotuloMes(natural)}. O que já passou está no fluxo realizado.`
-        : `A reprojeção pedida (${rotuloMes(pedido)}) é anterior ao início da obra; `
+        : `A reprojeção ${oQue} (${rotuloMes(pedido)}) é anterior ao início da obra; `
           + `usou-se ${rotuloMes(natural)}.`);
-    } else if (p.data_fim && pedido > mesDe(p.data_fim)) {
-      avisos.push(`A reprojeção pedida (${rotuloMes(pedido)}) é depois do fim da obra `
-                + `(${rotuloMes(mesDe(p.data_fim))}): não há meses onde repartir o que falta.`);
-      primeiro = pedido;   // deixa a lista vazia, e o aviso explica porquê
-    } else {
-      primeiro = pedido;
+      return natural;
     }
-  }
-  const meses = mesesEntre(primeiro, p.data_fim);
+    if (p.data_fim && pedido > mesDe(p.data_fim))
+      avisos.push(`A reprojeção ${oQue} (${rotuloMes(pedido)}) é depois do fim da obra `
+                + `(${rotuloMes(mesDe(p.data_fim))}): não há meses onde a repartir.`);
+    return pedido;
+  };
+
+  const primeiroObra   = limitar(mesPedido(p.mes_reprojecao), "da obra");
+  const primeiroAvenca = limitar(mesPedido(p.mes_reprojecao_avencas), "das avenças");
+
+  const mesesObra   = mesesEntre(primeiroObra, p.data_fim);
+  const mesesAvenca = mesesEntre(primeiroAvenca, p.data_fim);
+  const naObra   = new Set(mesesObra);
+  const naAvenca = new Set(mesesAvenca);
+
+  // O percurso: todos os meses em que acontece alguma coisa, por ordem.
+  const meses = [...new Set([...mesesObra, ...mesesAvenca])].sort();
+  const primeiro = meses[0] || primeiroObra;
 
   // O budget é dado sem IVA; o que já foi incorrido vem com IVA. A conta
   // faz-se toda em bruto — budget + IVA menos o que já se pagou de obra e de
@@ -672,7 +692,7 @@ export function planearObra(plano, { gastoObra = 0, hoje = hojeISO(), grupo = "L
   // 1. Obra — o que falta, dividido por igual. A fatura do empreiteiro sai
   //    pela BASE: o IVA não é pago com ela, é autoliquidado e entregue com o
   //    apuramento do trimestre (ponto 6).
-  const basePorMes = repartir(porGastar, meses.length);
+  const basePorMes = repartir(porGastar, mesesObra.length);
   // O IVA reparte-se pela proporção da base, por soma corrida: assim a soma
   // das linhas de obra com as de IVA fecha ao cêntimo com o que falta gastar,
   // em vez de ficar a um ou dois cêntimos por causa dos arredondamentos mês
@@ -692,6 +712,13 @@ export function planearObra(plano, { gastoObra = 0, hoje = hojeISO(), grupo = "L
   })();
   const obraBaseMes = basePorMes[0];          // o mês típico, para os textos
   const obraIvaMes  = ivaPorMes[0];
+
+  // O percurso dos meses é a união dos dois calendários, por isso a posição
+  // num já não serve de índice no outro: a obra passa a ler-se POR MÊS.
+  // Sem isto, bastava as avenças começarem um mês antes para a obra de
+  // dezembro ir buscar a parcela de novembro e a última ficar de fora.
+  const baseDoMes = new Map(mesesObra.map((m, i) => [m, basePorMes[i]]));
+  const ivaDoMes  = new Map(mesesObra.map((m, i) => [m, ivaPorMes[i]]));
 
   // 2 e 3. Avenças: o valor é o mesmo todos os meses, e são tantos meses
   //    quantos a obra durar. É aqui que esticar o prazo custa dinheiro.
@@ -767,11 +794,11 @@ export function planearObra(plano, { gastoObra = 0, hoje = hojeISO(), grupo = "L
   // pagamento de IVA que caia num mês de obra conta no saldo desse mês, e
   // portanto nos juros.
   const ivaPorTrimestre = new Map();
-  meses.forEach((mes, i) => {
+  mesesObra.forEach((mes) => {
     if (autoliquida) return;          // o IVA sai junto com o auto
-    if (!(ivaPorMes[i] > 0)) return;
+    if (!(ivaDoMes.get(mes) > 0)) return;
     const chave = `${anoDe(noMes(mes, 1))}-${trimestreDe(noMes(mes, 1))}`;
-    ivaPorTrimestre.set(chave, arred2((ivaPorTrimestre.get(chave) || 0) + ivaPorMes[i]));
+    ivaPorTrimestre.set(chave, arred2((ivaPorTrimestre.get(chave) || 0) + ivaDoMes.get(mes)));
   });
   const pagamentosIva = [...ivaPorTrimestre.entries()]
     .map(([chave, valor]) => {
@@ -789,7 +816,13 @@ export function planearObra(plano, { gastoObra = 0, hoje = hojeISO(), grupo = "L
   meses.forEach((mes, i) => {
     const ultimo = i === meses.length - 1;
 
-    const baseMes = basePorMes[i], ivaMes = ivaPorMes[i];
+    // Cada família só lança nos SEUS meses. Fora deles o mês continua a ser
+    // percorrido — a dívida e os juros precisam disso —, mas não leva linha.
+    const temObraMes   = naObra.has(mes);
+    const temAvencaMes = naAvenca.has(mes);
+
+    const baseMes = temObraMes ? (baseDoMes.get(mes) || 0) : 0;
+    const ivaMes  = temObraMes ? (ivaDoMes.get(mes)  || 0) : 0;
     // Com autoliquidação, o auto paga-se de uma vez com o IVA lá dentro.
     const obraMes = autoliquida ? arred2(baseMes + ivaMes) : baseMes;
     if (obraMes > 0) {
@@ -802,12 +835,12 @@ export function planearObra(plano, { gastoObra = 0, hoje = hojeISO(), grupo = "L
       }));
     }
 
-    if (fisc > 0) linhas.push(linha("fiscalizacao", mes, fisc, grupo, {
+    if (temAvencaMes && fisc > 0) linhas.push(linha("fiscalizacao", mes, fisc, grupo, {
       descricao: `Fiscalização de obra — ${rotuloMes(mes)}`,
       obs: `Avença ${fiscBase} € + IVA ${arred2(fisc - fiscBase)} € (${taxaServicos}%)`,
       base: fiscBase, iva: arred2(fisc - fiscBase),
     }));
-    if (cso > 0)  linhas.push(linha("cso", mes, cso, grupo, {
+    if (temAvencaMes && cso > 0)  linhas.push(linha("cso", mes, cso, grupo, {
       descricao: `CSO — ${rotuloMes(mes)}`,
       obs: `Avença ${csoBase} € + IVA ${arred2(cso - csoBase)} € (${taxaServicos}%)`,
       base: csoBase, iva: arred2(cso - csoBase),
@@ -818,8 +851,8 @@ export function planearObra(plano, { gastoObra = 0, hoje = hojeISO(), grupo = "L
     // fiscalização nem em CSO —, por isso o que se financia é o valor cheio,
     // que é o que sai da conta nesse dia. Uma bandeira por avença, porque há
     // bancos que aceitam a fiscalização e não o CSO.
-    const fundFisc = (financiaFisc && fisc > 0) ? arred2(fisc * pctFunding / 100) : 0;
-    const fundCso  = (financiaCso  && cso  > 0) ? arred2(cso  * pctFunding / 100) : 0;
+    const fundFisc = (temAvencaMes && financiaFisc && fisc > 0) ? arred2(fisc * pctFunding / 100) : 0;
+    const fundCso  = (temAvencaMes && financiaCso  && cso  > 0) ? arred2(cso  * pctFunding / 100) : 0;
     if (fundFisc > 0) linhas.push({
       ...linha("funding_fiscalizacao", mes, fundFisc, grupo, {
         descricao: `Funding banco — fiscalização ${rotuloMes(mes)}`,
@@ -839,7 +872,7 @@ export function planearObra(plano, { gastoObra = 0, hoje = hojeISO(), grupo = "L
     // bandeira. Correm nos mesmos meses: esticar o prazo custa mais meses
     // destas, tal como custa mais fiscalização.
     let fundAvencas = 0;
-    avencas.forEach(a => {
+    (temAvencaMes ? avencas : []).forEach(a => {
       linhas.push({
         ...linha("avenca", mes, a.comIva, grupo, {
           slot: a.slot,
@@ -1065,8 +1098,8 @@ export function planearObra(plano, { gastoObra = 0, hoje = hojeISO(), grupo = "L
 
   linhas.sort((a, b) => a.data.localeCompare(b.data) || TIPOS.indexOf(a.plano_tipo) - TIPOS.indexOf(b.plano_tipo));
   return { linhas, avisos, resumo: resumir(linhas, { budget, budgetBruto, ivaDoBudget, gasto, gastoBase, gastoIva,
-                    porGastar, porGastarBruto, ivaPorGastar, meses, dividaFinal: divida,
-                    mesEscritura, mesesAteEscritura }) };
+                    porGastar, porGastarBruto, ivaPorGastar, meses, mesesObra, mesesAvenca,
+                    dividaFinal: divida, mesEscritura, mesesAteEscritura }) };
 }
 
 function linha(tipo, mes, valor, grupo, extra = {}) {
@@ -1108,7 +1141,8 @@ export function rotuloMes(mes) {
 function resumir(linhas, { budget, budgetBruto = 0, ivaDoBudget = 0,
                            gasto, gastoBase = 0, gastoIva = 0,
                            porGastar, porGastarBruto = 0, ivaPorGastar = 0,
-                           meses, dividaFinal = 0, mesEscritura = null,
+                           meses, mesesObra = null, mesesAvenca = null,
+                           dividaFinal = 0, mesEscritura = null,
                            mesesAteEscritura = 0 }) {
   const soma = (t) => arred2(linhas.filter(l => l.plano_tipo === t)
     .reduce((s, l) => s + (l.tipo === "entrada" ? -l.valor : l.valor), 0));
@@ -1123,6 +1157,11 @@ function resumir(linhas, { budget, budgetBruto = 0, ivaDoBudget = 0,
     meses: meses.length,
     primeiroMes: meses[0] || null,
     ultimoMes: meses[meses.length - 1] || null,
+    // Os dois calendários à parte, para o ecrã poder mostrar cada um.
+    obra: { meses: (mesesObra || meses).length,
+            primeiro: (mesesObra || meses)[0] || null },
+    avencas: { meses: (mesesAvenca || meses).length,
+               primeiro: (mesesAvenca || meses)[0] || null },
     totais,
     custoTotal,
     dividaFinal: arred2(dividaFinal),

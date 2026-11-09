@@ -358,33 +358,57 @@ export default function ModalPlanoObra({
               </div>
 
               {/* ── A partir de que mês se reprograma ─────────────────────
-                  O mês corrente nem sempre está por fazer: se a fatura de
+                  O mês corrente nem sempre está por fazer: se o auto de
                   novembro já chegou, reprogramar a partir de novembro põe uma
-                  previsão por cima dela e o mês fica com dois pagamentos.
-                  Quem reprograma é que sabe se o auto deste mês já saiu. */}
-              <div>
-                <Rotulo>Reprogramar o saldo a partir de</Rotulo>
-                <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
-                  <input type="month" value={f.mes_reprojecao || ""}
-                    min={mesCorrente} max={f.data_fim ? f.data_fim.slice(0, 7) : undefined}
-                    style={{ ...campo, flex: 1 }}
-                    onChange={e => muda("mes_reprojecao")(e.target.value)} />
-                  {[["este mês", mesCorrente], ["próximo", mesSeguinte]].map(([txt, v]) => (
-                    <button key={v} onClick={() => muda("mes_reprojecao")(v)}
-                      style={{ background: (f.mes_reprojecao || mesCorrente) === v ? COR.tinta : "#EDF1F5",
-                               color: (f.mes_reprojecao || mesCorrente) === v ? "#FCF3EB" : COR.banco,
-                               border: "none", borderRadius: 7, padding: "8px 10px",
-                               fontSize: 11, cursor: "pointer", fontWeight: 600, whiteSpace: "nowrap" }}>
-                      {txt}
-                    </button>
-                  ))}
-                </div>
-                <div style={{ fontSize: 10.5, color: "#9DA2A6", lineHeight: 1.5, marginTop: 5 }}>
-                  {f.mes_reprojecao && f.mes_reprojecao > mesCorrente
-                    ? `O que falta reparte-se de ${rotuloMes(f.mes_reprojecao)} em diante. `
-                      + `${rotuloMes(mesCorrente)} fica como está.`
-                    : "Escolhe o mês seguinte se a fatura de obra deste mês já chegou — "
-                      + "senão o mês fica com a fatura e a previsão."}
+                  previsão por cima dele e o mês fica com dois pagamentos.
+
+                  São dois campos porque o auto da obra e a avença do mesmo
+                  mês não chegam ao mesmo tempo: pode já haver fatura do
+                  empreiteiro e ainda não haver taxa de gestão, ou ao
+                  contrário. Quem reprograma é que sabe. */}
+              <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                {[
+                  { campo: "mes_reprojecao", rotulo: "Reprogramar a obra a partir de",
+                    calendario: resumo.obra,
+                    nota: "Obra, IVA da obra e o funding dos dois." },
+                  { campo: "mes_reprojecao_avencas", rotulo: "Reprogramar as avenças a partir de",
+                    calendario: resumo.avencas,
+                    nota: "Fiscalização, CSO, as outras avenças e o funding delas." },
+                ].map(({ campo: nome, rotulo, calendario, nota }) => {
+                  const v = f[nome] || "";
+                  const escolhido = v || mesCorrente;
+                  return (
+                    <div key={nome}>
+                      <Rotulo>{rotulo}</Rotulo>
+                      <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+                        <input type="month" value={v}
+                          min={mesCorrente} max={f.data_fim ? f.data_fim.slice(0, 7) : undefined}
+                          style={{ ...campo, flex: 1 }}
+                          onChange={e => muda(nome)(e.target.value)} />
+                        {[["este mês", mesCorrente], ["próximo", mesSeguinte]].map(([txt, mv]) => (
+                          <button key={mv} onClick={() => muda(nome)(mv)}
+                            style={{ background: escolhido === mv ? COR.tinta : "#EDF1F5",
+                                     color: escolhido === mv ? "#FCF3EB" : COR.banco,
+                                     border: "none", borderRadius: 7, padding: "8px 10px",
+                                     fontSize: 11, cursor: "pointer", fontWeight: 600,
+                                     whiteSpace: "nowrap" }}>
+                            {txt}
+                          </button>
+                        ))}
+                      </div>
+                      <div style={{ fontSize: 10.5, color: "#9DA2A6", lineHeight: 1.5, marginTop: 4 }}>
+                        {nota}{" "}
+                        {calendario?.primeiro
+                          ? `${calendario.meses} ${calendario.meses === 1 ? "mês" : "meses"}, `
+                            + `de ${rotuloMes(calendario.primeiro)} em diante.`
+                          : "Sem meses onde repartir."}
+                      </div>
+                    </div>
+                  );
+                })}
+                <div style={{ fontSize: 10.5, color: "#9DA2A6", lineHeight: 1.5 }}>
+                  Passa para o mês seguinte aquilo que já tem fatura deste mês —
+                  senão o mês fica com a fatura e a previsão.
                 </div>
               </div>
 
