@@ -10,6 +10,8 @@ import { supabase } from "./supabase.js";
 import ComercialView from "./ComercialView.jsx";
 import PagamentosView from "./PagamentosView.jsx";
 import { CATEGORIAS_FATURA } from "./categorias.js";
+import RateioFatura from "./RateioFatura.jsx";
+import { conferirRateio, rateioParaGravar, temRateio, partesDaFatura } from "./rateio.js";
 import { categoriasDeFatura } from "./rubricas.js";
 import { usaSubcategoria, subcategoriasDa, comOValorAtual } from "./categoriasEmpresa.js";
 import { EMPRESAS as EMPRESAS_ALL, BANCO_COLORS as BANCO_COLORS_CFG, GRUPOS, GRUPOS_INFO } from "./empresas.js";
@@ -451,6 +453,16 @@ export function ContasPagar({canEdit, faturas: faturasTodas, setFaturas, addFatu
   const reset=()=>{setForm({empresa:"",projeto:"",fatura:"",fornecedor:"",categoria:"",tipo_projeto:"",valor:"",vencimento:"",previsao_pagamento:"",status:"Pendente em dia",obs:"",anexo_nome:"",anexo_b64:"",data_fatura:"",taxa_iva:23,iva_dedutivel:true});setEditId(null);};
   const save = async () => {
     const total = parseFloat(form.valor) || 0;
+
+    // Uma repartição que não fecha com o total faz desaparecer dinheiro do
+    // Fluxo Futuro e do Real × Orçado — a fatura fica na lista com o seu
+    // valor e a diferença evapora-se no meio das rubricas. Trava-se aqui.
+    const conf = conferirRateio(form.rateio, total);
+    if ((form.rateio || []).length && !conf.fecha) {
+      alert("A repartição por categorias não fecha com o total da fatura.\n\n"
+            + conf.erros.join("\n"));
+      return;
+    }
     // O IVA sai do total e da taxa escolhida — é a mesma conta que a aba IVA
     // faz, para que uma fatura lançada à mão e uma importada deem o mesmo.
     const deduz = form.iva_dedutivel !== false;
@@ -461,6 +473,10 @@ export function ContasPagar({canEdit, faturas: faturasTodas, setFaturas, addFatu
       taxa_iva: deduz ? (Number(form.taxa_iva) || 0) : null,
       valor_base: base, valor_iva: deduz ? iva : 0,
       iva_dedutivel: deduz, iva_estimado: false,
+      // Guarda-se como foi definido (valor ou %), sem os campos de trabalho
+      // do ecrã. Menos de duas linhas grava vazio: isso é classificação
+      // normal, não repartição.
+      rateio: rateioParaGravar(form.rateio, total),
     };
     // Se a migração do IVA ainda não foi corrida, a base de dados não conhece
     // estas colunas. Em vez de a fatura se perder, grava-se sem elas e avisa-se.
@@ -642,6 +658,12 @@ export function ContasPagar({canEdit, faturas: faturasTodas, setFaturas, addFatu
               {usaSubcategoria(form.empresa) && (
                 <div style={{display:"flex",flexDirection:"column",gap:4}}><label style={{fontSize:10,color:"#9DA2A6",fontFamily: "var(--fonte-numero)",textTransform:"uppercase"}}>Subcategoria</label><select value={form.subcategoria||""} onChange={e=>setForm(f=>({...f,subcategoria:e.target.value}))} disabled={!form.categoria} title={form.categoria?"A linha do fluxo operacional":"Escolhe primeiro a categoria"} style={{background:form.categoria?"#F9F5EF":"#F2EDE5",border:"1px solid #E3D9CC",borderRadius:8,padding:"9px 12px",fontSize:13,outline:"none"}}><option value="">{form.categoria?"Selecionar...":"— escolhe a categoria —"}</option>{comOValorAtual(subcategoriasDa(form.empresa, form.categoria), form.subcategoria).map(o=><option key={o}>{o}</option>)}</select></div>
               )}
+              {/* Repartir a fatura por várias categorias. Fechado por omissão;
+                  quando aberto, é ele que decide por que rubricas a fatura
+                  passa no fluxo — a categoria acima deixa de mandar. */}
+              <RateioFatura empresa={form.empresa} total={form.valor}
+                rateio={form.rateio}
+                onMudar={(r) => setForm(f => ({ ...f, rateio: r }))} />
               <div style={{display:"flex",flexDirection:"column",gap:4}}><label style={{fontSize:10,color:"#9DA2A6",fontFamily: "var(--fonte-numero)",textTransform:"uppercase"}}>Tipo de Projeto</label><select value={form.tipo_projeto||""} onChange={e=>setForm(f=>({...f,tipo_projeto:e.target.value}))} style={{background:"#F9F5EF",border:"1px solid #E3D9CC",borderRadius:8,padding:"9px 12px",fontSize:13,outline:"none"}}><option value="">Selecionar...</option>{TIPO_PROJETO.map(o=><option key={o}>{o}</option>)}</select></div>
               <div style={{display:"flex",flexDirection:"column",gap:4}}><label style={{fontSize:10,color:"#9DA2A6",fontFamily: "var(--fonte-numero)",textTransform:"uppercase"}}>Valor (€)</label><input type="number" value={form.valor||""} onChange={e=>setForm(f=>({...f,valor:e.target.value}))} style={{background:"#F9F5EF",border:"1px solid #E3D9CC",borderRadius:8,padding:"9px 12px",fontSize:13,outline:"none"}}/></div>
               <div style={{display:"flex",flexDirection:"column",gap:4}}><label style={{fontSize:10,color:"#9DA2A6",fontFamily: "var(--fonte-numero)",textTransform:"uppercase"}}>Vencimento</label><input type="date" value={form.vencimento||""} onChange={e=>setForm(f=>({...f,vencimento:e.target.value}))} style={{background:"#F9F5EF",border:"1px solid #E3D9CC",borderRadius:8,padding:"9px 12px",fontSize:13,outline:"none"}}/></div>
@@ -804,7 +826,18 @@ export function ContasPagar({canEdit, faturas: faturasTodas, setFaturas, addFatu
                     <td style={{padding:"11px 14px",color:"#4A5055"}}>{f.projeto}</td>
                     <td style={{padding:"11px 14px",fontFamily: "var(--fonte-numero)",fontSize:11,color:"#7E8388"}}>{f.fatura}</td>
                     <td style={{padding:"11px 14px",color:"#3A4044",maxWidth:140,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{f.fornecedor}</td>
-                    <td style={{padding:"11px 14px"}}><span style={{background:"#EDF1F5",color:"#2C4A63",fontSize:10,padding:"2px 8px",borderRadius:4,fontFamily: "var(--fonte-numero)"}}>{f.categoria}</span></td>
+                    <td style={{padding:"11px 14px"}}>{(() => {
+                      // Uma fatura repartida não tem UMA categoria: mostrar só
+                      // a do campo `categoria` dizia a quem lê que o dinheiro
+                      // todo vai para ali, e não vai.
+                      const ps = temRateio(f) ? partesDaFatura(f) : null;
+                      if (!ps) return <span style={{background:"#EDF1F5",color:"#2C4A63",fontSize:10,padding:"2px 8px",borderRadius:4,fontFamily: "var(--fonte-numero)"}}>{f.categoria}</span>;
+                      return <span title={ps.map(x => `${x.subcategoria || x.categoria}: ${x.valor.toFixed(2)} €`).join("\n")}
+                               style={{display:"inline-flex",flexDirection:"column",gap:2}}>
+                        {ps.slice(0,2).map((x,i) => <span key={i} style={{background:"#F6ECD6",color:"#7A5A22",fontSize:10,padding:"2px 8px",borderRadius:4,fontFamily:"var(--fonte-numero)",whiteSpace:"nowrap"}}>{x.subcategoria || x.categoria}</span>)}
+                        {ps.length > 2 && <span style={{fontSize:9.5,color:"#9DA2A6"}}>+{ps.length-2} rubricas</span>}
+                      </span>;
+                    })()}</td>
                     <td style={{padding:"11px 14px",fontFamily: "var(--fonte-numero)",fontWeight:700,whiteSpace:"nowrap",textDecoration:rejeitada?"line-through":"none"}}>{fmt(f.valor)}</td>
                     <td style={{padding:"8px 10px",whiteSpace:"nowrap"}}>
                       {canEdit ? (

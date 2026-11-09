@@ -31,6 +31,7 @@ import { rubricasDa, rubricaDe, chaveRubrica, rubricaNoPlano, ehProjetoHDG,
          ehCapital, ehFunding, ehAjuste, ehTransferenciaInterna,
          ordemDaRubrica } from "./rubricas.js";
 import { ocorrenciasDe } from "./recorrentes.js";
+import { partesDaFatura } from "./rateio.js";
 import { comissaoDaVenda, soReceita, vgvPorReceber } from "./vendas.js";
 import { rubricaNoFluxo, classificacaoDe } from "./obra.js";
 import { temFunding, valorFunding, descFunding } from "./funding.js";
@@ -204,14 +205,26 @@ export function calcularRealOrcado({
     if (f?.empresa !== empresaId) return;
     const estado = String(f?.status || "").trim();
     if (FATURA_PAGA.test(estado) || FATURA_MORTA.test(estado)) return;
-    const r = rubricaDoDoc(f?.categoria, f?.subcategoria, f?.descricao || f?.obs || "");
-    if (r === null) return;
-    const b = balde(r);
-    b.faturasPorPagar -= Math.abs(num(f?.valor));   // uma fatura por pagar é saída
-    b.nFaturas++;
-    b.docs.faturas.push({ texto: [f?.fornecedor, f?.fatura].filter(Boolean).join(" · ")
-                                 || f?.descricao || "(fatura)",
-                          valor: -Math.abs(num(f?.valor)), data: f?.vencimento || "" });
+
+    // Uma fatura repartida conta em cada uma das suas rubricas, pelo valor
+    // da parte. `partesDaFatura` devolve uma parte só quando não há
+    // repartição, por isso o caminho é o mesmo nos dois casos — e não há
+    // uma via que se esqueça da repartição.
+    partesDaFatura(f).forEach(parte => {
+      const r = rubricaDoDoc(parte.categoria, parte.subcategoria,
+                             f?.descricao || f?.obs || "");
+      if (r === null) return;
+      const b = balde(r);
+      b.faturasPorPagar -= parte.valor;             // uma fatura por pagar é saída
+      b.nFaturas++;
+      const nome = [f?.fornecedor, f?.fatura].filter(Boolean).join(" · ")
+                   || f?.descricao || "(fatura)";
+      b.docs.faturas.push({
+        texto: parte._nPartes > 1
+          ? `${nome} (${parte._parte}/${parte._nPartes}: ${parte.subcategoria || parte.categoria})`
+          : nome,
+        valor: -parte.valor, data: f?.vencimento || "" });
+    });
   });
 
   // ── Comprometido: previsões do Fluxo Futuro (inclui o plano de obra) ─────

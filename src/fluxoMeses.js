@@ -21,6 +21,7 @@ import { faturaPaga, faturaAtrasada } from "./status.js";
 import { linhaFunding } from "./funding.js";
 import { ocorrenciasDe } from "./recorrentes.js";
 import { linhasDeFluxo as linhasDeVendasBase, soReceita } from "./vendas.js";
+import { partesDaFatura } from "./rateio.js";
 
 const chaveMes = (data) => (data ? String(data).slice(0, 7) : null);
 const n2 = (v) => { const n = parseFloat(v); return Number.isFinite(n) ? n : 0; };
@@ -85,22 +86,37 @@ export function construirMesesDoFluxo({
     if (!pertence(f.empresa)) return;
     if (faturaPaga(f)) return;
 
+    // Uma fatura pode estar repartida por várias categorias — obra e
+    // trabalhos a mais, IMI e imposto de selo. Cada parte é uma linha com a
+    // sua rubrica; `partesDaFatura` devolve uma parte só quando não há
+    // repartição, para este código ser o mesmo nos dois casos.
+    const partes = partesDaFatura(f);
+    const nome = (p) => partes.length > 1
+      ? `${f.fornecedor || f.fatura} · ${p.subcategoria || p.categoria}`
+      : (f.fornecedor || f.fatura);
+
     if (faturaAtrasada(f)) {
-      const saida = { tipo: "saida", desc: f.fornecedor || f.fatura, valor: f.valor,
-                      cat: f.categoria, origem: "Vencida", natureza: "real",
-                      vencimento: dataFluxo, fatura: f };
-      vencidas.saidas += n2(f.valor);
-      vencidas.items.push(saida);
-      comFunding(vencidas, f, saida, { vencimento: dataFluxo, fatura: f });
+      partes.forEach(p => {
+        const saida = { tipo: "saida", desc: nome(p), valor: p.valor,
+                        cat: p.categoria, subcategoria: p.subcategoria,
+                        origem: "Vencida", natureza: "real",
+                        vencimento: dataFluxo, fatura: f, parte: p };
+        vencidas.saidas += p.valor;
+        vencidas.items.push(saida);
+        comFunding(vencidas, f, saida, { vencimento: dataFluxo, fatura: f });
+      });
       return;
     }
     const m = mesPor(dataFluxo);
     if (!m) return;
-    const saida = { tipo: "saida", desc: f.fornecedor || f.fatura, valor: f.valor,
-                    cat: f.categoria, origem: "Contas a Pagar", natureza: "real", fatura: f };
-    m.saidas += n2(f.valor);
-    m.items.push(saida);
-    comFunding(m, f, saida, { fatura: f });
+    partes.forEach(p => {
+      const saida = { tipo: "saida", desc: nome(p), valor: p.valor,
+                      cat: p.categoria, subcategoria: p.subcategoria,
+                      origem: "Contas a Pagar", natureza: "real", fatura: f, parte: p };
+      m.saidas += p.valor;
+      m.items.push(saida);
+      comFunding(m, f, saida, { fatura: f });
+    });
   });
 
   // ── Vendas ────────────────────────────────────────────────────────────────
@@ -317,9 +333,15 @@ export function criarRubricaDoItem({ empresa = "", empresas = [],
       return rubricaNoFluxo(g, r, "");
     }
 
-    const sub = it?.pagamento?.subcategoria || it?.fatura?.subcategoria
-             || it?.recorrente?.subcategoria || it?.subcategoria || "";
-    const r = rubricaDe(emp, it?.cat, sub) || it?.cat || "";
+    // A PARTE primeiro. Quando uma fatura está repartida, cada linha tem a
+    // sua rubrica e a do documento deixa de valer — ler a da fatura aqui
+    // mandava as três partes todas para a mesma linha do fluxo e a
+    // repartição ficava só a enfeitar o ecrã das contas a pagar.
+    const sub = it?.parte?.subcategoria || it?.pagamento?.subcategoria
+             || it?.fatura?.subcategoria || it?.recorrente?.subcategoria
+             || it?.subcategoria || "";
+    const cat = it?.parte?.categoria || it?.cat;
+    const r = rubricaDe(emp, cat, sub) || cat || "";
     // O IVA da obra é obra: lê-se dentro do balde dela, com o nome do
     // trimestre a distingui-lo. Ver rubricaNoFluxo em src/obra.js.
     return rubricaNoFluxo(g, r, it?.desc || "");
