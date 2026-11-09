@@ -76,7 +76,13 @@ const CATEGORIAS_LPX = {
 const CATEGORIAS_HDG = {
   obra:         { categoria: "Obras",            subcategoria: "Gastos com Obras" },
   funding:      { categoria: "Financiamento",    subcategoria: "Inflow - Obra" },
-  fiscalizacao: { categoria: "Obras",            subcategoria: "Fiscalização" },
+  // A fiscalização é uma avença da obra, como o CSO logo abaixo — e é em
+  // Soft_Costs que a FO a mostra e que o plano de contas de cada empresa a
+  // tem. Estava aqui em "Obras": a rubrica do fluxo dava na mesma (as duas
+  // resolvem para "Fiscalização"), mas a categoria gravada nas previsões não
+  // correspondia a nenhuma opção do ecrã — quem classificasse a fatura à mão
+  // nunca conseguia escrever o mesmo que o motor.
+  fiscalizacao: { categoria: "Soft_Costs",       subcategoria: "Fiscalização" },
   funding_fiscalizacao: { categoria: "Financiamento", subcategoria: "Inflow - Obra" },
   cso:          { categoria: "Soft_Costs",       subcategoria: "CSO" },
   funding_cso:  { categoria: "Financiamento",    subcategoria: "Inflow - Obra" },

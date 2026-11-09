@@ -58,6 +58,7 @@ export const CATEGORIAS_POR_EMPRESA = {
     "Obra",
     "Administrativos",
     "Fiscalização",
+    "CSO",
     "Fee Gestão",
     "Juros",
     "Ajuste",
@@ -88,6 +89,7 @@ export const CATEGORIAS_POR_EMPRESA = {
     "Obra",
     "Administrativos",
     "Fiscalização",
+    "CSO",
     "Fee Gestão",
     "Juros",
     "Ajuste",
@@ -131,6 +133,7 @@ export const CATEGORIAS_POR_EMPRESA = {
     "Obra",
     "Administrativos",
     "Fiscalização",
+    "CSO",
     "Fee Gestão",
     "Juros",
     "Ajuste",
@@ -155,6 +158,7 @@ export const CATEGORIAS_POR_EMPRESA = {
     "Obra",
     "Administrativos",
     "Fiscalização",
+    "CSO",
     "Fee Gestão",
     "Juros",
     "Ajuste",
@@ -188,6 +192,7 @@ export const CATEGORIAS_POR_EMPRESA = {
     "Obra",
     "Administrativos",
     "Fiscalização",
+    "CSO",
     "Fee Gestão",
     "Juros",
     "Ajuste",
@@ -211,6 +216,7 @@ export const CATEGORIAS_POR_EMPRESA = {
     "Obra",
     "Administrativos",
     "Fiscalização",
+    "CSO",
     "Fee Gestão",
     "Juros",
     "Ajuste",
@@ -246,7 +252,12 @@ export const CAT_SUB_POR_EMPRESA = {
       "Taxas (Obras)",
     ],
     "Soft_Costs": [
+      // O motor do plano de obra lança CSO todos os meses, ao lado da
+      // fiscalização (são as duas avenças fixas da obra). Sem o CSO aqui,
+      // a fatura dele não se conseguia classificar na rubrica onde o
+      // próprio plano a põe — e o plano continuava a lançá-la na mesma.
       "Fiscalização",
+      "CSO",
       "Marketing e propraganda",
       "Outros - Comissões Bancárias",
       "Outros - Diversos",
@@ -320,7 +331,12 @@ export const CAT_SUB_POR_EMPRESA = {
       "Taxas (Obras)",
     ],
     "Soft_Costs": [
+      // O motor do plano de obra lança CSO todos os meses, ao lado da
+      // fiscalização (são as duas avenças fixas da obra). Sem o CSO aqui,
+      // a fatura dele não se conseguia classificar na rubrica onde o
+      // próprio plano a põe — e o plano continuava a lançá-la na mesma.
       "Fiscalização",
+      "CSO",
       "Marketing e propraganda",
       "Outros - Comissões Bancárias",
       "Outros - Diversos",
