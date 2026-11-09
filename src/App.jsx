@@ -12,6 +12,7 @@ import PagamentosView from "./PagamentosView.jsx";
 import { CATEGORIAS_FATURA } from "./categorias.js";
 import RateioFatura from "./RateioFatura.jsx";
 import { conferirRateio, rateioParaGravar, temRateio, partesDaFatura } from "./rateio.js";
+import { colunaEmFalta } from "./escrita.js";
 import { categoriasDeFatura } from "./rubricas.js";
 import { usaSubcategoria, subcategoriasDa, comOValorAtual } from "./categoriasEmpresa.js";
 import { EMPRESAS as EMPRESAS_ALL, BANCO_COLORS as BANCO_COLORS_CFG, GRUPOS, GRUPOS_INFO } from "./empresas.js";
@@ -480,22 +481,46 @@ export function ContasPagar({canEdit, faturas: faturasTodas, setFaturas, addFatu
     };
     // Se a migração do IVA ainda não foi corrida, a base de dados não conhece
     // estas colunas. Em vez de a fatura se perder, grava-se sem elas e avisa-se.
-    const semColunasIva = (err) =>
-      /iva_dedutivel|valor_base|valor_iva|taxa_iva|data_fatura|iva_estimado/.test(
-        `${err?.message || ""} ${err?.details || ""} ${err?.hint || ""}`);
-    const semIva = () => {
-      const { data_fatura, taxa_iva, valor_base, valor_iva, iva_dedutivel, iva_estimado, ...resto } = fat;
-      return resto;
+    // ── Colunas que a base ainda não tem ────────────────────────────────────
+    // Isto era uma lista escrita à mão com os nomes das colunas do IVA, e por
+    // isso só tolerava ESSAS. Bastou acrescentar o `rateio` para uma fatura
+    // inteira deixar de poder ser gravada por causa de uma coluna que ainda
+    // não tinha sido criada — o PostgREST recusa o pedido todo quando não
+    // conhece um campo.
+    //
+    // Passa a usar o detetor genérico (ver src/escrita.js): tira a coluna de
+    // que a base se queixou, tenta outra vez, e no fim diz QUAIS ficaram de
+    // fora. Qualquer coluna nova passa a degradar sozinha, sem ninguém ter de
+    // se lembrar de a acrescentar aqui.
+    const QUE_SQL = {
+      rateio: "faturas-rateio.sql",
+      data_fatura: "iva-1 a iva-8", taxa_iva: "iva-1 a iva-8",
+      valor_base: "iva-1 a iva-8", valor_iva: "iva-1 a iva-8",
+      iva_dedutivel: "iva-1 a iva-8", iva_estimado: "iva-1 a iva-8",
     };
-    const AVISO_IVA = "A fatura foi guardada, mas sem os dados de IVA: faltam as colunas na base de dados."
-      + "\n\nCorre no Supabase os ficheiros iva-1 a iva-8 e volta a gravar esta fatura.";
+    const gravarTolerante = async (escrever) => {
+      let corpo = { ...fat };
+      const ignoradas = [];
+      for (let i = 0; i <= 8; i++) {
+        const r = await escrever(corpo);
+        if (!r?.error) return { ...r, ignoradas };
+        const col = colunaEmFalta(r.error);
+        if (!col || !(col in corpo)) return { ...r, ignoradas };
+        delete corpo[col];
+        ignoradas.push(col);
+      }
+      return { error: { message: "Demasiadas colunas em falta." }, ignoradas };
+    };
+    const avisarIgnoradas = (ignoradas) => {
+      if (!ignoradas?.length) return;
+      const ficheiros = [...new Set(ignoradas.map(c => QUE_SQL[c]).filter(Boolean))];
+      alert(`A fatura foi guardada, mas sem ${ignoradas.join(", ")}: `
+        + `${ignoradas.length === 1 ? "essa coluna ainda não existe" : "essas colunas ainda não existem"} na base de dados.`
+        + (ficheiros.length ? `\n\nCorre no Supabase ${ficheiros.join(" e ")} e volta a gravar esta fatura.` : ""));
+    };
 
     if (editId) {
-      let res = await updateFatura?.(editId, fat);
-      if (res?.error && semColunasIva(res.error)) {
-        res = await updateFatura?.(editId, semIva());
-        if (!res?.error) alert(AVISO_IVA);
-      }
+      const res = await gravarTolerante((c) => updateFatura?.(editId, c));
       if (res?.error) {
         alert("Erro ao guardar:\n\n" + (res.error.message || res.error));
         return;
@@ -504,16 +529,14 @@ export function ContasPagar({canEdit, faturas: faturasTodas, setFaturas, addFatu
         alert("Nada foi alterado (provavelmente falta política UPDATE no RLS para 'faturas').");
         return;
       }
+      avisarIgnoradas(res.ignoradas);
     } else {
-      let res = await addFatura?.(fat);
-      if (res?.error && semColunasIva(res.error)) {
-        res = await addFatura?.(semIva());
-        if (!res?.error) alert(AVISO_IVA);
-      }
+      const res = await gravarTolerante((c) => addFatura?.(c));
       if (res?.error) {
         alert("Erro ao criar fatura:\n\n" + (res.error.message || res.error));
         return;
       }
+      avisarIgnoradas(res.ignoradas);
     }
     setShowForm(false); reset();
   };
