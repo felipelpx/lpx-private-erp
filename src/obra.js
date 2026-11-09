@@ -626,8 +626,17 @@ export function planearObra(plano, { gastoObra = 0, hoje = hojeISO(), grupo = "L
   const naObra   = new Set(mesesObra);
   const naAvenca = new Set(mesesAvenca);
 
-  // O percurso: todos os meses em que acontece alguma coisa, por ordem.
-  const meses = [...new Set([...mesesObra, ...mesesAvenca])].sort();
+  // ── O percurso: TODOS os meses que faltam ────────────────────────────────
+  // Não é a união dos dois calendários acima. Os juros não se reprogramam:
+  // o banco cobra-os porque há DÍVIDA, não porque há obra nesse mês. Se o
+  // percurso fosse a união, bastava reprogramar a obra E as avenças para
+  // dezembro para novembro desaparecer do plano — e com ele os juros de um
+  // mês inteiro sobre 1,1 M€ de dívida, sem nada a assinalá-lo.
+  //
+  // Por isso o percurso vai do mês natural (hoje, ou o início da obra se ela
+  // ainda não começou) até ao fim da obra, e cada família só lança nos SEUS
+  // meses lá dentro.
+  const meses = mesesEntre(natural, p.data_fim);
   const primeiro = meses[0] || primeiroObra;
 
   // O budget é dado sem IVA; o que já foi incorrido vem com IVA. A conta
@@ -917,6 +926,25 @@ export function planearObra(plano, { gastoObra = 0, hoje = hojeISO(), grupo = "L
       if (comissao > 0) linhas.push(linha("comissao", mes, comissao, grupo, {
         descricao: `Comissão de avaliação — ${rotuloMes(mes)}`,
         obs: `Libertação de ${libertado} €`,
+      }));
+    }
+
+    // ── A comissão dos meses que a obra já deixou para trás ─────────────────
+    // Quando se reprograma a obra a partir de dezembro, novembro deixa de ter
+    // linha de obra no plano — mas tem obra A PAGAR: a fatura do empreiteiro
+    // já chegou e está no Contas a Pagar. O banco liberta contra essa fatura
+    // na mesma, e cobra a avaliação na mesma.
+    //
+    // O plano não sabe o valor dessa fatura (é por isso que ela foi tirada
+    // daqui), mas também não precisa: a comissão é um valor FIXO por
+    // libertação, não uma percentagem. A libertação em si não se lança — essa
+    // vem da própria fatura, pela marca de funding, no Fluxo Futuro. Lançá-la
+    // aqui outra vez era contar a mesma entrada do banco duas vezes.
+    if (!temObraMes && mes < primeiroObra && comissao > 0 && pctFunding > 0) {
+      linhas.push(linha("comissao", mes, comissao, grupo, {
+        descricao: `Comissão de avaliação — ${rotuloMes(mes)}`,
+        obs: "A obra deste mês já está faturada: a libertação do banco vem da "
+           + "fatura, mas a avaliação cobra-se na mesma.",
       }));
     }
 
