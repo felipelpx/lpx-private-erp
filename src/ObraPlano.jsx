@@ -92,6 +92,19 @@ export default function ModalPlanoObra({
   onGuardar, onAplicar, onFechar, hoje = hojeISO(),
 }) {
   const [f, setF] = useState(() => ({ ...PLANO_VAZIO, ...(planoGravado || {}), empresa }));
+
+  // Os dois meses entre os quais a decisão de reprogramar se faz quase
+  // sempre: este, ou o seguinte se a fatura deste já chegou.
+  // Contados a partir do MESMO `hoje` que o motor usa, não do relógio: em
+  // produção dá no mesmo, mas se os dois divergirem o botão "este mês" passa
+  // a escrever um mês diferente daquele que o motor considera corrente — e o
+  // ecrã fica a discordar de si próprio sem nada que o denuncie.
+  const [mesCorrente, mesSeguinte] = useMemo(() => {
+    const d = hoje ? new Date(String(hoje).slice(0, 10) + "T00:00:00") : new Date();
+    const base = Number.isNaN(d.getTime()) ? new Date() : d;
+    const fmt = (x) => `${x.getFullYear()}-${String(x.getMonth() + 1).padStart(2, "0")}`;
+    return [fmt(base), fmt(new Date(base.getFullYear(), base.getMonth() + 1, 1))];
+  }, [hoje]);
   const [aGravar, setAGravar] = useState(false);
   const [confirmar, setConfirmar] = useState(false);
   const [simular, setSimular] = useState("");       // data de fim alternativa
@@ -341,6 +354,37 @@ export default function ModalPlanoObra({
                   <Rotulo>Fim da obra</Rotulo>
                   <input type="date" value={f.data_fim || ""} style={campo}
                     onChange={e => muda("data_fim")(e.target.value)} />
+                </div>
+              </div>
+
+              {/* ── A partir de que mês se reprograma ─────────────────────
+                  O mês corrente nem sempre está por fazer: se a fatura de
+                  novembro já chegou, reprogramar a partir de novembro põe uma
+                  previsão por cima dela e o mês fica com dois pagamentos.
+                  Quem reprograma é que sabe se o auto deste mês já saiu. */}
+              <div>
+                <Rotulo>Reprogramar o saldo a partir de</Rotulo>
+                <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+                  <input type="month" value={f.mes_reprojecao || ""}
+                    min={mesCorrente} max={f.data_fim ? f.data_fim.slice(0, 7) : undefined}
+                    style={{ ...campo, flex: 1 }}
+                    onChange={e => muda("mes_reprojecao")(e.target.value)} />
+                  {[["este mês", mesCorrente], ["próximo", mesSeguinte]].map(([txt, v]) => (
+                    <button key={v} onClick={() => muda("mes_reprojecao")(v)}
+                      style={{ background: (f.mes_reprojecao || mesCorrente) === v ? COR.tinta : "#EDF1F5",
+                               color: (f.mes_reprojecao || mesCorrente) === v ? "#FCF3EB" : COR.banco,
+                               border: "none", borderRadius: 7, padding: "8px 10px",
+                               fontSize: 11, cursor: "pointer", fontWeight: 600, whiteSpace: "nowrap" }}>
+                      {txt}
+                    </button>
+                  ))}
+                </div>
+                <div style={{ fontSize: 10.5, color: "#9DA2A6", lineHeight: 1.5, marginTop: 5 }}>
+                  {f.mes_reprojecao && f.mes_reprojecao > mesCorrente
+                    ? `O que falta reparte-se de ${rotuloMes(f.mes_reprojecao)} em diante. `
+                      + `${rotuloMes(mesCorrente)} fica como está.`
+                    : "Escolhe o mês seguinte se a fatura de obra deste mês já chegou — "
+                      + "senão o mês fica com a fatura e a previsão."}
                 </div>
               </div>
 

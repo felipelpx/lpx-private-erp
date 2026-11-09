@@ -498,6 +498,11 @@ const eur = (v) => new Intl.NumberFormat("pt-PT",
 export const PLANO_VAZIO = {
   empresa: "", ativo: true,
   data_inicio: "", data_fim: "",
+  // O mês a partir do qual se reparte o saldo residual, em "AAAA-MM".
+  // Vazio = a partir do mês corrente. Serve para quando o mês já tem a
+  // fatura da obra: reprograma-se do mês seguinte, para não ficar com dois
+  // pagamentos no mesmo mês.
+  mes_reprojecao: "",
   budget_obra: 0, taxa_iva_obra: 23,
   fiscalizacao_mensal: 0, cso_mensal: 0, taxa_iva_servicos: 23, comissao_avaliacao: 0,
   euribor: 0, spread: 0, funding_pct: 0, divida_inicial: 0,
@@ -558,9 +563,45 @@ export function planearObra(plano, { gastoObra = 0, hoje = hojeISO(), grupo = "L
     avisos.push("A data de fim é anterior à de início.");
   if (!(num(p.budget_obra) > 0)) avisos.push("Falta o budget de obra.");
 
-  // O plano arranca no mês corrente, ou no início da obra se ainda não começou:
-  // o passado já está no fluxo realizado e não se prevê duas vezes.
-  const primeiro = mesDe(p.data_inicio) > mesDe(hoje) ? mesDe(p.data_inicio) : mesDe(hoje);
+  // ── De que mês em diante é que se reprograma ─────────────────────────────
+  // Por omissão o plano arranca no mês corrente, ou no início da obra se ela
+  // ainda não começou: o passado já está no fluxo realizado e não se prevê
+  // duas vezes.
+  //
+  // Mas o mês corrente nem sempre está por fazer. Quando a fatura de novembro
+  // já chegou — ou já foi paga —, reprogramar a partir de novembro põe uma
+  // previsão do motor por cima de uma obra que já tem documento: o mês fica
+  // com dois pagamentos e o forecast conta a mesma obra duas vezes. Nesses
+  // casos o saldo residual reparte-se a partir do mês SEGUINTE, e quem decide
+  // é quem está a reprogramar — o motor não tem como adivinhar se o auto
+  // deste mês já saiu.
+  //
+  // `mes_reprojecao` é esse mês, em "AAAA-MM". Vazio = o comportamento de
+  // sempre.
+  const natural = mesDe(p.data_inicio) > mesDe(hoje) ? mesDe(p.data_inicio) : mesDe(hoje);
+  const pedido = /^\d{4}-\d{2}$/.test(String(p.mes_reprojecao || "")) ? p.mes_reprojecao : null;
+
+  // Para trás não se reprograma: linhas num mês já passado entram no fluxo
+  // como vencidas, e obra planeada passava a dívida em atraso sem ninguém
+  // pedir. Para a frente do fim da obra também não — não haveria onde as pôr.
+  let primeiro = natural;
+  if (pedido) {
+    if (pedido < natural) {
+      // Duas razões diferentes para o mês pedido não servir, e o aviso tem de
+      // dizer a certa: ou já passou, ou a obra ainda nem começou.
+      avisos.push(natural === mesDe(hoje)
+        ? `A reprojeção pedida (${rotuloMes(pedido)}) é anterior ao mês corrente; `
+          + `usou-se ${rotuloMes(natural)}. O que já passou está no fluxo realizado.`
+        : `A reprojeção pedida (${rotuloMes(pedido)}) é anterior ao início da obra; `
+          + `usou-se ${rotuloMes(natural)}.`);
+    } else if (p.data_fim && pedido > mesDe(p.data_fim)) {
+      avisos.push(`A reprojeção pedida (${rotuloMes(pedido)}) é depois do fim da obra `
+                + `(${rotuloMes(mesDe(p.data_fim))}): não há meses onde repartir o que falta.`);
+      primeiro = pedido;   // deixa a lista vazia, e o aviso explica porquê
+    } else {
+      primeiro = pedido;
+    }
+  }
   const meses = mesesEntre(primeiro, p.data_fim);
 
   // O budget é dado sem IVA; o que já foi incorrido vem com IVA. A conta
