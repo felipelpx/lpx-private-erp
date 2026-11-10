@@ -12,6 +12,7 @@
 
 import { construirPptx, texto, caixa, regua, tabela, par, imagem } from "./pptx.js";
 import { logoPngBytes, LOGO_LARGURA, LOGO_ALTURA } from "./logoPng.js";
+import { construirPdf } from "./pdf.js";
 import { rotuloMesCurto, repartirPorNatureza } from "./reportCaixa.js";
 
 // ─── O sistema do deck ──────────────────────────────────────────────────────
@@ -612,17 +613,30 @@ export function gerarReportCaixaPptx(r) {
     slideConclusoes(r, sub),
   ];
 
-  const nomeLimpo = String(r.nomeEmpresa || "projeto")
-    .normalize("NFD").replace(/[̀-ͯ]/g, "")
-    .replace(/[^A-Za-z0-9]+/g, "_").replace(/^_|_$/g, "").slice(0, 40);
+  // O nome do ficheiro como a casa o quer: "Report Semanal - Projeto".
+  // Com espaços mesmo, que é o que se lê num anexo de email. Só saem os
+  // caracteres que os sistemas de ficheiros recusam (/ \ : * ? " < > |) e o
+  // que o Windows não aceita no fim de um nome (ponto e espaço).
+  const nomeProjeto = String(r.nomeEmpresa || "Projeto")
+    .replace(/[\/\\:*?"<>|]+/g, "-")
+    .replace(/\s+/g, " ")
+    .trim().replace(/[. ]+$/, "")
+    .slice(0, 80) || "Projeto";
+  const base = `Report Semanal - ${nomeProjeto}`;
+
+  const titulo = `Report Semanal — ${r.nomeEmpresa || ""}`.trim();
 
   return {
     dados: construirPptx(slides, {
-      titulo: `Report de Caixa — ${r.nomeEmpresa || ""}`.trim(),
-      autor: "LPX Private",
+      titulo, autor: "LPX Private",
       media: [{ ext: "png", dados: logoPngBytes() }],
     }),
-    nome: `Report_Caixa_${nomeLimpo}_${String(r.hoje).slice(0, 10)}.pptx`,
+    nome: `${base}.pptx`,
+    // O PDF sai das MESMAS peças (ver src/pdf.js): a disposição está escrita
+    // uma vez só, e os dois ficheiros não se podem separar.
+    pdf: construirPdf(slides, { titulo, autor: "LPX Private" }),
+    nomePdf: `${base}.pdf`,
+    base,
   };
 }
 

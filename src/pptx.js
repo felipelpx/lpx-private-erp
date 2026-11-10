@@ -124,7 +124,13 @@ const corpoTexto = (paras, { anchor = "t", margem = 0.06, wrap = true } = {}) =>
  */
 export function par(partes, { align = "l", espacoAntes = 0, entreLinhas = null } = {}) {
   const lista = Array.isArray(partes) ? partes : [{ t: partes }];
-  const runs = lista.map(r => {
+  return { _par: true, runs: lista, align, espacoAntes, entreLinhas };
+}
+
+/** O mesmo parágrafo, agora em XML do PowerPoint. */
+function parXml(pr) {
+  const { runs: lista, align = "l", espacoAntes = 0, entreLinhas = null } = pr || {};
+  const runs = (lista || []).map(r => {
     const espaco = r.esp ? ` spc="${Math.round(r.esp * 100)}"` : "";
     return `<a:r><a:rPr lang="pt-PT" sz="${pt(r.sz ?? 11)}" b="${r.b ? 1 : 0}"`
       + `${r.i ? ' i="1"' : ""}${espaco} dirty="0">`
@@ -139,10 +145,21 @@ export function par(partes, { align = "l", espacoAntes = 0, entreLinhas = null }
     + `<a:spcBef><a:spcPts val="${pt(espacoAntes)}"/></a:spcBef></a:pPr>${runs}</a:p>`;
 }
 
+/** Parágrafos (um, vários, ou já em XML) → XML. */
+function parasXml(paras) {
+  const lista = Array.isArray(paras) ? paras : [paras];
+  return lista.filter(Boolean)
+    .map(x => (typeof x === "string" ? x : parXml(x))).join("");
+}
+
 /** Caixa de texto. */
 export function texto(x, y, cx, cy, paras, opts = {}) {
+  return { tipo: "texto", x, y, cx, cy, paras, opts };
+}
+
+function textoXml({ x, y, cx, cy, paras, opts = {} }) {
   const id = proximoId();
-  const ps = Array.isArray(paras) ? paras.join("") : paras;
+  const ps = parasXml(paras);
   return `<p:sp><p:nvSpPr><p:cNvPr id="${id}" name="T${id}"/><p:cNvSpPr txBox="1"/><p:nvPr/></p:nvSpPr>
     <p:spPr><a:xfrm><a:off x="${pol(x)}" y="${pol(y)}"/><a:ext cx="${pol(cx)}" cy="${pol(cy)}"/></a:xfrm>
       <a:prstGeom prst="rect"><a:avLst/></a:prstGeom><a:noFill/></p:spPr>
@@ -150,8 +167,12 @@ export function texto(x, y, cx, cy, paras, opts = {}) {
 }
 
 /** Retângulo, com ou sem texto. */
-export function caixa(x, y, cx, cy, { fill = null, linha = null, larguraLinha = 0.75,
-                                      raio = null, paras = "", opts = {} } = {}) {
+export function caixa(x, y, cx, cy, o = {}) {
+  return { tipo: "caixa", x, y, cx, cy, ...o };
+}
+
+function caixaXml({ x, y, cx, cy, fill = null, linha = null, larguraLinha = 0.75,
+                    raio = null, paras = "", opts = {} }) {
   const id = proximoId();
   const geom = raio
     ? `<a:prstGeom prst="roundRect"><a:avLst><a:gd name="adj" fmla="val ${Math.round(raio * 50000)}"/></a:avLst></a:prstGeom>`
@@ -162,7 +183,7 @@ export function caixa(x, y, cx, cy, { fill = null, linha = null, larguraLinha = 
   const contorno = linha
     ? `<a:ln w="${Math.round(larguraLinha * 12700)}"><a:solidFill><a:srgbClr val="${linha.replace("#", "")}"/></a:solidFill></a:ln>`
     : `<a:ln><a:noFill/></a:ln>`;
-  const ps = Array.isArray(paras) ? paras.join("") : paras;
+  const ps = parasXml(paras);
   return `<p:sp><p:nvSpPr><p:cNvPr id="${id}" name="C${id}"/><p:cNvSpPr/><p:nvPr/></p:nvSpPr>
     <p:spPr><a:xfrm><a:off x="${pol(x)}" y="${pol(y)}"/><a:ext cx="${pol(cx)}" cy="${pol(cy)}"/></a:xfrm>
       ${geom}${preench}${contorno}</p:spPr>
@@ -171,6 +192,10 @@ export function caixa(x, y, cx, cy, { fill = null, linha = null, larguraLinha = 
 
 /** Linha horizontal. */
 export function regua(x, y, cx, cor = "D9CFC0", largura = 1) {
+  return { tipo: "regua", x, y, cx, cor, largura };
+}
+
+function reguaXml({ x, y, cx, cor = "D9CFC0", largura = 1 }) {
   const id = proximoId();
   return `<p:cxnSp><p:nvCxnSpPr><p:cNvPr id="${id}" name="L${id}"/><p:cNvCxnSpPr/><p:nvPr/></p:nvCxnSpPr>
     <p:spPr><a:xfrm><a:off x="${pol(x)}" y="${pol(y)}"/><a:ext cx="${pol(cx)}" cy="0"/></a:xfrm>
@@ -185,6 +210,10 @@ export function regua(x, y, cx, cor = "D9CFC0", largura = 1) {
  * @param linhas    [{ altura, celulas: [{ t, cor, sz, b, align, fill }] }]
  */
 export function tabela(x, y, larguras, linhas) {
+  return { tipo: "tabela", x, y, larguras, linhas };
+}
+
+function tabelaXml({ x, y, larguras, linhas }) {
   const id = proximoId();
   const gridCols = larguras.map(w => `<a:gridCol w="${pol(w)}"/>`).join("");
   const corpo = linhas.map(l => {
@@ -195,11 +224,11 @@ export function tabela(x, y, larguras, linhas) {
       // Uma célula pode levar uma segunda linha (`t2`): serve para pôr o nome
       // em cima e a descrição por baixo, mais pequena e mais clara, sem gastar
       // uma coluna inteira numa tabela que já está apertada.
-      const p = par([{ t: c.t, cor: c.cor, sz: c.sz ?? 9, b: c.b, fonte: c.fonte }],
-                    { align: c.align || "l" })
+      const p = parXml(par([{ t: c.t, cor: c.cor, sz: c.sz ?? 9, b: c.b, fonte: c.fonte }],
+                           { align: c.align || "l" }))
         + (c.t2
-            ? par([{ t: c.t2, cor: c.cor2 || "8A8F93", sz: c.sz2 ?? 7.2, fonte: c.fonte }],
-                  { align: c.align || "l", entreLinhas: 0.92 })
+            ? parXml(par([{ t: c.t2, cor: c.cor2 || "8A8F93", sz: c.sz2 ?? 7.2, fonte: c.fonte }],
+                         { align: c.align || "l", entreLinhas: 0.92 }))
             : "");
       // As bordas verticais saem TODAS: o deck de referência não as tem, e
       // sem as desligar à mão o PowerPoint e o LibreOffice desenham as do
@@ -228,6 +257,10 @@ export function tabela(x, y, larguras, linhas) {
  * construirPptx, que é quem mete o ficheiro dentro do .pptx e cria a relação.
  */
 export function imagem(x, y, cx, cy, rel = "rId2") {
+  return { tipo: "imagem", x, y, cx, cy, rel };
+}
+
+function imagemXml({ x, y, cx, cy, rel = "rId2" }) {
   const id = proximoId();
   return `<p:pic><p:nvPicPr><p:cNvPr id="${id}" name="Img${id}"/>
       <p:cNvPicPr><a:picLocks noChangeAspect="1"/></p:cNvPicPr><p:nvPr/></p:nvPicPr>
@@ -242,12 +275,28 @@ const NS = 'xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" '
          + 'xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" '
          + 'xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"';
 
+// Cada peça do slide é um objeto (ver texto/caixa/regua/tabela/imagem). Era
+// aqui que elas eram já XML: passaram a ser dados para o PDF poder desenhar
+// as MESMAS peças sem ninguém escrever a disposição duas vezes (ver src/pdf.js).
+function formaXml(f) {
+  if (!f) return "";
+  if (typeof f === "string") return f;          // XML à mão, se alguém precisar
+  switch (f.tipo) {
+    case "texto":  return textoXml(f);
+    case "caixa":  return caixaXml(f);
+    case "regua":  return reguaXml(f);
+    case "tabela": return tabelaXml(f);
+    case "imagem": return imagemXml(f);
+    default: return "";
+  }
+}
+
 const slideXml = (formas) => CABECALHO
   + `<p:sld ${NS}><p:cSld><p:spTree>
       <p:nvGrpSpPr><p:cNvPr id="1" name=""/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr>
       <p:grpSpPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="0" cy="0"/>
         <a:chOff x="0" y="0"/><a:chExt cx="0" cy="0"/></a:xfrm></p:grpSpPr>
-      ${formas.join("\n")}
+      ${(formas || []).map(formaXml).join("\n")}
     </p:spTree></p:cSld><p:clrMapOvr><a:overrideClrMapping bg1="lt1" tx1="dk1" bg2="lt2" tx2="dk2"
       accent1="accent1" accent2="accent2" accent3="accent3" accent4="accent4" accent5="accent5"
       accent6="accent6" hlink="hlink" folHlink="folHlink"/></p:clrMapOvr></p:sld>`;

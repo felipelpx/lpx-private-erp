@@ -989,9 +989,13 @@ export default function IRView({ currentUser, empresasVisiveis }) {
   // A mesma matriz do Fluxo Futuro, com os mesmos lançamentos — só que aqui
   // não se mexe em nada (ver src/MatrizFluxo.jsx).
   const [mesesMatriz, setMesesMatriz] = useState(6);
+  // Mesma opção do ecrã da equipa. Sem ela, os meses sem lançamentos eram
+  // deitados fora em silêncio: escolher 12 meses num projeto com despesas só
+  // em dois mostrava duas colunas, e o botão dos 12 ficava aceso a mentir.
+  const [mostrarVazios, setMostrarVazios] = useState(false);
 
   const matrizFuturo = useMemo(() => construirMatriz({
-    meses: fluxo.mesesComSaldo, maxMeses: mesesMatriz,
+    meses: fluxo.mesesComSaldo, maxMeses: mesesMatriz, comVazios: mostrarVazios,
     // A MESMA régua do Fluxo Futuro, do mesmo sítio: é ela que manda a
     // entrada do banco para FUNDING em vez de a deixar cair em RECEITAS.
     rubricaDoItem: criarRubricaDoItem({
@@ -1001,7 +1005,7 @@ export default function IRView({ currentUser, empresasVisiveis }) {
     // o mesmo ponto de partida do ecrã da equipa. Abrir no saldo cheio dava
     // ao investidor um caixa melhor do que o que a equipa vê.
     saldoInicial: fluxo.saldoLiquido,
-  }), [fluxo, mesesMatriz, empSel]);
+  }), [fluxo, mesesMatriz, mostrarVazios, empSel]);
 
   const totalPrevEntradas = fluxo.meses.reduce((s, m) => s + m.entradas, 0);
   const totalPrevSaidas = fluxo.meses.reduce((s, m) => s + m.saidas, 0);
@@ -1154,7 +1158,8 @@ export default function IRView({ currentUser, empresasVisiveis }) {
           {/* Exatamente a grelha que a equipa vê no Fluxo Futuro do ERP, com os
               mesmos lançamentos — aqui sem um único botão de edição. */}
           <MatrizFluxo matriz={matrizFuturo} isAdmin={false} acoes={{}}
-            nMeses={mesesMatriz} onNMeses={setMesesMatriz} />
+            nMeses={mesesMatriz} onNMeses={setMesesMatriz}
+            comVazios={mostrarVazios} onComVazios={setMostrarVazios} />
         </Card>
       )}
 

@@ -160,7 +160,7 @@ const AMARELO_LINHA = "#E8D9A8";
 const AMARELO_TEXTO = "#7A5A22";
 
 export default function MatrizFluxo({ matriz, isAdmin, acoes, nMeses, onNMeses, onNovaDespesa,
-                                      comVazios, rubricasDoPlano = null,
+                                      comVazios, onComVazios = null, rubricasDoPlano = null,
                                       // De que é feito o caixa de abertura:
                                       // { atual, vencido }. Sem isto, a linha
                                       // mostra só o número — e um saldo
@@ -280,6 +280,32 @@ export default function MatrizFluxo({ matriz, isAdmin, acoes, nMeses, onNMeses, 
                      border: `1px solid ${nMeses === n ? "#091C2A" : "#E7DED2"}`, padding: "3px 10px",
                      borderRadius: 7, fontSize: 11, cursor: "pointer", fontFamily: "var(--fonte-numero)" }}>{n}</button>
         ))}
+        {/* A caixa dos meses vazios, para quem a passa (o Investor Relations).
+            No ecrã da equipa ela vive na barra de cima, por isso lá não se
+            repete. */}
+        {onComVazios && (
+          <label title="Por defeito só aparecem os meses com lançamentos"
+            style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 11,
+                     color: "#7E8388", cursor: "pointer" }}>
+            <input type="checkbox" checked={!!comVazios}
+              onChange={e => onComVazios(e.target.checked)} />
+            meses vazios
+          </label>
+        )}
+
+        {/* Pediu 12 e vê 2? Tem de ficar dito porquê.
+            `porMostrar` é sobre meses COM lançamentos que ficaram de fora da
+            janela — não diz nada quando o que ficou de fora foram meses
+            vazios, e era aí que o número escolhido parecia simplesmente
+            ignorado. */}
+        {!comVazios && nMeses > colunas.length && (
+          <span style={{ fontSize: 10.5, color: "#9DA2A6" }}
+            title="Liga «meses vazios» para ver as colunas todas.">
+            pediste {nMeses}: {nMeses - colunas.length}{" "}
+            {nMeses - colunas.length === 1 ? "mês não tem" : "meses não têm"} lançamentos
+          </span>
+        )}
+
         {porMostrar > 0 && (
           <span style={{ fontSize: 10.5, color: "#9DA2A6" }}
             title="A coluna TOTAL soma o fluxo todo, não só os meses à vista.">

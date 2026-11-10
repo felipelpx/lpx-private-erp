@@ -47,15 +47,28 @@ export default function BotaoReportCaixa({
         faturas, empresa,
       });
 
-      const { dados, nome } = gerarReportCaixaPptx(r);
-      const blob = new Blob([dados], {
-        type: "application/vnd.openxmlformats-officedocument.presentationml.presentation" });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url; a.download = nome;
-      document.body.appendChild(a); a.click(); a.remove();
-      // Sem isto o blob fica na memória do separador até se fechar.
-      setTimeout(() => URL.revokeObjectURL(url), 4000);
+      const { dados, nome, pdf, nomePdf } = gerarReportCaixaPptx(r);
+
+      // Os dois ficheiros, do mesmo clique: o .pptx para quem vai apresentar
+      // ou mexer, o PDF para anexar a um email sem o deck se desformatar na
+      // máquina de quem o abre. Saem das MESMAS peças (ver src/pdf.js), por
+      // isso não podem divergir.
+      const descarregar = (bytes, nomeFicheiro, tipo) => {
+        const url = URL.createObjectURL(new Blob([bytes], { type: tipo }));
+        const a = document.createElement("a");
+        a.href = url; a.download = nomeFicheiro;
+        document.body.appendChild(a); a.click(); a.remove();
+        // Sem isto o blob fica na memória do separador até se fechar.
+        setTimeout(() => URL.revokeObjectURL(url), 4000);
+      };
+
+      descarregar(dados, nome,
+        "application/vnd.openxmlformats-officedocument.presentationml.presentation");
+      // Um pequeno intervalo entre os dois: há browsers que tratam dois
+      // downloads disparados no mesmo instante como um só e deixam cair o
+      // segundo sem dizer nada.
+      await new Promise(ok => setTimeout(ok, 350));
+      descarregar(pdf, nomePdf, "application/pdf");
     } catch (e) {
       console.error("report de caixa:", e);
       alert("Não foi possível gerar o report:\n\n" + (e?.message || e));
