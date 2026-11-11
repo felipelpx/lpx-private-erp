@@ -5,6 +5,7 @@
 //
 //   node teste-render.mjs
 import { build } from "esbuild";
+import { comCauda } from "./testes/stubHooks.mjs";
 import { writeFileSync, mkdtempSync, rmSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
@@ -42,7 +43,7 @@ const MOVS = [
   { id: "m2", conta_id: "adseq_bcp", empresa_id: "adseq", banco: "BCP", data: "2026-09-12", movimento: "ENTRADA SOCIO", valor: 50000, saldo: 90000, categoria: "Aportes", detalhes: "" },
 ];
 
-writeFileSync(join(dir, "stub-hooks.js"), `
+writeFileSync(join(dir, "stub-hooks.js"), comCauda(`
 const MOVS = ${JSON.stringify(MOVS)};
 const QUESTOES = [
   { id: "q1", movimento_id: "m1", conta_id: "adseq_bcp", empresa: "adseq", banco: "BCP",
@@ -108,7 +109,7 @@ export const useQuestionamentos = () => ({ questionamentos: QUESTOES, loading: f
   deleteQuestionamento: async()=>({ error: null }), marcarLida: async()=>{} });
 export const QUESTOES_TESTE = QUESTOES;
 export const MOVS_TESTE = MOVS;
-`);
+`));
 
 // ── Entrada do teste ────────────────────────────────────────────────────────
 writeFileSync(join(dir, "entrada.jsx"), `

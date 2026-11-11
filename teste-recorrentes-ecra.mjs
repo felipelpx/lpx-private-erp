@@ -2,6 +2,7 @@
 // vê-la cair nos meses do fluxo, e pará-la com a data de fim.
 //   node teste-recorrentes-ecra.mjs
 import { build } from "esbuild";
+import { comCauda } from "./testes/stubHooks.mjs";
 import { writeFileSync, mkdtempSync, rmSync } from "fs";
 import { join } from "path";
 import { pathToFileURL } from "url";
@@ -23,7 +24,7 @@ export default supabase;`);
 
 // A tabela das recorrentes vive em memória, para o ecrã se comportar como
 // se o Supabase estivesse lá: gravar aparece na lista e no fluxo.
-writeFileSync(join(dir, "stub-hooks.js"), `
+writeFileSync(join(dir, "stub-hooks.js"), comCauda(`
 import { useState, useCallback } from "react";
 const VAZIO = Object.freeze({ loading:false, error:null, reload:()=>{} });
 export const useVendas = () => ({ ...VAZIO, vendas: [], updateVenda: async()=>({}) });
@@ -57,7 +58,7 @@ export const useDespesasRecorrentes = () => {
   return { ...VAZIO, recorrentes: LINHAS, guardarRecorrente, apagarRecorrente,
            pararRecorrente: async()=>({}) };
 };
-`);
+`));
 
 writeFileSync(join(dir, "entrada.jsx"), `
 import React from "react";

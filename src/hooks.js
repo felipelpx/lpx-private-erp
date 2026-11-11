@@ -36,7 +36,34 @@ function useRealtimeTable(table, queryFn) {
     return () => { supabase.removeChannel(ch); clearTimeout(timeout) }
   }, [table, load])
 
-  return { data, loading, error, reload: load }
+  // ── Aplicar o que a base devolveu, já, na lista que está no ecrã ──────────
+  //
+  // O tempo real é uma comodidade, não uma garantia. Depender só dele obriga
+  // a carregar F5 para ver o que acabámos de gravar sempre que: a tabela não
+  // está na publicação `supabase_realtime` do Supabase (é preciso lá pô-la à
+  // mão, tabela a tabela), o separador esteve em segundo plano e o socket
+  // caiu, a rede oscilou, ou a política de leitura filtra o evento.
+  //
+  // Como toda a escrita já faz `.select()` e devolve a linha gravada, não há
+  // razão para esperar pela volta: aplica-se localmente e, se o evento de
+  // tempo real chegar depois, encontra a lista já na mesma forma e não há
+  // segundo render (ver aplicarNaLista em src/escrita.js, que devolve o
+  // MESMO array quando nada muda).
+  const aplicar = useCallback((r, { apagado = null } = {}) => {
+    if (r?.error) return r
+    if (apagado != null) {
+      setData(l => {
+        const fora = l.filter(x => String(x?.id) !== String(apagado))
+        return fora.length === l.length ? l : fora
+      })
+      return r
+    }
+    const linhas = Array.isArray(r?.data) ? r.data : (r?.data ? [r.data] : [])
+    linhas.forEach(linha => { if (linha?.id) setData(l => aplicarNaLista(l, linha)) })
+    return r
+  }, [])
+
+  return { data, loading, error, reload: load, aplicar }
 }
 
 // ─── AUTH ─────────────────────────────────────────────────────────────────────
@@ -72,7 +99,7 @@ export function useAuth() {
 
 // ─── PROFILES ─────────────────────────────────────────────────────────────────
 export function useProfiles() {
-  const { data, loading } = useRealtimeTable('profiles',
+  const { data, loading, aplicar } = useRealtimeTable('profiles',
     () => supabase.from('profiles').select('*').order('nome'))
   const upsertProfile = (p) => supabase.from('profiles').upsert(p)
   return { profiles: data, loading, upsertProfile }
@@ -80,7 +107,7 @@ export function useProfiles() {
 
 // ─── CONTAS (saldos) ──────────────────────────────────────────────────────────
 export function useContas() {
-  const { data, loading } = useRealtimeTable('contas',
+  const { data, loading, aplicar } = useRealtimeTable('contas',
     () => supabase.from('contas').select('*'))
   const updateSaldo = (id, saldo) =>
     supabase.from('contas').update({ saldo, updated_at: new Date().toISOString() }).eq('id', id)
@@ -163,18 +190,18 @@ export function useMovimentosByConta(contaId) {
 
 // ─── FATURAS ──────────────────────────────────────────────────────────────────
 export function useFaturas() {
-  const { data, loading } = useRealtimeTable('faturas',
+  const { data, loading, aplicar } = useRealtimeTable('faturas',
     () => supabase.from('faturas').select('*').order('created_at', { ascending: false }))
   const addFatura = async (f) => {
     const { data, error } = await supabase.from('faturas').insert([f]).select()
     if (error) console.error('addFatura error:', error)
-    return { data, error }
+    return aplicar({ data, error })
   }
   const addFaturas = async (arr) => {
     if (!arr?.length) return { data: [], error: null }
     const { data, error } = await supabase.from('faturas').insert(arr).select()
     if (error) console.error('addFaturas error:', error)
-    return { data, error }
+    return aplicar({ data, error })
   }
   const updateFatura = async (id, u) => {
     // Remover o id do payload (primary key, não atualizável)
@@ -182,36 +209,36 @@ export function useFaturas() {
     const { data, error } = await supabase.from('faturas')
       .update(rest).eq('id', id).select()
     if (error) console.error('updateFatura error:', error)
-    return { data, error }
+    return aplicar({ data, error })
   }
   const deleteFatura = async (id) => {
     const { data, error } = await supabase.from('faturas').delete().eq('id', id).select();
     if (error) console.error('deleteFatura error:', error);
-    return { data, error };
+    return aplicar({ data, error }, { apagado: id })
   };
   return { faturas: data, loading, addFatura, addFaturas, updateFatura, deleteFatura }
 }
 
 // ─── PAGAMENTOS EXTRAS ────────────────────────────────────────────────────────
 export function usePagamentosExtras() {
-  const { data, loading } = useRealtimeTable('pagamentos_extras',
+  const { data, loading, aplicar } = useRealtimeTable('pagamentos_extras',
     () => supabase.from('pagamentos_extras').select('*').order('data_inicio'))
   const addPagamento = async (p) => {
     const { data, error } = await supabase.from('pagamentos_extras').insert([p]).select()
     if (error) console.error('addPagamento error:', error)
-    return { data, error }
+    return aplicar({ data, error })
   }
   const updatePagamento = async (id, u) => {
     const { data, error } = await supabase.from('pagamentos_extras')
       .update(u).eq('id', id).select()
     if (error) console.error('updatePagamento error:', error)
-    return { data, error }
+    return aplicar({ data, error })
   }
   const deletePagamento = async (id) => {
     const { data, error } = await supabase.from('pagamentos_extras')
       .delete().eq('id', id).select()
     if (error) console.error('deletePagamento error:', error)
-    return { data, error }
+    return aplicar({ data, error }, { apagado: id })
   }
   // Em lote, para o plano de obra: um recálculo apaga dezenas de linhas e
   // cria outras tantas. Uma chamada por linha seria lento e deixaria o fluxo
@@ -231,7 +258,7 @@ export function usePagamentosExtras() {
     const { data, error } = await supabase.from('pagamentos_extras')
       .upsert(arr, { onConflict: 'id' }).select()
     if (error) console.error('addPagamentos error:', error)
-    return { data, error }
+    return aplicar({ data, error })
   }
   const apagarPagamentos = async (ids) => {
     if (!ids?.length) return { data: [], error: null }
@@ -248,7 +275,7 @@ export function usePagamentosExtras() {
 // A regra, não as linhas (ver src/recorrentes.js). O fluxo expande-a ao
 // desenhar, por isso aqui só se guarda e se lê.
 export function useDespesasRecorrentes() {
-  const { data, loading, error } = useRealtimeTable('despesas_recorrentes',
+  const { data, loading, error, aplicar } = useRealtimeTable('despesas_recorrentes',
     () => supabase.from('despesas_recorrentes').select('*').order('descricao'))
 
   const guardarRecorrente = async (r) => {
@@ -262,13 +289,13 @@ export function useDespesasRecorrentes() {
       linha)
     if (res.error) console.error('guardarRecorrente error:', res.error)
     if (res.ignoradas?.length) console.warn('guardarRecorrente: colunas em falta', res.ignoradas)
-    return res
+    return aplicar(res)
   }
   const apagarRecorrente = async (id) => {
     const { data, error } = await supabase.from('despesas_recorrentes')
       .delete().eq('id', id).select()
     if (error) console.error('apagarRecorrente error:', error)
-    return { data, error }
+    return aplicar({ data, error }, { apagado: id })
   }
   // Parar é pôr-lhe uma data de fim, não apagar: o que já passou continua a
   // fazer parte da história do projeto.
@@ -276,7 +303,7 @@ export function useDespesasRecorrentes() {
     const { data, error } = await supabase.from('despesas_recorrentes')
       .update({ data_fim: dataFim, ativa: true }).eq('id', id).select()
     if (error) console.error('pararRecorrente error:', error)
-    return { data, error }
+    return aplicar({ data, error })
   }
 
   return { recorrentes: data, loading, error, guardarRecorrente, apagarRecorrente, pararRecorrente }
@@ -372,7 +399,7 @@ export async function lerCaixaSemana(contaIds = [], de, ate) {
 }
 
 export function useObraPlanos() {
-  const { data, loading, error } = useRealtimeTable('obra_planos',
+  const { data, loading, error, aplicar } = useRealtimeTable('obra_planos',
     () => supabase.from('obra_planos').select('*').order('empresa'))
 
   const guardarPlano = async (plano) => {
@@ -385,7 +412,7 @@ export function useObraPlanos() {
       linha)
     if (r.error) console.error('guardarPlano:', r.error)
     if (r.ignoradas?.length) console.warn('guardarPlano: colunas em falta', r.ignoradas)
-    return r
+    return aplicar(r)
   }
 
   return { planos: data, loading, error, guardarPlano }
@@ -393,7 +420,7 @@ export function useObraPlanos() {
 
 // ─── MAPAS DE PAGAMENTO ──────────────────────────────────────────────────────
 export function useMapasPagamento() {
-  const { data: mapas, loading, reload } = useRealtimeTable('mapas_pagamento',
+  const { data: mapas, loading, reload, aplicar } = useRealtimeTable('mapas_pagamento',
     () => supabase.from('mapas_pagamento').select('*').order('created_at', { ascending: false }))
 
   const addMapa = async (mapa, itens) => {
@@ -432,7 +459,7 @@ export function useMapasPagamento() {
     const { data, error } = await supabase.from('mapas_pagamento').update(rest).eq('id', id).select()
     if (error) console.error('updateMapa error:', error)
     if (!error) await reload()
-    return { data, error }
+    return aplicar({ data, error })
   }
 
   const deleteMapa = async (id) => {
@@ -440,7 +467,7 @@ export function useMapasPagamento() {
     const { data, error } = await supabase.from('mapas_pagamento').delete().eq('id', id).select()
     if (error) console.error('deleteMapa error:', error)
     if (!error) await reload()
-    return { data, error }
+    return aplicar({ data, error }, { apagado: id })
   }
 
   return { mapas, loading, reload, addMapa, updateMapa, deleteMapa }
@@ -584,7 +611,7 @@ export function useVendas() {
 
 // ─── ORCAMENTO ────────────────────────────────────────────────────────────────
 export function useOrcamento() {
-  const { data, loading } = useRealtimeTable('orcamento',
+  const { data, loading, aplicar } = useRealtimeTable('orcamento',
     () => supabase.from('orcamento').select('*').order('empresa_id').order('categoria'))
   // Devolve { data, error } como os outros: o ecrã do Real × Orçado precisa
   // de saber se a gravação passou para pintar a célula e não mentir ao
@@ -593,12 +620,12 @@ export function useOrcamento() {
     const { data, error } = await supabase.from('orcamento')
       .upsert({ ...row, updated_at: new Date().toISOString() }, { onConflict: 'id' }).select()
     if (error) console.error('upsertOrcamento error:', error)
-    return { data, error }
+    return aplicar({ data, error })
   }
   const deleteOrcamento = async (id) => {
     const { data, error } = await supabase.from('orcamento').delete().eq('id', id).select()
     if (error) console.error('deleteOrcamento error:', error)
-    return { data, error }
+    return aplicar({ data, error }, { apagado: id })
   }
   return { orcamento: data, loading, upsertOrcamento, deleteOrcamento }
 }
@@ -759,23 +786,23 @@ export function useMovimentosPeriodo(contaIds = [], de = null, ate = null) {
 
 // ─── RECEBÍVEIS (Contas a Receber) ───────────────────────────────────────────
 export function useRecebiveis() {
-  const { data, loading } = useRealtimeTable('recebiveis',
+  const { data, loading, aplicar } = useRealtimeTable('recebiveis',
     () => supabase.from('recebiveis').select('*').order('data_prevista'))
   const addRecebivel = async (r) => {
     const { data, error } = await supabase.from('recebiveis').insert([r]).select()
     if (error) console.error('addRecebivel:', error)
-    return { data, error }
+    return aplicar({ data, error })
   }
   const updateRecebivel = async (id, u) => {
     const { data, error } = await supabase.from('recebiveis')
       .update({ ...u, updated_at: new Date().toISOString() }).eq('id', id).select()
     if (error) console.error('updateRecebivel:', error)
-    return { data, error }
+    return aplicar({ data, error })
   }
   const deleteRecebivel = async (id) => {
     const { error } = await supabase.from('recebiveis').delete().eq('id', id)
     if (error) console.error('deleteRecebivel:', error)
-    return { error }
+    return aplicar({ error }, { apagado: id })
   }
   return { recebiveis: data, loading, addRecebivel, updateRecebivel, deleteRecebivel }
 }
