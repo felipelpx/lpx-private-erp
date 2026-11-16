@@ -107,17 +107,33 @@ function slideSemana(r, sub) {
   const pp = r.porPagar || { n: 0, total: 0, estados: [], maiores: [] };
   const f = [...moldura("Caixa — Últimos 7 Dias", sub, 1)];
 
-  const cx = 3.84, gap = 0.21;
-  f.push(cartao(X0, 1.66, cx, 1.40, `Caixa a ${s.de.slice(8, 10)}/${s.de.slice(5, 7)}`,
+  // Quatro cartões: os dois saldos lado a lado, e a seguir o que os liga.
+  //
+  //   [ Caixa a 09/11 ] [ Caixa hoje ] | [ Entrou ] [ Saiu ]
+  //
+  // Os saldos juntos para a variação se ler de relance — é a comparação que
+  // interessa, e separá-los obrigava a saltar o slide de um lado ao outro.
+  //
+  // E entrada e saída com o MESMO peso. Antes o que entrou ia como legenda
+  // pequena e cinzenta por baixo do que saiu: numa semana em que entraram
+  // 17.052 € e saíram 17.241 € — ou seja, em que a casa praticamente empatou
+  // — o slide dava a ler um número grande e vermelho com um rodapé, e parecia
+  // uma sangria. O peso tipográfico dizia uma coisa que os números não diziam.
+  const gap = 0.21, cx = (LARGURA - 3 * gap) / 4;     // 2,825 pol
+  const col = (i) => X0 + i * (cx + gap);
+  f.push(cartao(col(0), 1.66, cx, 1.40, `Caixa a ${s.de.slice(8, 10)}/${s.de.slice(5, 7)}`,
                 eur(s.saldoAnterior), { nota: "saldo lido do extrato", szValor: 21 }));
-  f.push(cartao(X0 + cx + gap, 1.66, cx, 1.40, "Saiu nestes 7 dias",
-                eur(s.saidas), { cor: C.vermelho, szValor: 21,
-                nota: s.entradas > 0.005 ? `entraram ${eur(s.entradas)}` : "sem entradas no período" }));
   // Se se puseram transferências de lado, o cartão tem de o dizer: um número
   // mais baixo do que o extrato bruto, sem explicação, parece um erro.
-  f.push(cartao(X0 + 2 * (cx + gap), 1.66, cx, 1.40, "Caixa hoje",
+  f.push(cartao(col(1), 1.66, cx, 1.40, "Caixa hoje",
                 eur(s.saldoAtual), { cor: sinal(s.saldoAtual), szValor: 21,
                 nota: `variação de ${eur(s.variacao)}` }));
+  f.push(cartao(col(2), 1.66, cx, 1.40, "Entrou nestes 7 dias",
+                eur(s.entradas), { cor: C.verde, szValor: 21,
+                nota: s.entradas > 0.005 ? "recebimentos do período" : "sem entradas no período" }));
+  f.push(cartao(col(3), 1.66, cx, 1.40, "Saiu nestes 7 dias",
+                eur(s.saidas), { cor: C.vermelho, szValor: 21,
+                nota: s.saidas > 0.005 ? "pagamentos do período" : "sem saídas no período" }));
 
   let y = 3.22;
   const intra = s.intraGrupo || { n: 0, total: 0 };
@@ -637,6 +653,10 @@ export function gerarReportCaixaPptx(r) {
     pdf: construirPdf(slides, { titulo, autor: "LPX Private" }),
     nomePdf: `${base}.pdf`,
     base,
+    // As peças, para os testes poderem medir a disposição em vez de a
+    // julgarem por um .pptx já fechado. Foi assim que se apanhou o cartão
+    // com texto creme sobre fundo creme: a olho estava lá, medido não.
+    slides,
   };
 }
 
