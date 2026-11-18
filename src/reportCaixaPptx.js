@@ -162,35 +162,77 @@ function slideSemana(r, sub) {
   const colL = 5.82, colR = LARGURA - colL - 0.29;
   const xR = X0 + colL + 0.29;
 
-  f.push(texto(X0, y, colL, 0.3,
-         par([{ t: "Maiores saídas da semana", sz: 12.5, b: true, cor: C.tinta, fonte: G }])));
   f.push(texto(xR, y, colR, 0.3,
          par([{ t: "Faturas por pagar", sz: 12.5, b: true, cor: C.tinta, fonte: G }])));
   const yT = y + 0.38;
 
-  // Esquerda: o extrato da semana.
-  if (s.maiores.length) {
-    const l = [{ altura: 0.26, celulas: [
+  // ── Esquerda: o extrato da semana, saídas e entradas ────────────────────
+  //
+  // As duas tabelas empilham-se, e as linhas repartem-se pelo espaço que
+  // houver até ao rodapé. A altura do topo varia — a nota das transferências
+  // intra-grupo e o aviso do extrato que não fecha aparecem conforme os
+  // dados — por isso um número fixo de linhas ou deixava buraco ou passava
+  // por cima da régua. Conta-se o espaço e corta-se a tabela mais comprida
+  // até caber, nunca abaixo de uma linha enquanto houver movimentos.
+  const FUNDO = 6.78;
+  const CAB = 0.26, LIN = 0.24, TOT = 0.27, TIT = 0.38, FOLGA = 0.22;
+  const bloco = (n) => (n > 0 ? CAB + n * LIN + TOT : 0.40);
+
+  let nSai = Math.min(5, s.maiores.length);
+  let nEnt = Math.min(5, (s.maioresEntradas || []).length);
+  const cabe = () => bloco(nSai) + FOLGA + TIT + bloco(nEnt) <= FUNDO - yT;
+  // Encurta sempre a mais comprida, para as duas ficarem equilibradas.
+  while (!cabe() && (nSai > 1 || nEnt > 1)) {
+    if (nSai >= nEnt && nSai > 1) nSai--;
+    else if (nEnt > 1) nEnt--;
+    else break;
+  }
+
+  /** Uma das duas tabelas do extrato. */
+  const tabelaExtrato = (yy, itens, n, { cor, totalRotulo, total, nMov }) => {
+    const l = [{ altura: CAB, celulas: [
       { t: "Data", b: true, sz: 8.5, cor: C.tinta, fonte: K, fill: C.cabTab },
       { t: "Movimento", b: true, sz: 8.5, cor: C.tinta, fonte: K, fill: C.cabTab },
       { t: "Valor", b: true, sz: 8.5, cor: C.tinta, fonte: K, align: "r", fill: C.cabTab },
     ]}];
-    s.maiores.slice(0, 5).forEach((m, i) => l.push({ altura: 0.24, celulas: [
+    itens.slice(0, n).forEach((m, i) => l.push({ altura: LIN, celulas: [
       { t: `${m.data.slice(8, 10)}/${m.data.slice(5, 7)}`, sz: 8.5, cor: C.suave, fonte: K,
         fill: i % 2 ? C.zebra : null },
       { t: m.desc.slice(0, 38), sz: 8.5, cor: C.texto, fonte: K, fill: i % 2 ? C.zebra : null },
-      { t: eur(m.valor), sz: 8.5, b: true, cor: C.vermelho, fonte: K, align: "r",
+      { t: eur(m.valor), sz: 8.5, b: true, cor, fonte: K, align: "r",
         fill: i % 2 ? C.zebra : null },
     ]}));
-    l.push({ altura: 0.27, celulas: [
-      { t: `${s.nMovimentos} mov.`, b: true, sz: 8.5, cor: C.tinta, fonte: K },
-      { t: "total das saídas", sz: 8.5, cor: C.suave, fonte: K, align: "r" },
-      { t: eur(s.saidas), b: true, sz: 8.5, cor: C.tinta, fonte: K, align: "r" },
+    l.push({ altura: TOT, celulas: [
+      { t: `${nMov} mov.`, b: true, sz: 8.5, cor: C.tinta, fonte: K },
+      { t: totalRotulo, sz: 8.5, cor: C.suave, fonte: K, align: "r" },
+      { t: eur(total), b: true, sz: 8.5, cor: C.tinta, fonte: K, align: "r" },
     ]});
-    f.push(tabela(X0, yT, [0.76, 3.3, 1.76], l));
+    return tabela(X0, yy, [0.76, 3.3, 1.76], l);
+  };
+
+  f.push(texto(X0, y, colL, 0.3,
+         par([{ t: "Maiores saídas da semana", sz: 12.5, b: true, cor: C.tinta, fonte: G }])));
+  if (s.maiores.length) {
+    f.push(tabelaExtrato(yT, s.maiores, nSai, { cor: C.vermelho,
+      totalRotulo: "total das saídas", total: s.saidas, nMov: s.nSaidas ?? s.nMovimentos }));
   } else {
     f.push(texto(X0, yT, colL, 0.4,
            par([{ t: "Sem saídas registadas no período.", sz: 10, cor: C.suave, fonte: K }])));
+  }
+
+  // E as entradas por baixo, com a mesma forma. Dar-lhes uma tabela própria
+  // em vez de as somar num número só é o que permite ver DE ONDE veio o
+  // dinheiro: um desembolso do banco e um sinal de venda não são a mesma
+  // notícia, e no total eram indistinguíveis.
+  const yE = yT + bloco(s.maiores.length ? nSai : 0) + FOLGA;
+  f.push(texto(X0, yE, colL, 0.3,
+         par([{ t: "Maiores entradas da semana", sz: 12.5, b: true, cor: C.tinta, fonte: G }])));
+  if ((s.maioresEntradas || []).length) {
+    f.push(tabelaExtrato(yE + TIT, s.maioresEntradas, nEnt, { cor: C.verde,
+      totalRotulo: "total das entradas", total: s.entradas, nMov: s.nEntradas ?? 0 }));
+  } else {
+    f.push(texto(X0, yE + TIT, colL, 0.4,
+           par([{ t: "Sem entradas registadas no período.", sz: 10, cor: C.suave, fonte: K }])));
   }
 
   // Direita: o Contas a Pagar em aberto, por estado e depois as maiores.

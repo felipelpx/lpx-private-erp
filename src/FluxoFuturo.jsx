@@ -194,6 +194,7 @@ export default function FluxoFuturo({ faturas: faturasTodas, faturasLoading, pag
   const [escolhas, setEscolhas] = useState({});        // { pagamentoId: faturaId | "" }
   const [aAplicar, setAAplicar] = useState(false);
   const [showForm, setShowForm] = useState(false);
+  const [aExportar, setAExportar] = useState(false);
   // Form simples (descrição, empresa, categoria, observação, tipo)
   const [form, setForm] = useState({
     descricao: "", empresa: "", categoria: "Obra", obs: "", tipo: "saida"
@@ -855,6 +856,31 @@ export default function FluxoFuturo({ faturas: faturasTodas, faturasLoading, pag
                   style={{ background: "#F6DED9", color: "#A93226", border: "none", padding: "4px 8px", borderRadius: 6, fontSize: 10, cursor: "pointer", fontWeight: 600 }}>✕</button>
               )}
             </>
+          )}
+          {/* Exportar a matriz. Só na vista "Matriz": é essa que tem a grelha
+              despesa × mês, e um botão que exportasse outra coisa do que
+              está à vista seria uma armadilha. */}
+          {view === "matriz" && (
+            <button onClick={async () => {
+                if (aExportar) return;
+                setAExportar(true);
+                try {
+                  const { exportarMatrizExcel } = await import("./matrizExcel.js");
+                  await exportarMatrizExcel(matriz, {
+                    nomeProjeto: empresa === "all" ? "Todos os Projetos" : nomeDaEmpresa,
+                    saldoAtual,
+                    filtro: natureza === "real" ? "Custo real"
+                          : natureza === "previsto" ? "Forecast" : "",
+                  });
+                } catch (e) {
+                  alert("Não foi possível exportar: " + (e?.message || e));
+                } finally { setAExportar(false); }
+              }}
+              disabled={aExportar}
+              title="Descarrega a matriz como está à vista, em Excel, com os valores como números"
+              style={{ background: "#fff", color: "#1F7A54", border: "1px solid #BFD8C9", padding: "7px 14px", borderRadius: 8, fontSize: 12, cursor: aExportar ? "default" : "pointer", fontWeight: 700, opacity: aExportar ? 0.6 : 1 }}>
+              {aExportar ? "A exportar…" : "⬇ Excel"}
+            </button>
           )}
           <button onClick={() => setShowForm(true)}
             style={{ background:"#091C2A", color: "#fff", border: "none", padding: "7px 18px", borderRadius: 8, fontSize: 12, cursor: "pointer", fontWeight: 700 }}>

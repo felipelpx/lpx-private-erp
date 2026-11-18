@@ -151,14 +151,22 @@ export function semanaQuePassou({ saldoAtual = 0, saldoAnterior = 0,
   const saidas = arred2(dentro.filter(m => num(m.valor) < 0)
     .reduce((s, m) => s + abs(m.valor), 0));
 
-  // As maiores saídas, que é o que se quer ver num report de uma semana.
-  const maiores = dentro.filter(m => num(m.valor) < 0)
+  // As maiores de cada lado. Mesma regra para os dois: o sinal escolhe o
+  // lado, a ordem é por valor absoluto, e o valor sai sempre positivo — a
+  // coluna já diz se entrou ou saiu, um menos ali era ruído.
+  const maioresDe = (sinal) => dentro
+    .filter(m => (sinal > 0 ? num(m.valor) > 0 : num(m.valor) < 0))
     .sort((a, b) => abs(b.valor) - abs(a.valor))
     .slice(0, 6)
     .map(m => ({ data: String(m.data).slice(0, 10),
                  desc: String(m.movimento || m.detalhes || "(sem descrição)").slice(0, 60),
                  rubrica: m.subcategoria || m.categoria || "",
                  valor: abs(m.valor) }));
+
+  const maiores = maioresDe(-1);
+  const maioresEntradas = maioresDe(+1);
+  const nSaidas = dentro.filter(m => num(m.valor) < 0).length;
+  const nEntradas = dentro.filter(m => num(m.valor) > 0).length;
 
   const variacao = arred2(num(saldoAtual) - num(saldoAnterior));
   const explicada = arred2(entradas - saidas);
@@ -171,7 +179,8 @@ export function semanaQuePassou({ saldoAtual = 0, saldoAnterior = 0,
     entradas, saidas, variacao, explicada, porExplicar,
     fecha: Math.abs(porExplicar) < 0.011,
     nMovimentos: dentro.length,
-    maiores,
+    nSaidas, nEntradas,
+    maiores, maioresEntradas,
     // O que foi posto de lado, para o slide o poder dizer em vez de o número
     // mudar sem explicação.
     intraGrupo: { total: intra.total, n: intra.n, pares: intra.pares },
