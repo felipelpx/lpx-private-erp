@@ -28,6 +28,15 @@
 //   ficar com "Impostos e Taxas", que passou a ocupar a posição da antiga.
 //   Os lançamentos gravados com a grafia antiga continuam a cair nela: a
 //   comparação de rubricas ignora maiúsculas e acentos.
+//
+// ACRESCENTADO À MÃO (19/11/2026) — Av. da Igreja 68:
+//   meridiano e spiral. Partem da lista da `simplify` e trocam as duas linhas
+//   de aporte dela (Blessed e Parcela Emergente, que são sócios de outros
+//   projetos) pelos sócios de cada uma:
+//     meridiano > LPX Private, Manga Investments, LX5
+//     spiral    > Meridiano Radioso, Empresar
+//   Não vêm do Categorias.xlsx — ainda não estão lá. Quem voltar a gerar este
+//   ficheiro tem de as pôr no Excel primeiro.
 // Quem voltar a gerar este ficheiro a partir do Categorias.xlsx tem de as pôr
 // lá primeiro, senão elas desaparecem daqui sem ninguém dar por isso — o
 // teste-categorias-empresa.mjs trava essa regressão.
@@ -200,6 +209,66 @@ export const CATEGORIAS_POR_EMPRESA = {
   simplify: [
     "Blessed - Aporte/Resgate",
     "Parcela Emergente - Aporte/Resgate",
+    "Mútuo Lpx",
+    "Mútuo Big Mouse",
+    "Amortização",
+    "Funding",
+    "Vendas",
+    "Outras Receitas",
+    "Comissão",
+    "Terreno",
+    "Impostos e taxas",
+    "Encargos financeiros",
+    "Legais",
+    "Marketing",
+    "Projetos",
+    "Obra",
+    "Administrativos",
+    "Fiscalização",
+    "CSO",
+    "Fee Gestão",
+    "Juros",
+    "Ajuste",
+    "IVA de obra",
+  ],
+
+  // ── Av. da Igreja 68 ──────────────────────────────────────────────────────
+  // A Meridiano é a holding; os sócios dela entram aqui. Mantém as rubricas
+  // de obra porque o custo pode passar por ela, mesmo não sendo a dona do
+  // imóvel — se vier a confirmar-se que não passa, tiram-se.
+  meridiano: [
+    "LPX Private - Aporte/Resgate",
+    "Manga Investments - Aporte/Resgate",
+    "LX5 - Aporte/Resgate",
+    "Mútuo Lpx",
+    "Mútuo Big Mouse",
+    "Amortização",
+    "Funding",
+    "Vendas",
+    "Outras Receitas",
+    "Comissão",
+    "Terreno",
+    "Impostos e taxas",
+    "Encargos financeiros",
+    "Legais",
+    "Marketing",
+    "Projetos",
+    "Obra",
+    "Administrativos",
+    "Fiscalização",
+    "CSO",
+    "Fee Gestão",
+    "Juros",
+    "Ajuste",
+    "IVA de obra",
+  ],
+
+  // A SPV que adquire o imóvel. Os dois sócios dela são a Meridiano (50%) e
+  // a Empresar (50%) — e mais nenhum, por isso as linhas da Blessed e da
+  // Parcela Emergente não vêm para aqui.
+  spiral: [
+    "Meridiano Radioso - Aporte/Resgate",
+    "Empresar - Aporte/Resgate",
     "Mútuo Lpx",
     "Mútuo Big Mouse",
     "Amortização",

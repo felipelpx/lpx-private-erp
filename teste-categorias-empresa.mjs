@@ -39,6 +39,52 @@ ok(comOValorAtual(["a","b"], "z").includes("z"), "o valor gravado entra sempre n
 ok(comOValorAtual(["a","b"], "a").length === 2, "e não se repete se já lá estiver");
 ok(comOValorAtual(["a"], "").length === 1, "vazio não acrescenta nada");
 
+console.log("\nAv. da Igreja: cada empresa com os SEUS sócios:");
+{
+  // Estas duas listas foram escritas à mão e ainda não estão no
+  // Categorias.xlsx. Quem voltar a gerar este ficheiro a partir do Excel
+  // apaga-as sem dar por isso — é este bloco que trava essa regressão.
+  const MOLDE = "simplify";
+  const aporte = (id) => categoriasDa(id).filter(c => /Aporte\s*\/\s*Resgate/i.test(c));
+
+  ok(temPlanoProprio("meridiano"), "a Meridiano tem plano próprio");
+  ok(temPlanoProprio("spiral"), "a Spiral tem plano próprio");
+  ok(!usaSubcategoria("meridiano") && !usaSubcategoria("spiral"),
+     "as duas em lista plana, como o resto do grupo LPX");
+
+  ok(aporte("meridiano").join(" · ") ===
+     "LPX Private - Aporte/Resgate · Manga Investments - Aporte/Resgate · LX5 - Aporte/Resgate",
+     `Meridiano: ${aporte("meridiano").join(", ")}`);
+  ok(aporte("spiral").join(" · ") ===
+     "Meridiano Radioso - Aporte/Resgate · Empresar - Aporte/Resgate",
+     `Spiral: ${aporte("spiral").join(", ")}`);
+
+  // Os sócios dos OUTROS projetos não podem ter vindo no molde.
+  for (const id of ["meridiano", "spiral"]) {
+    const intrusos = categoriasDa(id).filter(c => /Blessed|Parcela Emergente/i.test(c));
+    ok(intrusos.length === 0,
+       intrusos.length ? `${id} traz sócios de outro projeto: ${intrusos.join(", ")}`
+                       : `${id} não traz a Blessed nem a Parcela Emergente`);
+  }
+
+  // E o resto da lista tem de ser o do molde, linha a linha: é isso que
+  // significa "as mesmas categorias do grupo".
+  const semAporte = (id) => categoriasDa(id).filter(c => !/Aporte\s*\/\s*Resgate/i.test(c));
+  for (const id of ["meridiano", "spiral"]) {
+    const a = semAporte(id).join("|"), b = semAporte(MOLDE).join("|");
+    ok(a === b, a === b
+         ? `${id} tem as restantes ${semAporte(id).length} rubricas iguais às da ${MOLDE}`
+         : `${id} divergiu do molde: ${a.split("|").filter(x => !b.includes(x)).join(", ")}`);
+  }
+
+  // E o essencial de um plano de contas: nada repetido.
+  for (const id of ["meridiano", "spiral"]) {
+    const l = categoriasDa(id);
+    ok(new Set(l.map(c => c.toLowerCase())).size === l.length,
+       `${id}: ${l.length} rubricas, nenhuma repetida`);
+  }
+}
+
 console.log("\nAs contas dos FO existem nas empresas:");
 const bancos = (id) => EMPRESAS.find(e => e.id === id)?.contas.map(c => c.banco) || [];
 ok(bancos("simplify").includes("BM"), "Simplify tem a conta BM (Big Mouse)");
