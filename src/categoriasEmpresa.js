@@ -33,7 +33,8 @@
 //   meridiano e spiral. Partem da lista da `simplify` e trocam as duas linhas
 //   de aporte dela (Blessed e Parcela Emergente, que são sócios de outros
 //   projetos) pelos sócios de cada uma:
-//     meridiano > LPX Private, Manga Investments, LX5
+//     meridiano > LPX Private, Manga Investments, Alvorada Resiliente,
+//                 e "Aporte / Resgate investida" (saídas para a Spiral)
 //     spiral    > Meridiano Radioso, Empresar
 //   Não vêm do Categorias.xlsx — ainda não estão lá. Quem voltar a gerar este
 //   ficheiro tem de as pôr no Excel primeiro.
@@ -239,7 +240,11 @@ export const CATEGORIAS_POR_EMPRESA = {
   meridiano: [
     "LPX Private - Aporte/Resgate",
     "Manga Investments - Aporte/Resgate",
-    "LX5 - Aporte/Resgate",
+    "Alvorada Resiliente - Aporte/Resgate",
+    // O outro lado da holding: as três linhas acima são o dinheiro que ENTRA
+    // dos sócios, esta é o que SAI para a participada (a Spiral). É a mesma
+    // rubrica que a Blessed usa, com a mesma grafia.
+    "Aporte / Resgate investida",
     "Mútuo Lpx",
     "Mútuo Big Mouse",
     "Amortização",

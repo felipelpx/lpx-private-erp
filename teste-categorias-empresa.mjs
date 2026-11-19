@@ -45,7 +45,12 @@ console.log("\nAv. da Igreja: cada empresa com os SEUS sócios:");
   // Categorias.xlsx. Quem voltar a gerar este ficheiro a partir do Excel
   // apaga-as sem dar por isso — é este bloco que trava essa regressão.
   const MOLDE = "simplify";
-  const aporte = (id) => categoriasDa(id).filter(c => /Aporte\s*\/\s*Resgate/i.test(c));
+  // Duas coisas diferentes com nomes parecidos: a linha de cada SÓCIO
+  // ("<nome> - Aporte/Resgate", dinheiro que entra) e a da PARTICIPADA
+  // ("Aporte / Resgate investida", dinheiro que sai para a sociedade
+  // detida). Separam-se aqui para não se confundirem nas contagens.
+  const aporte = (id) => categoriasDa(id).filter(c => /\s-\s*Aporte\s*\/?\s*Resgate/i.test(c));
+  const investida = (id) => categoriasDa(id).filter(c => /investida/i.test(c));
 
   ok(temPlanoProprio("meridiano"), "a Meridiano tem plano próprio");
   ok(temPlanoProprio("spiral"), "a Spiral tem plano próprio");
@@ -53,11 +58,19 @@ console.log("\nAv. da Igreja: cada empresa com os SEUS sócios:");
      "as duas em lista plana, como o resto do grupo LPX");
 
   ok(aporte("meridiano").join(" · ") ===
-     "LPX Private - Aporte/Resgate · Manga Investments - Aporte/Resgate · LX5 - Aporte/Resgate",
+     "LPX Private - Aporte/Resgate · Manga Investments - Aporte/Resgate · Alvorada Resiliente - Aporte/Resgate",
      `Meridiano: ${aporte("meridiano").join(", ")}`);
   ok(aporte("spiral").join(" · ") ===
      "Meridiano Radioso - Aporte/Resgate · Empresar - Aporte/Resgate",
      `Spiral: ${aporte("spiral").join(", ")}`);
+
+  // A Meridiano é holding: tem de ter onde lançar o que SAI para a Spiral.
+  // Sem esta linha, as "TRF P/ SPIRAL TREASURE LDA" do extrato ficavam sem
+  // categoria possível.
+  ok(investida("meridiano").join(" · ") === "Aporte / Resgate investida",
+     `Meridiano tem a linha da participada: ${investida("meridiano").join(", ") || "(nenhuma)"}`);
+  ok(investida("spiral").length === 0,
+     "e a Spiral não tem, porque não detém ninguém");
 
   // Os sócios dos OUTROS projetos não podem ter vindo no molde.
   for (const id of ["meridiano", "spiral"]) {
@@ -69,11 +82,12 @@ console.log("\nAv. da Igreja: cada empresa com os SEUS sócios:");
 
   // E o resto da lista tem de ser o do molde, linha a linha: é isso que
   // significa "as mesmas categorias do grupo".
-  const semAporte = (id) => categoriasDa(id).filter(c => !/Aporte\s*\/\s*Resgate/i.test(c));
+  const proprias = (id) => categoriasDa(id)
+    .filter(c => !/\s-\s*Aporte\s*\/?\s*Resgate/i.test(c) && !/investida/i.test(c));
   for (const id of ["meridiano", "spiral"]) {
-    const a = semAporte(id).join("|"), b = semAporte(MOLDE).join("|");
+    const a = proprias(id).join("|"), b = proprias(MOLDE).join("|");
     ok(a === b, a === b
-         ? `${id} tem as restantes ${semAporte(id).length} rubricas iguais às da ${MOLDE}`
+         ? `${id} tem as restantes ${proprias(id).length} rubricas iguais às da ${MOLDE}`
          : `${id} divergiu do molde: ${a.split("|").filter(x => !b.includes(x)).join(", ")}`);
   }
 

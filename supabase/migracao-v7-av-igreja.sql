@@ -81,7 +81,8 @@ SELECT count(*) AS contas_depois, count(DISTINCT empresa_id) AS empresas_depois
 --         WHERE email = 'quem@exemplo.pt';
 --
 --    Deixo isto por correr de propósito: dar acesso a um projeto é uma decisão
---    tua, e sobretudo neste, em que há sócios de fora (EMPRESAR, LX5, Manga).
+--    tua, e sobretudo neste, em que há sócios de fora (EMPRESAR, Alvorada
+--    Resiliente, Manga).
 --
 -- 3. UM SEGUNDO BANCO. Se alguma delas abrir outra conta, acrescenta o banco
 --    em src/empresas.js e corre o INSERT com o id novo — por exemplo
