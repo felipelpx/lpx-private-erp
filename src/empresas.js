@@ -30,6 +30,10 @@ const DEF = [
   { id: "adseq",     nome: "Admirable Sequence", projeto: "Cinq Etoiles",        grupo: "HDG", bancos: ["BCP", "RED"] },
   { id: "infinite",  nome: "Infinite Change",    projeto: "Paço D'arcos",        grupo: "HDG", bancos: ["BCP", "RED"] },
   { id: "tracos",    nome: "Traços e Angulos, Lda", projeto: "soc. Farmaceutica", grupo: "HDG", bancos: ["BCP"] },
+  // Av. da Igreja 68 — a Meridiano é a holding e a Spiral Treasure a SPV que
+  // adquire o imóvel. A LPX Private entra por quota na Meridiano.
+  { id: "meridiano", nome: "Meridiano Radioso",  projeto: "Holding Av Igreja",   grupo: "LPX", bancos: ["BCP"] },
+  { id: "spiral",    nome: "Spiral Treasure",    projeto: "SPV Av Igreja",       grupo: "LPX", bancos: ["BCP"] },
   { id: "offtopic",  nome: "Off Topic, Lda",     projeto: "",                    grupo: "LPX", bancos: ["BCP"] },
   { id: "lpx",       nome: "LPX Private",        projeto: "Holding",             grupo: "LPX", bancos: ["BCP", "Revolut", "CGD"] },
 ];
