@@ -180,7 +180,7 @@ function slideSemana(r, sub) {
     const desde = t.primeira
       ? `${t.primeira.slice(8, 10)}/${t.primeira.slice(5, 7)}/${t.primeira.slice(0, 4)}`
       : "";
-    f.push(caixa(X0, y, LARGURA, 0.42, { fill: "F3F0EA", linha: C.linha, raio: 0.04,
+    f.push(caixa(X0, y, LARGURA, 0.34, { fill: "F3F0EA", linha: C.linha, raio: 0.04,
       paras: par([
         { t: "Realizado total", sz: 9.5, b: true, cor: C.tinta, fonte: K },
         { t: desde ? `  desde ${desde}  ·  ` : "  ·  ", sz: 9.5, cor: C.suave, fonte: K },
@@ -192,7 +192,7 @@ function slideSemana(r, sub) {
         { t: "     líquido ", sz: 9.5, cor: C.suave, fonte: K },
         { t: eur(t.liquido), sz: 9.5, b: true, cor: sinal(t.liquido), fonte: K },
       ]), opts: { anchor: "ctr", margem: 0.14 } }));
-    y += 0.52;
+    y += 0.42;
   }
 
   const intra = s.intraGrupo || { n: 0, total: 0 };
@@ -214,7 +214,7 @@ function slideSemana(r, sub) {
            + `${eur(s.porExplicar)} por explicar. Provavelmente há extrato por importar.`,
           sz: 9.5, cor: "7A5A22", fonte: K },
       ]), opts: { anchor: "ctr", margem: 0.14 } }));
-    y += 0.52;
+    y += 0.42;
   }
 
   // ── Duas colunas: o que saiu, e o que está à espera de sair ─────────────
@@ -233,8 +233,13 @@ function slideSemana(r, sub) {
   // dados — por isso um número fixo de linhas ou deixava buraco ou passava
   // por cima da régua. Conta-se o espaço e corta-se a tabela mais comprida
   // até caber, nunca abaixo de uma linha enquanto houver movimentos.
+  // Medidas apertadas de propósito. A faixa do realizado total e o aviso do
+  // extrato que não fecha podem aparecer os dois, e cada um come meia
+  // polegada — com as medidas folgadas de antes, sobrava espaço para UMA
+  // linha por tabela, e uma tabela de "maiores movimentos" com um
+  // movimento não é um quadro, é um título.
   const FUNDO = 6.78;
-  const CAB = 0.26, LIN = 0.24, TOT = 0.27, TIT = 0.38, FOLGA = 0.22;
+  const CAB = 0.24, LIN = 0.22, TOT = 0.26, TIT = 0.34, FOLGA = 0.18;
   const bloco = (n) => (n > 0 ? CAB + n * LIN + TOT : 0.40);
 
   let nSai = Math.min(5, s.maiores.length);
@@ -248,25 +253,50 @@ function slideSemana(r, sub) {
   }
 
   /** Uma das duas tabelas do extrato. */
+  // Data · Movimento · Categoria · Valor.
+  //
+  // A descrição é o que o banco escreveu ("TRF DE Pagamento"), e por si só
+  // não diz o que aquilo é. A categoria é a classificação da casa, e é ela
+  // que liga o movimento ao plano de contas e ao resto do report — sem ela
+  // o leitor vê o dinheiro a mexer-se e não sabe a que rubrica pertence.
+  //
+  // A largura sai da descrição, que é a mais comprida; o resto é o que
+  // basta. As duas colunas de texto são cortadas à largura real da fonte,
+  // senão a célula parte em duas linhas e escreve por cima da seguinte.
+  const COLS = [0.66, 2.46, 1.42, 1.28];     // = 5,82
   const tabelaExtrato = (yy, itens, n, { cor, totalRotulo, total, nMov }) => {
     const l = [{ altura: CAB, celulas: [
       { t: "Data", b: true, sz: 8.5, cor: C.tinta, fonte: K, fill: C.cabTab },
       { t: "Movimento", b: true, sz: 8.5, cor: C.tinta, fonte: K, fill: C.cabTab },
+      { t: "Categoria", b: true, sz: 8.5, cor: C.tinta, fonte: K, fill: C.cabTab },
       { t: "Valor", b: true, sz: 8.5, cor: C.tinta, fonte: K, align: "r", fill: C.cabTab },
     ]}];
-    itens.slice(0, n).forEach((m, i) => l.push({ altura: LIN, celulas: [
-      { t: `${m.data.slice(8, 10)}/${m.data.slice(5, 7)}`, sz: 8.5, cor: C.suave, fonte: K,
-        fill: i % 2 ? C.zebra : null },
-      { t: m.desc.slice(0, 38), sz: 8.5, cor: C.texto, fonte: K, fill: i % 2 ? C.zebra : null },
-      { t: eur(m.valor), sz: 8.5, b: true, cor, fonte: K, align: "r",
-        fill: i % 2 ? C.zebra : null },
-    ]}));
+    itens.slice(0, n).forEach((m, i) => {
+      const z = i % 2 ? C.zebra : null;
+      // Um movimento por classificar diz-se, e não fica em branco: uma
+      // célula vazia lê-se como esquecimento do report, não do lançamento.
+      const rub = String(m.rubrica || "").trim();
+      l.push({ altura: LIN, celulas: [
+        { t: `${m.data.slice(8, 10)}/${m.data.slice(5, 7)}`, sz: 8.5, cor: C.suave,
+          fonte: K, fill: z },
+        { t: encurtar(m.desc, COLS[1] - 0.14), sz: 8.5, cor: C.texto, fonte: K, fill: z },
+        { t: rub ? encurtar(rub, COLS[2] - 0.14) : "por classificar", sz: 8.5,
+          cor: rub ? C.texto : C.suave, fonte: K, fill: z },
+        { t: eur(m.valor), sz: 8.5, b: true, cor, fonte: K, align: "r", fill: z },
+      ]});
+    });
+    // Quando não coube tudo, diz-se. Um rodapé a dizer "4 mov." por baixo
+    // de duas linhas lê-se como erro do report; e o total continua a ser
+    // dos movimentos TODOS, não só dos que estão à vista.
+    const mostradas = Math.min(n, itens.length);
+    const cortou = nMov > mostradas;
     l.push({ altura: TOT, celulas: [
       { t: `${nMov} mov.`, b: true, sz: 8.5, cor: C.tinta, fonte: K },
+      { t: cortou ? `mostram-se ${mostradas}` : "", sz: 8, cor: C.suave, fonte: K },
       { t: totalRotulo, sz: 8.5, cor: C.suave, fonte: K, align: "r" },
       { t: eur(total), b: true, sz: 8.5, cor: C.tinta, fonte: K, align: "r" },
     ]});
-    return tabela(X0, yy, [0.76, 3.3, 1.76], l);
+    return tabela(X0, yy, COLS, l);
   };
 
   f.push(texto(X0, y, colL, 0.3,

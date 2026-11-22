@@ -89,21 +89,63 @@ console.log("\nCada tabela conta os SEUS movimentos:");
   const rodape = (t) => t.linhas[t.linhas.length - 1].celulas.map(texto);
   ok(rodape(tt[0])[0] === "5 mov.", `saídas: "${rodape(tt[0])[0]}"`);
   ok(rodape(tt[1])[0] === "3 mov.", `entradas: "${rodape(tt[1])[0]}"`);
-  ok(/total das saídas/.test(rodape(tt[0])[1]), "com o rótulo certo em cada uma");
-  ok(/total das entradas/.test(rodape(tt[1])[1]), "idem nas entradas");
-  ok(rodape(tt[0])[2] === "18.753,48 €", `total das saídas: ${rodape(tt[0])[2]}`);
-  ok(rodape(tt[1])[2] === "22.532,22 €", `total das entradas: ${rodape(tt[1])[2]}`);
+  ok(/total das saídas/.test(rodape(tt[0])[2]), "com o rótulo certo em cada uma");
+  ok(/total das entradas/.test(rodape(tt[1])[2]), "idem nas entradas");
+  ok(rodape(tt[0])[3] === "18.753,48 €", `total das saídas: ${rodape(tt[0])[3]}`);
+  ok(rodape(tt[1])[3] === "22.532,22 €", `total das entradas: ${rodape(tt[1])[3]}`);
+}
+
+console.log("\nA categoria tem coluna própria, ao lado da descrição:");
+{
+  // A descrição é o que o banco escreveu ("TRF DE Pagamento"); a categoria é
+  // a classificação da casa. Sem ela vê-se o dinheiro a mexer-se e não se
+  // sabe a que rubrica pertence.
+  const { slide } = montar({ movimentos: [
+    { data: "2026-11-12", valor: -312, movimento: "AVENCA CONTABILIDADE",
+      conta: "a", categoria: "Administrativos" },
+    { data: "2026-11-13", valor: 1000, movimento: "TRF DE Pagamento", conta: "a" },
+  ] });
+  const tt = tabelas(slide).filter(t => t.x < 6.5).sort((a, b) => a.y - b.y);
+  const cab = tt[0].linhas[0].celulas.map(texto);
+  ok(cab.join(" | ") === "Data | Movimento | Categoria | Valor",
+     `cabeçalho: ${cab.join(" | ")}`);
+  ok(tt[0].larguras.length === 4, "quatro colunas");
+  ok(texto(tt[0].linhas[1].celulas[2]) === "Administrativos",
+     `a categoria da saída: "${texto(tt[0].linhas[1].celulas[2])}"`);
+  // Um movimento sem categoria diz-se; uma célula vazia lê-se como falha
+  // do report e não do lançamento.
+  ok(texto(tt[1].linhas[1].celulas[2]) === "por classificar",
+     `e um sem categoria: "${texto(tt[1].linhas[1].celulas[2])}"`);
+}
+
+console.log("\nQuando não cabem todos os movimentos, o rodapé diz:");
+{
+  // Um rodapé a dizer "6 mov." por baixo de duas linhas lê-se como erro.
+  const muitos = Array.from({ length: 6 }, (_, i) => mov(
+    "2026-11-1" + (i % 5), -(1000 - i), "MOVIMENTO " + (i + 1)));
+  // Com o aviso do extrato por fechar, o espaço aperta e há corte.
+  const { slide } = montar({ movimentos: muitos, saldoAtual: 99999 });
+  const t = tabelas(slide).filter(x => x.x < 6.5).sort((a, b) => a.y - b.y)[0];
+  const mostradas = t.linhas.length - 2;
+  const rodape = t.linhas[t.linhas.length - 1].celulas.map(texto);
+  ok(rodape[0] === "6 mov.", `o total continua a contar os 6: "${rodape[0]}"`);
+  if (mostradas < 6) {
+    ok(rodape[1] === `mostram-se ${mostradas}`,
+       `e avisa do corte: "${rodape[1]}" (${mostradas} linhas)`);
+  } else {
+    ok(rodape[1] === "", "couberam todos, e não há aviso nenhum");
+  }
 }
 
 console.log("\nAs cores separam os dois lados:");
 {
   const { slide } = montar({ movimentos: [...SAIDAS, ...ENTRADAS] });
   const tt = tabelas(slide).filter(t => t.x < 6.5).sort((a, b) => a.y - b.y);
-  const cores = (t) => t.linhas.slice(1, -1).map(l => l.celulas[2].cor);
+  const cores = (t) => t.linhas.slice(1, -1).map(l => l.celulas[3].cor);
   ok(cores(tt[0]).every(c => c === "A93226"), "as saídas todas a vermelho");
   ok(cores(tt[1]).every(c => c === "1F7A54"), "as entradas todas a verde");
   // E o valor sai positivo dos dois lados: a coluna já diz de que lado é.
-  const vals = (t) => t.linhas.slice(1, -1).map(l => texto(l.celulas[2]));
+  const vals = (t) => t.linhas.slice(1, -1).map(l => texto(l.celulas[3]));
   ok(!vals(tt[1]).some(v => /−|^-/.test(v)), `sem sinais nas entradas: ${vals(tt[1])[0]}`);
   ok(!vals(tt[0]).some(v => /−|^-/.test(v)), `nem nas saídas: ${vals(tt[0])[0]}`);
 }
