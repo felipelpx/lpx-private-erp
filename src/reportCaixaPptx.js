@@ -14,6 +14,7 @@ import { construirPptx, texto, caixa, regua, tabela, par, imagem } from "./pptx.
 import { logoPngBytes, LOGO_LARGURA, LOGO_ALTURA } from "./logoPng.js";
 import { construirPdf } from "./pdf.js";
 import { rotuloMesCurto, repartirPorNatureza } from "./reportCaixa.js";
+import { LARGURAS } from "./larguras.js";
 
 // ─── O sistema do deck ──────────────────────────────────────────────────────
 const C = {
@@ -52,6 +53,38 @@ function eur(v, casas = 2) {
   return `${neg ? "−" : ""}${comPontos}${dec ? "," + dec : ""} €`;
 }
 const eur0 = (v) => eur(v, 0);
+/** Um número inteiro com pontos nos milhares e sem o €: áreas e €/m2. */
+const nInt = (v) => eur(v, 0).replace(/\s*€$/, "");
+
+// A unidade de área escreve-se "m2" e não "m²" DE PROPÓSITO.
+//
+// O expoente ² é 0xB2 em WinAnsi e o PDF sai com o byte certo, mas as fontes
+// base-14 com que os leitores o compõem não trazem esse glifo: ele não sai
+// como "?" — desaparece, e "5.341 €/m" lê-se como euros por metro, que é
+// outra coisa. (Na mesma gama, ½, ª e º saem bem; o ² e o ³ não.)
+// Num documento que vai para fora, uma unidade que some em silêncio não é
+// aceitável, e "m2" lê-se sem ambiguidade.
+const M2 = "m2";
+
+/**
+ * Corta um texto para caber numa largura, medindo-o com as métricas reais
+ * da fonte em vez de contar caracteres.
+ *
+ * Contar caracteres não serve: "WWW" e "iii" têm três e ocupam o triplo um
+ * do outro. Numa célula de tabela, um texto a mais parte a linha em duas e
+ * essa segunda linha escreve-se por cima da linha seguinte — foi o que
+ * aconteceu com "Direito de preferência exercido" na coluna do estado.
+ */
+function encurtar(t, polegadas, sz = 8.5, fonte = "Helvetica") {
+  const s = String(t ?? "");
+  const larg = (x) => [...x].reduce((a, c) => a + (LARGURAS[fonte]?.[c] ?? 500), 0) / 1000 * sz;
+  const limite = polegadas * 72;
+  if (larg(s) <= limite) return s;
+  const reticencias = larg("…");
+  let fim = s.length;
+  while (fim > 1 && larg(s.slice(0, fim)) + reticencias > limite) fim--;
+  return s.slice(0, fim).trimEnd() + "…";
+}
 const sinal = (v) => (n2(v) >= 0 ? C.verde : C.vermelho);
 
 /** O cabeçalho e o rodapé, iguais em todos os slides. */
@@ -136,6 +169,32 @@ function slideSemana(r, sub) {
                 nota: s.saidas > 0.005 ? "pagamentos do período" : "sem saídas no período" }));
 
   let y = 3.22;
+
+  // O acumulado do projeto, numa faixa só. Os quatro cartões em cima são a
+  // semana; esta linha responde à outra pergunta — quanto já entrou e saiu
+  // desde o primeiro movimento. Fica numa faixa estreita em vez de em
+  // cartões próprios para não competir com a semana, que é o assunto do
+  // slide, e some quando não há dados em vez de mostrar zeros.
+  const t = r.total;
+  if (t && t.n > 0) {
+    const desde = t.primeira
+      ? `${t.primeira.slice(8, 10)}/${t.primeira.slice(5, 7)}/${t.primeira.slice(0, 4)}`
+      : "";
+    f.push(caixa(X0, y, LARGURA, 0.42, { fill: "F3F0EA", linha: C.linha, raio: 0.04,
+      paras: par([
+        { t: "Realizado total", sz: 9.5, b: true, cor: C.tinta, fonte: K },
+        { t: desde ? `  desde ${desde}  ·  ` : "  ·  ", sz: 9.5, cor: C.suave, fonte: K },
+        { t: `${t.n} ${t.n === 1 ? "movimento" : "movimentos"}`, sz: 9.5, cor: C.suave, fonte: K },
+        { t: "     entrou ", sz: 9.5, cor: C.suave, fonte: K },
+        { t: eur(t.entradas), sz: 9.5, b: true, cor: C.verde, fonte: K },
+        { t: "     saiu ", sz: 9.5, cor: C.suave, fonte: K },
+        { t: eur(t.saidas), sz: 9.5, b: true, cor: C.vermelho, fonte: K },
+        { t: "     líquido ", sz: 9.5, cor: C.suave, fonte: K },
+        { t: eur(t.liquido), sz: 9.5, b: true, cor: sinal(t.liquido), fonte: K },
+      ]), opts: { anchor: "ctr", margem: 0.14 } }));
+    y += 0.52;
+  }
+
   const intra = s.intraGrupo || { n: 0, total: 0 };
   if (intra.n > 0) {
     f.push(caixa(X0, y, LARGURA, 0.36, { fill: "F3F0EA", linha: C.linha, raio: 0.04,
@@ -463,7 +522,16 @@ function rubricasQueCabem(seccoes, maximo) {
 function slideFuturo(r, sub) {
   const m = r.matriz;
   const fu = r.futuro;
-  const f = [...moldura(`Fluxo Futuro — Próximos ${m.colunas.length} Meses`, sub, 3)];
+  // O título diz o intervalo em vez de "Próximos N meses": a primeira coluna
+  // é o MÊS CORRENTE, por isso "próximos 7" estava a contar o mês em que se
+  // está como se fosse futuro. Com as datas à vista não há ambiguidade.
+  const rot = (k) => { const n = Number(String(k).slice(5, 7)) - 1;
+    return `${["jan","fev","mar","abr","mai","jun",
+               "jul","ago","set","out","nov","dez"][n] || "?"}/${String(k).slice(2, 4)}`; };
+  const ks = m.chaves || [];
+  const intervalo = ks.length > 1 ? `${rot(ks[0])} a ${rot(ks[ks.length - 1])}`
+                  : ks.length === 1 ? rot(ks[0]) : "sem meses";
+  const f = [...moldura(`Fluxo Futuro — ${intervalo}`, sub, 3)];
 
   const chaves = m.chaves;
   const nCol = chaves.length;
@@ -617,8 +685,8 @@ const COR_GRAU = {
   info:     { barra: C.suave,    fundo: C.cartao, linha: C.cartaoLn },
 };
 
-function slideConclusoes(r, sub) {
-  const f = [...moldura("Pontos de Atenção para a Gestão", sub, 4)];
+function slideConclusoes(r, sub, n = 4) {
+  const f = [...moldura("Pontos de Atenção para a Gestão", sub, n)];
   const lista = (r.conclusoes || []).slice(0, 5);
 
   if (!lista.length) {
@@ -654,6 +722,159 @@ function slideConclusoes(r, sub) {
 const capitalizar = (s) => String(s || "").charAt(0).toUpperCase() + String(s || "").slice(1);
 
 /**
+ * O estado das frações — o rent roll num slide.
+ *
+ * Num prédio que se compra arrendado e se vende vazio, a pergunta não é só
+ * "quanto vale": é "quantas já posso vender". Por isso o quadro tem as duas
+ * colunas, a renda que cada fração ainda rende e o estado da desocupação, e
+ * a faixa de cima separa o que está arrendado do que está livre.
+ */
+function slideFracoes(r, sub, n) {
+  const x = r.fracoes;
+  const f = [...moldura("Frações — Estado", sub, n)];
+
+  // ── A faixa de números ───────────────────────────────────────────────────
+  const gap = 0.21, cx = (LARGURA - 3 * gap) / 4;
+  const col = (i) => X0 + i * (cx + gap);
+  f.push(cartao(col(0), 1.66, cx, 1.40, `${x.n} frações`,
+                `${nInt(x.area)} ${M2}`, { szValor: 21,
+                nota: `${x.nArrendadas} arrendadas · ${x.nVazias} ${x.nVazias === 1 ? "livre" : "livres"}` }));
+  f.push(cartao(col(1), 1.66, cx, 1.40, "Aquisição (CPCV)",
+                eur0(x.aquisicao), { szValor: 21,
+                nota: `${nInt(x.aquisicaoM2)} €/${M2}` }));
+  f.push(cartao(col(2), 1.66, cx, 1.40, "Venda de tabela",
+                eur0(x.venda), { cor: C.verde, szValor: 21,
+                nota: `${nInt(x.vendaM2)} €/${M2}` }));
+  // Bruta e dito por extenso: não desconta obra, juros nem comissões. Um
+  // número destes sem a ressalva lê-se como lucro, e não é.
+  f.push(cartao(col(3), 1.66, cx, 1.40, "Margem bruta",
+                eur0(x.margem), { cor: sinal(x.margem), szValor: 21,
+                nota: "sem obra, juros nem comissões" }));
+
+  let y = 3.22;
+  f.push(caixa(X0, y, LARGURA, 0.42, { fill: "F3F0EA", linha: C.linha, raio: 0.04,
+    paras: par([
+      { t: "Rendas ", sz: 9.5, b: true, cor: C.tinta, fonte: K },
+      { t: eur(x.rendaMes), sz: 9.5, b: true, cor: C.verde, fonte: K },
+      { t: " por mês  ·  ", sz: 9.5, cor: C.suave, fonte: K },
+      { t: eur(x.rendaAno), sz: 9.5, b: true, cor: C.verde, fonte: K },
+      { t: " por ano        ", sz: 9.5, cor: C.suave, fonte: K },
+      { t: x.porOcupacao.map(o => `${o.n} ${o.k.toLowerCase()}`).join("  ·  "),
+        sz: 9.5, cor: C.suave, fonte: K },
+    ]), opts: { anchor: "ctr", margem: 0.14 } }));
+  y += 0.54;
+
+  // ── O quadro, em duas colunas ────────────────────────────────────────────
+  //
+  // Dezanove frações numa coluna só davam 4,9 pol de tabela a partir de 3,8:
+  // as últimas cinco saíam da folha. Em duas metades cabem, e a folha fica
+  // com a largura usada em vez de meio slide em branco.
+  //
+  // Corta-se ao meio com a de cima a levar a sobra, para a coluna esquerda
+  // nunca ser mais curta do que a direita — uma lista que acaba antes do
+  // meio parece truncada.
+  // Quantas cabem: encolhe-se a linha até um mínimo legível e, se ainda
+  // assim não couberem, mostram-se as que cabem e diz-se quantas ficaram de
+  // fora. Um quadro que escorrega para fora da folha é pior do que um
+  // quadro que assume o corte.
+  const CAB = 0.26, TOT = 0.28, FUNDO = 6.78;
+  const ALT_MAX = 0.238, ALT_MIN = 0.196;
+  const NOTA = 0.30;                       // a linha do "mostram-se N de M"
+  const cabemCom = (alt, comNota) =>
+    Math.max(1, Math.floor((FUNDO - (y + CAB + TOT) - (comNota ? NOTA : 0)) / alt));
+
+  let ALT = ALT_MAX;
+  let porColuna = cabemCom(ALT, false);
+  if (x.linhas.length > porColuna * 2) {
+    // Não cabe à altura normal: aperta-se a linha e, se mesmo assim ficar
+    // alguma de fora, conta-se já com o espaço da nota que vai ser precisa.
+    ALT = ALT_MIN;
+    porColuna = cabemCom(ALT, false);
+    if (x.linhas.length > porColuna * 2) porColuna = cabemCom(ALT, true);
+  }
+  const mostradas = Math.min(x.linhas.length, porColuna * 2);
+  const deFora = x.linhas.length - mostradas;
+  const visiveis = x.linhas.slice(0, mostradas);
+
+  const metade = Math.ceil(visiveis.length / 2);
+  const blocos = [visiveis.slice(0, metade), visiveis.slice(metade)];
+  const GOTEIRA = 0.30;
+  const largBloco = (LARGURA - GOTEIRA) / 2;
+  // Fração, tipologia, área, renda, estado, venda — seis colunas. O piso já
+  // está no nome da fração ("1º Direito") e o €/m2 está na faixa de cima,
+  // por isso saem daqui para o resto caber sem encolher a letra.
+  const prop = [1.70, 0.88, 0.50, 0.90, 1.70, 1.13];
+  const esc = largBloco / prop.reduce((a, b) => a + b, 0);
+  const larguras = prop.map(w => w * esc);
+
+  // O texto da folha é longo para uma coluna de tabela. Encurta-se aqui, na
+  // apresentação, e não na base de dados: lá fica o que o rent roll diz.
+  const ESTADO_CURTO = { "Direito de preferência exercido": "Preferência exercida" };
+  // A data da carta vive numa coluna própria; junta-se aqui, na leitura.
+  // "Carta enviada 26/10" diz numa linha o que aconteceu e quando — e é a
+  // data que conta os prazos de oposição à renovação.
+  const estado = (l) => {
+    const t = ESTADO_CURTO[l.ocupacao] || l.ocupacao || "—";
+    if (!l.dataCarta) return t;
+    const d = String(l.dataCarta).slice(0, 10);
+    return `${t} ${d.slice(8, 10)}/${d.slice(5, 7)}`;
+  };
+
+  const cab = ["Fração", "Tipologia", M2, "Renda/mês", "Estado do inquilino", "Venda"];
+  const cabecalho = () => ({ altura: CAB, celulas: cab.map((t, i) => ({
+    t, b: true, sz: 8.5, cor: C.tinta, fonte: K, fill: C.cabTab,
+    align: (i === 2 || i === 3 || i === 5) ? "r" : "l" })) });
+
+  blocos.forEach((bloco, nb) => {
+    if (!bloco.length) return;
+    const linhas = [cabecalho()];
+    bloco.forEach((l, i) => {
+      const z = i % 2 ? C.zebra : null;
+      // Uma fração sem renda é uma que já se pode vender: é o que este quadro
+      // existe para mostrar, por isso sai a verde e a renda fica a "—".
+      const livre = l.renda <= 0.005;
+      linhas.push({ altura: ALT, celulas: [
+        { t: encurtar(l.fracao, larguras[0] - 0.14), sz: 8.5, b: true,
+          cor: C.tinta, fonte: K, fill: z },
+        { t: encurtar(l.tipologia, larguras[1] - 0.14), sz: 8.5,
+          cor: C.texto, fonte: K, fill: z },
+        { t: nInt(l.area), sz: 8.5, cor: C.texto, fonte: K, align: "r", fill: z },
+        { t: livre ? "—" : eur0(l.renda), sz: 8.5, cor: livre ? C.suave : C.texto,
+          fonte: K, align: "r", fill: z },
+        { t: encurtar(estado(l), larguras[4] - 0.14), sz: 8.5, b: livre,
+          cor: livre ? C.verde : C.texto, fonte: K, fill: z },
+        { t: eur0(l.venda), sz: 8.5, b: true, cor: C.tinta, fonte: K, align: "r", fill: z },
+      ]});
+    });
+    // O total vai só debaixo da coluna da direita, e é o total das DUAS —
+    // repeti-lo nas duas metades convidava a somá-lo duas vezes.
+    if (nb === 1) {
+      linhas.push({ altura: TOT, celulas: [
+        { t: `${x.n} frações`, b: true, sz: 8.5, cor: C.tinta, fonte: K },
+        { t: "", sz: 8.5 },
+        { t: nInt(x.area), b: true, sz: 8.5, cor: C.tinta, fonte: K, align: "r" },
+        { t: eur0(x.rendaMes), b: true, sz: 8.5, cor: C.tinta, fonte: K, align: "r" },
+        { t: "total do prédio", sz: 8.5, cor: C.suave, fonte: K },
+        { t: eur0(x.venda), b: true, sz: 8.5, cor: C.tinta, fonte: K, align: "r" },
+      ]});
+    }
+    f.push(tabela(X0 + nb * (largBloco + GOTEIRA), y, larguras, linhas));
+  });
+
+  // Se houve corte, diz-se — e os totais da faixa de cima continuam a ser do
+  // prédio inteiro, por isso não há risco de alguém somar só o que vê.
+  if (deFora > 0) {
+    const yN = y + CAB + metade * ALT + TOT + 0.06;
+    f.push(texto(X0, yN, LARGURA, 0.24, par([
+      { t: `Mostram-se ${mostradas} das ${x.linhas.length} frações por caber na página. `,
+        sz: 8.5, cor: C.suave, fonte: K },
+      { t: `Os totais acima são das ${x.linhas.length}.`, sz: 8.5, b: true, cor: C.suave, fonte: K },
+    ])));
+  }
+  return f;
+}
+
+/**
  * O ficheiro inteiro.
  * @param r  o que construirReportCaixa devolveu
  * @returns { dados: Uint8Array, nome: string }
@@ -664,11 +885,16 @@ export function gerarReportCaixaPptx(r) {
                + `${String(d.getUTCMonth() + 1).padStart(2, "0")}/${d.getUTCFullYear()}`;
   const sub = `${r.nomeEmpresa || "—"} · posição em ${dataPt}`;
 
+  // O slide das frações só existe quando o projeto TEM frações. Em "Todos os
+  // Projetos", e nas empresas que não são empreendimentos, não aparece — um
+  // slide vazio a dizer "sem frações" é pior do que não haver slide.
+  const temFracoes = r.fracoes && r.fracoes.n > 0;
   const slides = [
     slideSemana(r, sub),
     slideMes(r, sub),
     slideFuturo(r, sub),
-    slideConclusoes(r, sub),
+    ...(temFracoes ? [slideFracoes(r, sub, 4)] : []),
+    slideConclusoes(r, sub, temFracoes ? 5 : 4),
   ];
 
   // O nome do ficheiro como a casa o quer: "Report Semanal - Projeto".

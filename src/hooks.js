@@ -367,6 +367,54 @@ export function useCaixaUnico() {
 // Não é um hook: são duas consultas feitas SÓ quando se carrega no botão. Em
 // hook, o Fluxo Futuro passava a fazer mais duas idas à base sempre que
 // abrisse, para uma coisa que se usa uma vez por semana.
+/**
+ * O realizado ACUMULADO destas contas, desde o primeiro movimento até hoje.
+ *
+ * O `lerCaixaSemana` só traz a janela da semana, que é o que o slide 1 sempre
+ * mostrou. Isto responde a outra pergunta — "quanto é que já entrou e saiu
+ * neste projeto desde o início?" — e não se deduz da semana.
+ *
+ * Soma-se linha a linha em vez de pedir um agregado ao Postgres: o agregado
+ * obrigaria a uma função nova na base de dados, e estas contas têm centenas
+ * de movimentos, não milhões. A paginação é a mesma dos outros leitores.
+ */
+export async function lerCaixaTotal(contaIds = []) {
+  const ids = (contaIds || []).filter(Boolean)
+  const vazio = { entradas: 0, saidas: 0, n: 0, primeira: null, ultima: null, erro: null }
+  if (!ids.length) return vazio
+
+  const pagina = 1000
+  let inicio = 0, entradas = 0, saidas = 0, n = 0
+  let primeira = null, ultima = null
+  const erros = []
+
+  for (;;) {
+    const { data, error } = await supabase
+      .from('movimentos').select('data, valor')
+      .in('conta_id', ids)
+      .order('data', { ascending: true })
+      .range(inicio, inicio + pagina - 1)
+    if (error) { erros.push(error.message); break }
+    if (!data?.length) break
+    for (const m of data) {
+      const v = parseFloat(m.valor)
+      if (!Number.isFinite(v)) continue
+      if (v > 0) entradas += v; else saidas += -v
+      n++
+      const d = String(m.data || '').slice(0, 10)
+      if (d) {
+        if (!primeira || d < primeira) primeira = d
+        if (!ultima || d > ultima) ultima = d
+      }
+    }
+    if (data.length < pagina) break
+    inicio += pagina
+  }
+
+  return { entradas, saidas, n, primeira, ultima,
+           erro: erros.length ? erros.join(" · ") : null }
+}
+
 export async function lerCaixaSemana(contaIds = [], de, ate) {
   const ids = (contaIds || []).filter(Boolean)
   if (!ids.length || !de || !ate) return { saldoAnterior: 0, movimentos: [], erro: null }

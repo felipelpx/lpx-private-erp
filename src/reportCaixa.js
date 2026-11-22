@@ -507,15 +507,104 @@ export function repartirPorNatureza(grupo, chave, assinado = false) {
            total: arred2(faturado + previsto), nF, nP };
 }
 
+/**
+ * O estado das frações do projeto — o rent roll, arrumado para o slide.
+ *
+ * Duas coisas que parecem uma e não são, e que por isso saem em colunas
+ * separadas:
+ *   · o estado COMERCIAL (Disponível / Reservada / CPCV / Escriturada): onde
+ *     está a venda;
+ *   · a OCUPAÇÃO (vazio, carta enviada, negociar saída, preferência
+ *     exercida): onde está o inquilino.
+ * Num prédio que se compra arrendado e se vende vazio, uma fração pode estar
+ * à venda e ocupada ao mesmo tempo, e juntar os dois eixos numa coluna só
+ * esconde exactamente o que interessa.
+ */
+export function estadoDasFracoes({ fracoes = [], empresa = null,
+                                   empresaDe = null } = {}) {
+  const minhas = (fracoes || []).filter(f => {
+    if (!f) return false;
+    if (!empresa) return true;
+    const dona = typeof empresaDe === "function" ? empresaDe(f.projeto) : null;
+    // Sem resolvedor, não se adivinha: é melhor não mostrar frações do que
+    // mostrar as do projeto errado no report de um investidor.
+    return dona ? dona === empresa : false;
+  });
+  if (!minhas.length) return null;
+
+  const linhas = minhas.map(f => {
+    const area = num(f.area);
+    const venda = num(f.preco_tabela);
+    return {
+      fracao: String(f.fracao || "").trim(),
+      tipologia: String(f.tipologia || "").trim(),
+      piso: String(f.piso ?? "").trim(),
+      area,
+      renda: num(f.renda_mensal),
+      ocupacao: String(f.ocupacao || "").trim(),
+      dataCarta: f.data_carta || null,
+      status: String(f.status || "").trim() || "Disponível",
+      venda,
+      aquisicao: num(f.preco_aquisicao),
+      eurM2: area > 0.005 ? arred2(venda / area) : 0,
+      termo: f.data_termo || null,
+    };
+  }).sort((a, b) => a.fracao.localeCompare(b.fracao, "pt"));
+
+  const soma = (f) => arred2(linhas.reduce((s, l) => s + f(l), 0));
+  const totalArea = soma(l => l.area);
+  const totalVenda = soma(l => l.venda);
+  const totalAquis = soma(l => l.aquisicao);
+
+  const contar = (campo) => {
+    const m = new Map();
+    for (const l of linhas) {
+      const k = l[campo] || "(sem indicação)";
+      const a = m.get(k) || { n: 0, renda: 0, venda: 0 };
+      a.n++; a.renda += l.renda; a.venda += l.venda;
+      m.set(k, a);
+    }
+    return [...m.entries()]
+      .map(([k, v]) => ({ k, n: v.n, renda: arred2(v.renda), venda: arred2(v.venda) }))
+      .sort((a, b) => b.n - a.n || a.k.localeCompare(b.k, "pt"));
+  };
+
+  return {
+    linhas,
+    n: linhas.length,
+    area: totalArea,
+    venda: totalVenda,
+    aquisicao: totalAquis,
+    // A margem bruta é venda − aquisição: não desconta obra, juros nem
+    // comissões. O slide diz isso, para ninguém a ler como lucro.
+    margem: arred2(totalVenda - totalAquis),
+    rendaMes: soma(l => l.renda),
+    rendaAno: arred2(soma(l => l.renda) * 12),
+    nArrendadas: linhas.filter(l => l.renda > 0.005).length,
+    nVazias: linhas.filter(l => l.renda <= 0.005).length,
+    vendaM2: totalArea > 0.005 ? arred2(totalVenda / totalArea) : 0,
+    aquisicaoM2: totalArea > 0.005 ? arred2(totalAquis / totalArea) : 0,
+    porOcupacao: contar("ocupacao"),
+    porStatus: contar("status"),
+  };
+}
+
 /** Tudo junto, que é o que o botão do ecrã chama. */
 export function construirReportCaixa({
   nomeEmpresa = "", hoje = new Date().toISOString().slice(0, 10),
   saldoAtual = 0, saldoAnterior = 0, movimentos = [],
   meses = [], vencido = 0, dias = 7, nMeses = 6, faturas = [], empresa = null,
+  // O acumulado desde o primeiro movimento (ver lerCaixaTotal). Fica opcional
+  // de propósito: sem ele o report sai como sempre saiu, só sem essa linha.
+  realizadoTotal = null,
   // Em que rubrica cai cada lançamento. É a MESMA função que o Fluxo Futuro
   // usa para desenhar a matriz — por isso o slide sai com as mesmas linhas
   // que estão no ecrã, e não com uma arrumação paralela.
   rubricaDoItem = null,
+  // As frações do projeto e o resolvedor projeto→empresa. Sem os dois o
+  // slide das frações não sai — é informação de um projeto, e pô-la no
+  // report de outro seria pior do que não a pôr.
+  fracoes = [], empresaDe = null,
 } = {}) {
   const de = hoje7DiasAntes(hoje, dias);
   const semana = semanaQuePassou({ saldoAtual, saldoAnterior, movimentos, de, ate: hoje });
@@ -556,6 +645,15 @@ export function construirReportCaixa({
     nomeEmpresa, hoje, dias, nMeses,
     saldoAtual: arred2(saldoAtual), vencido: arred2(vencido), saldoInicial,
     semana, porPagar, mes, futuro, matriz, matrizMes,
+    fracoes: estadoDasFracoes({ fracoes, empresa, empresaDe }),
+    total: realizadoTotal ? {
+      entradas: arred2(realizadoTotal.entradas),
+      saidas:   arred2(realizadoTotal.saidas),
+      liquido:  arred2(num(realizadoTotal.entradas) - num(realizadoTotal.saidas)),
+      n: realizadoTotal.n || 0,
+      primeira: realizadoTotal.primeira || null,
+      ultima: realizadoTotal.ultima || null,
+    } : null,
     conclusoes: conclusoes({ semana, mes, futuro, vencido, saldoAtual, porPagar }),
   };
 }

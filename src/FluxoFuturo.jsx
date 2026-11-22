@@ -825,7 +825,13 @@ export default function FluxoFuturo({ faturas: faturasTodas, faturasLoading, pag
             // as linhas da FO, nas empresas LPX o plano de contas.
             rubricaDoItem={rubricaDoItem}
             faturas={faturas} empresa={empresa === "all" ? null : empresa}
-            hoje={hojeISO} nMeses={6} />
+            // As frações do projeto, para o slide do estado da comercialização.
+            // Em "Todos os Projetos" não vão: um quadro com as frações de
+            // cinco empreendimentos misturados não diz nada a ninguém.
+            fracoes={empresa === "all" ? [] : fracoes}
+            // Sete: o mês corrente MAIS seis. Com 6 a matriz mostrava o mês
+            // corrente e só cinco à frente.
+            hoje={hojeISO} nMeses={7} />
           {/* Real (com fatura) vs Previsto (estimativa lançada à mão) */}
           <div style={{ display: "flex", gap: 2, background: "#E7DED2", borderRadius: 8, padding: 2, marginLeft: 4 }}>
             {[["todos", "Tudo"], ["real", "Custo real"], ["previsto", "Forecast"]].map(([v, lbl]) => (

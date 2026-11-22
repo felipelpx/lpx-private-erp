@@ -10,18 +10,25 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { useState } from "react";
-import { lerCaixaSemana } from "./hooks.js";
+import { lerCaixaSemana, lerCaixaTotal } from "./hooks.js";
+import { empresaDoProjeto } from "./empresas.js";
 import { construirReportCaixa, hoje7DiasAntes } from "./reportCaixa.js";
 import { gerarReportCaixaPptx } from "./reportCaixaPptx.js";
 
 export default function BotaoReportCaixa({
   nomeEmpresa, contaIds = [], meses = [], saldoAtual = 0, vencido = 0,
-  hoje = new Date().toISOString().slice(0, 10), dias = 7, nMeses = 6,
+  hoje = new Date().toISOString().slice(0, 10), dias = 7,
+  // O mês corrente MAIS seis: a primeira coluna da matriz é o mês em que se
+  // está, por isso 6 dava corrente + 5.
+  nMeses = 7,
   rubricaDoItem = null,
   // As faturas do Contas a Pagar e o id da empresa: o slide 1 mostra o que
   // está por pagar, e isso é o Contas a Pagar — não o "vencido" do caixa,
   // que junta quatro origens e desconta o funding.
   faturas = [], empresa = null,
+  // As frações do projeto (tabela `fracoes`). Com elas o report ganha o
+  // slide do estado da comercialização; sem elas sai como sempre saiu.
+  fracoes = [],
 }) {
   const [aGerar, setAGerar] = useState(false);
 
@@ -31,6 +38,13 @@ export default function BotaoReportCaixa({
     try {
       const de = hoje7DiasAntes(hoje, dias);
       const { saldoAnterior, movimentos, erro } = await lerCaixaSemana(contaIds, de, hoje);
+      // O acumulado do projeto, para a faixa do slide 1. Se falhar, o report
+      // sai na mesma — sem essa linha, que é melhor do que não sair de todo.
+      // O try/catch cobre mais do que um .catch() encadeado: apanha também o
+      // caso de a função rebentar em vez de devolver uma promessa rejeitada.
+      let realizadoTotal = null;
+      try { realizadoTotal = await lerCaixaTotal(contaIds); }
+      catch { realizadoTotal = null; }
 
       // Um erro a ler o extrato não pode dar um report silenciosamente errado:
       // ou se diz, ou não se gera.
@@ -44,7 +58,8 @@ export default function BotaoReportCaixa({
       const r = construirReportCaixa({
         nomeEmpresa, hoje, dias, nMeses,
         saldoAtual, saldoAnterior, movimentos, meses, vencido, rubricaDoItem,
-        faturas, empresa,
+        realizadoTotal,
+        faturas, empresa, fracoes, empresaDe: empresaDoProjeto,
       });
 
       const { dados, nome, pdf, nomePdf } = gerarReportCaixaPptx(r);
@@ -83,7 +98,7 @@ export default function BotaoReportCaixa({
     <button onClick={gerar} disabled={aGerar || semContas}
       title={semContas
         ? "Escolhe um projeto: o report de caixa lê o extrato das contas dele."
-        : `Report de caixa em PowerPoint: a última semana, o mês, os próximos ${nMeses} meses e os pontos de atenção.`}
+        : `Report de caixa em PowerPoint: a última semana, o realizado total, o mês corrente e os ${nMeses - 1} seguintes, e os pontos de atenção.`}
       style={{
         background: aGerar ? "#8E9398" : "transparent",
         border: `1px solid ${semContas ? "#E7DED2" : "#BAA685"}`,
