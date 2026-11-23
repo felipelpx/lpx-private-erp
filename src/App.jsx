@@ -12,7 +12,7 @@ import PagamentosView from "./PagamentosView.jsx";
 import { CATEGORIAS_FATURA } from "./categorias.js";
 import RateioFatura from "./RateioFatura.jsx";
 import { conferirRateio, rateioParaGravar, temRateio, partesDaFatura } from "./rateio.js";
-import { colunaEmFalta } from "./escrita.js";
+import { escreverTolerante } from "./escrita.js";
 import { categoriasDeFatura } from "./rubricas.js";
 import { usaSubcategoria, subcategoriasDa, comOValorAtual } from "./categoriasEmpresa.js";
 import { EMPRESAS as EMPRESAS_ALL, BANCO_COLORS as BANCO_COLORS_CFG, GRUPOS, GRUPOS_INFO } from "./empresas.js";
@@ -498,19 +498,13 @@ export function ContasPagar({canEdit, faturas: faturasTodas, setFaturas, addFatu
       valor_base: "iva-1 a iva-8", valor_iva: "iva-1 a iva-8",
       iva_dedutivel: "iva-1 a iva-8", iva_estimado: "iva-1 a iva-8",
     };
-    const gravarTolerante = async (escrever) => {
-      let corpo = { ...fat };
-      const ignoradas = [];
-      for (let i = 0; i <= 8; i++) {
-        const r = await escrever(corpo);
-        if (!r?.error) return { ...r, ignoradas };
-        const col = colunaEmFalta(r.error);
-        if (!col || !(col in corpo)) return { ...r, ignoradas };
-        delete corpo[col];
-        ignoradas.push(col);
-      }
-      return { error: { message: "Demasiadas colunas em falta." }, ignoradas };
-    };
+    // Isto era uma segunda cópia do `escreverTolerante`, escrita à mão aqui.
+    // Fazia o mesmo que a de src/escrita.js, menos uma coisa: não punha a
+    // null as datas deixadas em branco. Resultado — uma fatura sem previsão
+    // de pagamento rebentava com «invalid input syntax for type date: ""»,
+    // enquanto as escritas que passavam pelo módulo partilhado funcionavam.
+    // Duas cópias do mesmo conceito é como estas avarias aparecem; fica uma.
+    const gravarTolerante = (escrever) => escreverTolerante(escrever, fat);
     const avisarIgnoradas = (ignoradas) => {
       if (!ignoradas?.length) return;
       const ficheiros = [...new Set(ignoradas.map(c => QUE_SQL[c]).filter(Boolean))];

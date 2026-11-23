@@ -35,6 +35,41 @@ export function colunaEmFalta(error) {
 export const semAuxiliares = (o) => Object.fromEntries(
   Object.entries(o || {}).filter(([k]) => !k.startsWith("_")));
 
+// ─────────────────────────────────────────────────────────────────────────────
+// DATAS POR PREENCHER
+//
+// Um <input type="date"> em branco vale "", não null. O Postgres recusa a
+// escrita INTEIRA com «invalid input syntax for type date: ""», e o que o
+// utilizador vê é a fatura a não ser criada por causa de um campo que ele
+// deixou em branco de propósito.
+//
+// Já estava tratado num campo à mão (o `data_fatura` das faturas) e não nos
+// outros — que é como estas coisas reaparecem. Passa a ser tratado aqui, no
+// sítio por onde todas as escritas passam, para não haver uma segunda lista
+// que alguém se esqueça de actualizar.
+//
+// Vai pelo NOME da coluna, não pelo valor: "" é um valor legítimo numa
+// coluna de texto (umas observações vazias são umas observações vazias), e
+// nunca é um valor legítimo numa data.
+const NOME_DE_DATA = /^(data|previsao|prev)_|_(data|date|inicio|fim|termo|carta)$|^(vencimento|validade|nascimento)$/i;
+
+/** true se o nome da coluna é de uma data. */
+export const pareceData = (nome) => NOME_DE_DATA.test(String(nome || ""));
+
+/**
+ * Troca por null as datas que vêm em branco.
+ *
+ * Só mexe em strings vazias (ou só com espaços) de colunas com nome de data.
+ * Tudo o resto passa tal e qual.
+ */
+export function datasVaziasANull(o) {
+  const saida = {};
+  for (const [k, v] of Object.entries(o || {})) {
+    saida[k] = (typeof v === "string" && v.trim() === "" && pareceData(k)) ? null : v;
+  }
+  return saida;
+}
+
 /**
  * Executa a escrita, tirando as colunas que a base diz não ter.
  *
@@ -48,7 +83,10 @@ export const semAuxiliares = (o) => Object.fromEntries(
  */
 export async function escreverTolerante(executar, payload, maxTentativas = 8) {
   const ignoradas = [];
-  const corpo = { ...payload };
+  // As datas em branco viram null ANTES da primeira tentativa: de outro
+  // modo a base recusa a escrita toda e nem se chega a saber que colunas
+  // faltavam.
+  const corpo = datasVaziasANull(payload);
 
   for (let i = 0; i <= maxTentativas; i++) {
     if (Object.keys(corpo).length === 0) {

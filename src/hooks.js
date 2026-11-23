@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback } from 'react'
 import { supabase } from './supabase'
-import { escreverTolerante, semAuxiliares, aplicarNaLista, colunaEmFalta } from './escrita.js'
+import { datasVaziasANull, escreverTolerante, semAuxiliares, aplicarNaLista, colunaEmFalta } from './escrita.js'
 
 // ─── HELPER: generic realtime table hook ─────────────────────────────────────
 function useRealtimeTable(table, queryFn) {
@@ -193,13 +193,15 @@ export function useFaturas() {
   const { data, loading, aplicar } = useRealtimeTable('faturas',
     () => supabase.from('faturas').select('*').order('created_at', { ascending: false }))
   const addFatura = async (f) => {
-    const { data, error } = await supabase.from('faturas').insert([f]).select()
+    const { data, error } = await supabase.from('faturas')
+      .insert([datasVaziasANull(f)]).select()
     if (error) console.error('addFatura error:', error)
     return aplicar({ data, error })
   }
   const addFaturas = async (arr) => {
     if (!arr?.length) return { data: [], error: null }
-    const { data, error } = await supabase.from('faturas').insert(arr).select()
+    const { data, error } = await supabase.from('faturas')
+      .insert(arr.map(datasVaziasANull)).select()
     if (error) console.error('addFaturas error:', error)
     return aplicar({ data, error })
   }
@@ -224,13 +226,14 @@ export function usePagamentosExtras() {
   const { data, loading, aplicar } = useRealtimeTable('pagamentos_extras',
     () => supabase.from('pagamentos_extras').select('*').order('data_inicio'))
   const addPagamento = async (p) => {
-    const { data, error } = await supabase.from('pagamentos_extras').insert([p]).select()
+    const { data, error } = await supabase.from('pagamentos_extras')
+      .insert([datasVaziasANull(p)]).select()
     if (error) console.error('addPagamento error:', error)
     return aplicar({ data, error })
   }
   const updatePagamento = async (id, u) => {
     const { data, error } = await supabase.from('pagamentos_extras')
-      .update(u).eq('id', id).select()
+      .update(datasVaziasANull(u)).eq('id', id).select()
     if (error) console.error('updatePagamento error:', error)
     return aplicar({ data, error })
   }
@@ -578,7 +581,8 @@ export function useFracoes() {
       const existe = list.some(x => x.id === linha.id)
       return existe ? list.map(x => (x.id === linha.id ? { ...x, ...linha } : x)) : [...list, linha]
     })
-    const { data, error } = await supabase.from('fracoes').upsert(linha).select()
+    const { data, error } = await supabase.from('fracoes')
+      .upsert(datasVaziasANull(linha)).select()
     if (error) {
       console.error('upsertFracao:', error)
       setFracoes(anterior)          // repõe o que estava
