@@ -918,7 +918,10 @@ export function gerarReportCaixaPptx(r) {
   // O slide das frações só existe quando o projeto TEM frações. Em "Todos os
   // Projetos", e nas empresas que não são empreendimentos, não aparece — um
   // slide vazio a dizer "sem frações" é pior do que não haver slide.
-  const temFracoes = r.fracoes && r.fracoes.n > 0;
+  // Não basta HAVER frações: quase todos os projetos têm. O slide só sai
+  // quando elas trazem rent roll — rendas e inquilinos — que hoje é só a
+  // Av. da Igreja. Nos outros o report fica exactamente como estava.
+  const temFracoes = !!(r.fracoes && r.fracoes.n > 0 && r.fracoes.temRentRoll);
   const slides = [
     slideSemana(r, sub),
     slideMes(r, sub),

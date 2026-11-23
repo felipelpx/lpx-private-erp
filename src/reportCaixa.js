@@ -584,6 +584,16 @@ export function estadoDasFracoes({ fracoes = [], empresa = null,
     nVazias: linhas.filter(l => l.renda <= 0.005).length,
     vendaM2: totalArea > 0.005 ? arred2(totalVenda / totalArea) : 0,
     aquisicaoM2: totalArea > 0.005 ? arred2(totalAquis / totalArea) : 0,
+    // Este bloco só interessa a um prédio comprado ARRENDADO, em que o
+    // negócio é esvaziá-lo. Nos empreendimentos de venda nova — que são
+    // quase todos — as frações não têm inquilino nenhum, e um quadro com
+    // uma coluna "Estado do inquilino" vazia não acrescenta nada ao report.
+    //
+    // A pergunta não é "que empresa é esta" mas "estas frações têm rendas e
+    // inquilinos?". Assim não há nenhum nome de projeto escrito no código,
+    // e no dia em que houver outro prédio arrendado o quadro aparece
+    // sozinho — que é o que se quer.
+    temRentRoll: linhas.some(l => l.renda > 0.005 || l.ocupacao),
     porOcupacao: contar("ocupacao"),
     porStatus: contar("status"),
   };

@@ -119,6 +119,42 @@ console.log("\nAs frações de um projeto não entram no report de outro:");
   ok(semEmpresa?.n === 19, "só em «Todos os Projetos» é que entram todas");
 }
 
+console.log("\nNum projeto de venda nova o report NÃO muda:");
+{
+  // Quase todos os projetos têm frações — é o que se vende. O que só a Av.
+  // da Igreja tem é inquilinos. Se o slide saísse por haver frações, todos
+  // os outros reports ganhavam uma página com uma coluna "Estado do
+  // inquilino" em branco.
+  const vendaNova = [
+    { id: "g1", projeto: "Maria Pia", fracao: "1A", tipologia: "T2", area: 80,
+      preco_tabela: 400000, status: "Disponível" },
+    { id: "g2", projeto: "Maria Pia", fracao: "1B", tipologia: "T1", area: 55,
+      preco_tabela: 290000, status: "CPCV" },
+  ];
+  const soMariaPia = (p) => (p === "Maria Pia" ? "genero" : "outra");
+  const x = estadoDasFracoes({ fracoes: vendaNova, empresa: "genero", empresaDe: soMariaPia });
+  ok(x.n === 2, "as frações existem e contam-se na mesma");
+  ok(x.temRentRoll === false, "mas não há rent roll nenhum: nem rendas nem inquilinos");
+
+  const base = { nomeEmpresa: "Género Prudente", hoje: "2026-11-23", saldoAtual: 0,
+                 saldoAnterior: 0, movimentos: [], meses: [], nMeses: 7 };
+  const g = gerarReportCaixaPptx(construirReportCaixa({
+    ...base, fracoes: vendaNova, empresa: "genero", empresaDe: soMariaPia }));
+  ok(g.slides.length === 4, `o report fica com ${g.slides.length} slides, como antes`);
+  const titulos = g.slides.flat().flatMap(s => {
+    const ps = Array.isArray(s.paras) ? s.paras : (s.paras ? [s.paras] : []);
+    return ps.flatMap(p => (Array.isArray(p?.runs) ? p.runs : Array.isArray(p) ? p : p ? [p] : []))
+             .map(r => String(r?.t || ""));
+  });
+  ok(!titulos.some(t => /Frações/.test(t)), "e não aparece nenhuma página de frações");
+
+  // Basta uma renda para o prédio passar a ter rent roll.
+  const comUm = [...vendaNova, { ...vendaNova[0], id: "g3", fracao: "2A",
+    renda_mensal: 750, ocupacao: "Carta enviada" }];
+  const y = estadoDasFracoes({ fracoes: comUm, empresa: "genero", empresaDe: soMariaPia });
+  ok(y.temRentRoll === true, "com um inquilino que seja, o quadro passa a fazer sentido");
+}
+
 console.log("\nO slide só existe quando há frações:");
 {
   const base = {
